@@ -2,8 +2,8 @@ import { useState } from "react";
 
 import { Sidebar } from "@/layouts/Sidebar";
 import { TopBar } from "@/layouts/TopBar";
-import { AIChatPage } from "@/pages/ai-chat/AIChatPage";
 import { AdminPage } from "@/pages/admin/AdminPage";
+import { AIChatPage } from "@/pages/ai-chat/AIChatPage";
 import { CalendarPage } from "@/pages/calendar/CalendarPage";
 import { ChatPage } from "@/pages/chat/ChatPage";
 import { Dashboard } from "@/pages/dashboard/Dashboard";

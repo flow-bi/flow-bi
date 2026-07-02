@@ -14,7 +14,9 @@ export function AIChatPage() {
 
   const sendMessage = (text: string) => {
     const trimmed = text.trim()
-    if (!trimmed) return
+    if (!trimmed) {
+      return
+    }
 
     setMessages((prev) => [
       ...prev,

@@ -1,5 +1,5 @@
-import { type FormEvent } from 'react'
 import { Send } from 'lucide-react'
+import { type FormEvent } from 'react'
 
 import { BRAND_PRIMARY } from '@/constants/brand'
 
