@@ -1,16 +1,23 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useEffect } from 'react'
-import { useForm } from 'react-hook-form'
+import { useEffect, useState } from 'react'
+import { useForm, useWatch } from 'react-hook-form'
 
-import { SidePanel } from '../../../../shared/components/SidePanel'
-import { useCancelReservation, useCreateReservation, useUpdateReservation } from '../../list/hooks'
+import { Modal } from '../../../../shared/components/Modal'
+import { StatusBadge } from '../../../../shared/components/StatusBadge'
+import {
+  useCancelReservation,
+  useCreateReservation,
+  useRoomReservations,
+  useUpdateReservation,
+} from '../../list/hooks'
 import { reservationFormSchema } from '../../list/schema'
 
 import type { ReservationFormValues } from '../../list/schema'
 import type { Reservation, Room } from '../../list/types'
 
 type ReservationPanelProps = {
-  room: Room | null
+  rooms: Room[]
+  initialRoom: Room | null
   date: string
   reservation: Reservation | null
   isOpen: boolean
@@ -23,35 +30,42 @@ const timeOptions = Array.from(
 )
 
 export function ReservationPanel({
-  room,
+  rooms,
+  initialRoom,
   date,
   reservation,
   isOpen,
   onClose,
 }: ReservationPanelProps) {
-  const createMutation = useCreateReservation(room?.roomId ?? 0)
+  const [selectedRoomId, setSelectedRoomId] = useState(initialRoom?.roomId ?? 0)
+  const selectedRoom = rooms.find((room) => room.roomId === selectedRoomId) ?? initialRoom
+  const createMutation = useCreateReservation(selectedRoomId)
   const updateMutation = useUpdateReservation(reservation?.reservationId ?? 0)
   const cancelMutation = useCancelReservation()
   const {
     register,
     handleSubmit,
     reset,
+    control,
     formState: { errors },
   } = useForm<ReservationFormValues>({
     resolver: zodResolver(reservationFormSchema),
     defaultValues: getDefaultValues(date, reservation),
   })
+  const selectedDate = useWatch({ control, name: 'date' }) || date
+  const reservationsQuery = useRoomReservations(selectedRoomId || null, selectedDate)
+  const reservations = reservationsQuery.data ?? selectedRoom?.reservations ?? []
 
   useEffect(() => {
     reset(getDefaultValues(date, reservation))
   }, [date, reservation, reset])
 
   const submit = (values: ReservationFormValues) => {
-    if (!room) {
+    if (!selectedRoom) {
       return
     }
     if (reservation) {
-      updateMutation.mutate(values, { onSuccess: onClose })
+      updateMutation.mutate({ roomId: selectedRoomId, values }, { onSuccess: onClose })
       return
     }
     createMutation.mutate(values, { onSuccess: onClose })
@@ -61,21 +75,27 @@ export function ReservationPanel({
   const isError = createMutation.isError || updateMutation.isError || cancelMutation.isError
 
   return (
-    <SidePanel title={reservation ? '예약 수정' : '예약하기'} isOpen={isOpen} onClose={onClose}>
-      {room ? (
+    <Modal title={reservation ? '예약 수정' : '예약하기'} isOpen={isOpen} onClose={onClose}>
+      {selectedRoom ? (
         <form
           className="space-y-4"
           onSubmit={(event) => {
             void handleSubmit(submit)(event)
           }}
         >
-          <div className="rounded-md border border-[var(--color-border)] p-4">
-            <p className="text-sm font-semibold text-[var(--color-text)]">{room.roomName}</p>
-            <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-              {room.location ?? '위치 미지정'} · {room.capacity ?? '-'}명 ·{' '}
-              {room.field ?? '장비 미지정'}
-            </p>
-          </div>
+          <Field label="회의실">
+            <select
+              className="form-input"
+              value={selectedRoomId}
+              onChange={(event) => setSelectedRoomId(Number(event.target.value))}
+            >
+              {rooms.map((room) => (
+                <option key={room.roomId} value={room.roomId}>
+                  {room.roomName} · {room.capacity ?? '-'}명
+                </option>
+              ))}
+            </select>
+          </Field>
 
           <Field label="예약 제목" error={errors.title?.message}>
             <input className="form-input" {...register('title')} />
@@ -104,6 +124,62 @@ export function ReservationPanel({
                 ))}
               </select>
             </Field>
+          </div>
+
+          <div className="rounded-md border border-[var(--color-border)] p-4">
+            <p className="text-sm font-semibold text-[var(--color-text)]">예약 현황</p>
+            <div className="mt-3 space-y-2">
+              {reservationsQuery.isPending ? (
+                <p className="text-sm text-[var(--color-text-muted)]">
+                  예약 시간을 확인하는 중입니다.
+                </p>
+              ) : null}
+              {reservationsQuery.isError ? (
+                <p className="text-sm text-[var(--color-danger)]">
+                  예약 현황을 불러오지 못했습니다.
+                </p>
+              ) : null}
+              {!reservationsQuery.isPending && !reservationsQuery.isError ? (
+                reservations.length > 0 ? (
+                  reservations.map((item) => (
+                    <div
+                      key={item.reservationId}
+                      className="flex items-center justify-between gap-3 rounded-md border border-[var(--color-border)] px-3 py-2"
+                    >
+                      <span>
+                        <span className="block text-sm font-semibold text-[var(--color-text)]">
+                          {item.title}
+                        </span>
+                        <span className="block text-xs tabular-nums text-[var(--color-text-muted)]">
+                          {item.startAt.slice(11, 16)}-{item.endAt.slice(11, 16)} ·{' '}
+                          {item.teamName ?? '팀 미지정'}
+                        </span>
+                      </span>
+                      <StatusBadge
+                        tone={
+                          item.status === 'RESERVED'
+                            ? 'success'
+                            : item.status === 'PENDING'
+                              ? 'warning'
+                              : 'muted'
+                        }
+                        label={
+                          item.status === 'RESERVED'
+                            ? '예약완료'
+                            : item.status === 'PENDING'
+                              ? '승인대기'
+                              : '취소됨'
+                        }
+                      />
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-[var(--color-text-muted)]">
+                    선택한 날짜에 예약이 없습니다.
+                  </p>
+                )
+              ) : null}
+            </div>
           </div>
 
           <Field label="예상 인원" error={errors.count?.message}>
@@ -161,7 +237,7 @@ export function ReservationPanel({
       ) : (
         <p className="text-sm text-[var(--color-text-muted)]">회의실을 선택해주세요.</p>
       )}
-    </SidePanel>
+    </Modal>
   )
 }
 

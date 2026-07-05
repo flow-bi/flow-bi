@@ -10,6 +10,8 @@ import org.springframework.data.repository.query.Param;
 
 public interface RoomReservationRepository extends JpaRepository<RoomReservation, Long> {
 
+  long countByStartAtGreaterThanEqualAndStartAtLessThan(LocalDateTime startAt,LocalDateTime endAt);
+
   @Query("""
       select count(reservation) > 0
       from RoomReservation reservation
@@ -20,7 +22,7 @@ public interface RoomReservationRepository extends JpaRepository<RoomReservation
         and reservation.endAt > :startAt
       """)
   boolean existsOverlappingReservation(@Param("roomId") Long roomId,
-      @Param("startAt") LocalDateTime startAt, @Param("endAt") LocalDateTime endAt,
+      @Param("startAt") LocalDateTime startAt,@Param("endAt") LocalDateTime endAt,
       @Param("excludeReservationId") Long excludeReservationId);
 
   @Query(value = """
@@ -35,6 +37,8 @@ public interface RoomReservationRepository extends JpaRepository<RoomReservation
         rr.cancelled_at as cancelledAt,
         rr.count as count,
         rr.field as field,
+        s.creator_id as creatorId,
+        u.name as creatorName,
         t.team_name as teamName
       from rooms_reservations rr
       join schedules s on s.schedule_id = rr.schedule_id
@@ -46,7 +50,7 @@ public interface RoomReservationRepository extends JpaRepository<RoomReservation
       order by rr.start_at asc, rr.reservation_id asc
       """, nativeQuery = true)
   List<ReservationSummary> findSummariesByRoomAndRange(@Param("roomId") Long roomId,
-      @Param("startAt") LocalDateTime startAt, @Param("endAt") LocalDateTime endAt);
+      @Param("startAt") LocalDateTime startAt,@Param("endAt") LocalDateTime endAt);
 
   @Query("""
       select reservation
@@ -57,6 +61,6 @@ public interface RoomReservationRepository extends JpaRepository<RoomReservation
         and reservation.endAt > :startAt
       """)
   List<RoomReservation> findByRoomAndRangeAndStatus(@Param("roomId") Long roomId,
-      @Param("startAt") LocalDateTime startAt, @Param("endAt") LocalDateTime endAt,
+      @Param("startAt") LocalDateTime startAt,@Param("endAt") LocalDateTime endAt,
       @Param("status") ReservationStatus status);
 }

@@ -40,66 +40,66 @@ public class MeetingRoomService {
   }
 
   @Transactional(readOnly = true)
-  public List<RoomResponse> findRooms(Long capacity, LocalDate date, TimeRange timeRange,
+  public List<RoomResponse> findRooms(Long capacity,LocalDate date,TimeRange timeRange,
       ReservationStatus status) {
     DateRange dateRange = date == null ? null : DateRange.forDate(date);
     return roomRepository.findPrioritized(capacity).stream()
-        .sorted(roomPriorityComparator(dateRange, timeRange, status))
-        .map(room -> toRoomResponse(room, dateRange)).toList();
+        .sorted(roomPriorityComparator(dateRange,timeRange,status))
+        .map(room -> toRoomResponse(room,dateRange)).toList();
   }
 
   @Transactional(readOnly = true)
-  public List<ReservationResponse> findReservations(Long roomId, LocalDate date) {
+  public List<ReservationResponse> findReservations(Long roomId,LocalDate date) {
     Room room = findRoom(roomId);
     DateRange range = DateRange.forDate(date);
-    return findReservationSummaries(room.getRoomId(), range).stream().map(this::toResponse)
-        .toList();
+    return findReservationSummaries(room.getRoomId(),range).stream().map(this::toResponse).toList();
   }
 
-  public ReservationResponse createReservation(Long userId, Long roomId, ReservationRequest request) {
+  public ReservationResponse createReservation(Long userId,Long roomId,ReservationRequest request) {
     validateRequest(request);
     Room room = lockRoom(roomId);
-    verifyNoOverlap(roomId, request.startAt(), request.endAt(), null);
+    verifyNoOverlap(roomId,request.startAt(),request.endAt(),null);
     ScheduleResponse schedule = scheduleService.createForMeetingRoom(userId,
-        toScheduleRequest(room, request));
-    RoomReservation reservation = reservationRepository.save(new RoomReservation(roomId,
-        schedule.scheduleId(), request.title(), request.startAt(), request.endAt(),
-        ReservationStatus.RESERVED, request.count(), request.field()));
-    return toResponse(reservation, null);
+        toScheduleRequest(room,request));
+    RoomReservation reservation = reservationRepository
+        .save(new RoomReservation(roomId, schedule.scheduleId(), request.title(), request.startAt(),
+            request.endAt(), ReservationStatus.RESERVED, request.count(), request.field()));
+    return toResponse(reservation,null);
   }
 
-  public ReservationResponse updateReservation(Long userId, Long reservationId,
+  public ReservationResponse updateReservation(Long userId,Long reservationId,
       ReservationRequest request) {
     validateRequest(request);
     RoomReservation reservation = findReservation(reservationId);
     if (reservation.getStatus() == ReservationStatus.CANCELLED) {
       throw new BusinessException(ErrorCode.MEETINGROOM_CANCELLED_RESERVATION);
     }
-    Room room = lockRoom(reservation.getRoomId());
-    verifyNoOverlap(reservation.getRoomId(), request.startAt(), request.endAt(), reservationId);
-    scheduleService.update(userId, reservation.getScheduleId(), toScheduleRequest(room, request));
-    reservation.update(request.title(), request.startAt(), request.endAt(), request.count(),
-        request.field());
-    return toResponse(reservation, null);
+    Long targetRoomId = request.roomId() == null ? reservation.getRoomId() : request.roomId();
+    Room room = lockRoom(targetRoomId);
+    verifyNoOverlap(targetRoomId,request.startAt(),request.endAt(),reservationId);
+    scheduleService.update(userId,reservation.getScheduleId(),toScheduleRequest(room,request));
+    reservation.update(targetRoomId,request.title(),request.startAt(),request.endAt(),
+        request.count(),request.field());
+    return toResponse(reservation,null);
   }
 
-  public void cancelReservation(Long userId, Long reservationId) {
+  public void cancelReservation(Long userId,Long reservationId) {
     RoomReservation reservation = findReservation(reservationId);
     if (reservation.getStatus() == ReservationStatus.CANCELLED) {
       return;
     }
     lockRoom(reservation.getRoomId());
     reservation.cancel();
-    scheduleService.deleteForMeetingRoom(userId, reservation.getScheduleId());
+    scheduleService.deleteForMeetingRoom(userId,reservation.getScheduleId());
   }
 
-  private Comparator<Room> roomPriorityComparator(DateRange dateRange, TimeRange timeRange,
+  private Comparator<Room> roomPriorityComparator(DateRange dateRange,TimeRange timeRange,
       ReservationStatus status) {
-    return Comparator.comparingInt(room -> matchesReservationSearch(room, dateRange, timeRange,
-        status) ? 0 : 1);
+    return Comparator
+        .comparingInt(room -> matchesReservationSearch(room,dateRange,timeRange,status) ? 0 : 1);
   }
 
-  private boolean matchesReservationSearch(Room room, DateRange dateRange, TimeRange timeRange,
+  private boolean matchesReservationSearch(Room room,DateRange dateRange,TimeRange timeRange,
       ReservationStatus status) {
     if (dateRange == null && timeRange == null && status == null) {
       return true;
@@ -107,41 +107,45 @@ public class MeetingRoomService {
     if (dateRange == null) {
       return true;
     }
-    LocalDateTime startAt = timeRange == null ? dateRange.start() : dateRange.date().atTime(
-        timeRange.start());
-    LocalDateTime endAt = timeRange == null ? dateRange.end() : dateRange.date().atTime(
-        timeRange.end());
-    return !reservationRepository
-        .findByRoomAndRangeAndStatus(room.getRoomId(), startAt, endAt, status).isEmpty();
+    LocalDateTime startAt = timeRange == null
+        ? dateRange.start()
+        : dateRange.date().atTime(timeRange.start());
+    LocalDateTime endAt = timeRange == null
+        ? dateRange.end()
+        : dateRange.date().atTime(timeRange.end());
+    return !reservationRepository.findByRoomAndRangeAndStatus(room.getRoomId(),startAt,endAt,status)
+        .isEmpty();
   }
 
-  private RoomResponse toRoomResponse(Room room, DateRange dateRange) {
-    List<ReservationResponse> reservations = dateRange == null ? List.of()
-        : findReservationSummaries(room.getRoomId(), dateRange).stream().map(this::toResponse)
+  private RoomResponse toRoomResponse(Room room,DateRange dateRange) {
+    List<ReservationResponse> reservations = dateRange == null
+        ? List.of()
+        : findReservationSummaries(room.getRoomId(),dateRange).stream().map(this::toResponse)
             .toList();
     return new RoomResponse(room.getRoomId(), room.getRoomName(), room.getCapacity(),
         room.getLocation(), room.getField(), reservations);
   }
 
-  private List<ReservationSummary> findReservationSummaries(Long roomId, DateRange range) {
-    return reservationRepository.findSummariesByRoomAndRange(roomId, range.start(), range.end());
+  private List<ReservationSummary> findReservationSummaries(Long roomId,DateRange range) {
+    return reservationRepository.findSummariesByRoomAndRange(roomId,range.start(),range.end());
   }
 
   private ReservationResponse toResponse(ReservationSummary summary) {
     return new ReservationResponse(summary.getReservationId(), summary.getRoomId(),
         summary.getScheduleId(), summary.getTitle(), summary.getStartAt(), summary.getEndAt(),
         ReservationStatus.valueOf(summary.getStatus()), summary.getCancelledAt(),
-        summary.getCount(), summary.getField(), summary.getTeamName());
+        summary.getCount(), summary.getField(), summary.getCreatorId(), summary.getCreatorName(),
+        summary.getTeamName());
   }
 
-  private ReservationResponse toResponse(RoomReservation reservation, String teamName) {
+  private ReservationResponse toResponse(RoomReservation reservation,String teamName) {
     return new ReservationResponse(reservation.getReservationId(), reservation.getRoomId(),
         reservation.getScheduleId(), reservation.getTitle(), reservation.getStartAt(),
         reservation.getEndAt(), reservation.getStatus(), reservation.getCancelledAt(),
-        reservation.getCount(), reservation.getField(), teamName);
+        reservation.getCount(), reservation.getField(), null, null, teamName);
   }
 
-  private ScheduleRequest toScheduleRequest(Room room, ReservationRequest request) {
+  private ScheduleRequest toScheduleRequest(Room room,ReservationRequest request) {
     return new ScheduleRequest(request.title(),
         request.scheduleType() == null ? ScheduleType.PERSONAL : request.scheduleType(),
         request.visibility() == null ? ScheduleVisibility.PRIVATE : request.visibility(),
@@ -156,9 +160,9 @@ public class MeetingRoomService {
     }
   }
 
-  private void verifyNoOverlap(Long roomId, LocalDateTime startAt, LocalDateTime endAt,
+  private void verifyNoOverlap(Long roomId,LocalDateTime startAt,LocalDateTime endAt,
       Long excludeReservationId) {
-    if (reservationRepository.existsOverlappingReservation(roomId, startAt, endAt,
+    if (reservationRepository.existsOverlappingReservation(roomId,startAt,endAt,
         excludeReservationId)) {
       throw new BusinessException(ErrorCode.MEETINGROOM_RESERVATION_CONFLICT);
     }

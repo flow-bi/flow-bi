@@ -46,40 +46,41 @@ public class MeetingRoomController {
       @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
       @RequestParam(required = false) String timeRange,
       @RequestParam(required = false) ReservationStatus status) {
-    return ApiResponse.success(
-        meetingRoomService.findRooms(capacity, date, parseTimeRange(timeRange), status));
+    return ApiResponse
+        .success(meetingRoomService.findRooms(capacity,date,parseTimeRange(timeRange),status));
   }
 
   @Operation(summary = "회의실 예약 현황 조회")
   @GetMapping("/{roomId}/reservations")
   public ApiResponse<List<ReservationResponse>> findReservations(@PathVariable Long roomId,
       @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
-    return ApiResponse.success(meetingRoomService.findReservations(roomId, date));
+    return ApiResponse.success(meetingRoomService.findReservations(roomId,date));
   }
 
   @Operation(summary = "회의실 예약 생성")
   @PostMapping("/{roomId}/reservations")
   public ApiResponse<ReservationResponse> createReservation(HttpServletRequest servletRequest,
-      @PathVariable Long roomId, @Valid @RequestBody ReservationRequest request) {
+      @PathVariable Long roomId,@Valid @RequestBody ReservationRequest request) {
     return ApiResponse.success(
-        meetingRoomService.createReservation(currentUserId(servletRequest), roomId, request),
+        meetingRoomService.createReservation(currentUserId(servletRequest),roomId,request),
         "회의실 예약이 생성되었습니다.");
   }
 
   @Operation(summary = "회의실 예약 수정")
   @PatchMapping("/reservations/{reservationId}")
   public ApiResponse<ReservationResponse> updateReservation(HttpServletRequest servletRequest,
-      @PathVariable Long reservationId, @Valid @RequestBody ReservationRequest request) {
-    return ApiResponse.success(meetingRoomService.updateReservation(currentUserId(servletRequest),
-        reservationId, request), "회의실 예약이 수정되었습니다.");
+      @PathVariable Long reservationId,@Valid @RequestBody ReservationRequest request) {
+    return ApiResponse.success(
+        meetingRoomService.updateReservation(currentUserId(servletRequest),reservationId,request),
+        "회의실 예약이 수정되었습니다.");
   }
 
   @Operation(summary = "회의실 예약 취소")
   @DeleteMapping("/reservations/{reservationId}")
   public ApiResponse<Void> cancelReservation(HttpServletRequest servletRequest,
       @PathVariable Long reservationId) {
-    meetingRoomService.cancelReservation(currentUserId(servletRequest), reservationId);
-    return ApiResponse.success(null, "회의실 예약이 취소되었습니다.");
+    meetingRoomService.cancelReservation(currentUserId(servletRequest),reservationId);
+    return ApiResponse.success(null,"회의실 예약이 취소되었습니다.");
   }
 
   private TimeRange parseTimeRange(String value) {
@@ -88,8 +89,7 @@ public class MeetingRoomController {
     }
     String[] parts = value.split("-");
     if (parts.length != 2) {
-      throw new BusinessException(ErrorCode.VALIDATION_FAILED,
-          "timeRange는 HH:mm-HH:mm 형식이어야 합니다.");
+      throw new BusinessException(ErrorCode.VALIDATION_FAILED, "timeRange는 HH:mm-HH:mm 형식이어야 합니다.");
     }
     try {
       LocalTime start = LocalTime.parse(parts[0]);
@@ -103,8 +103,7 @@ public class MeetingRoomController {
       if (exception instanceof BusinessException businessException) {
         throw businessException;
       }
-      throw new BusinessException(ErrorCode.VALIDATION_FAILED,
-          "timeRange는 HH:mm-HH:mm 형식이어야 합니다.");
+      throw new BusinessException(ErrorCode.VALIDATION_FAILED, "timeRange는 HH:mm-HH:mm 형식이어야 합니다.");
     }
   }
 

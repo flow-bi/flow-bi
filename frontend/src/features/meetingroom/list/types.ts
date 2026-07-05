@@ -22,5 +22,7 @@ export type Reservation = {
   cancelledAt?: string
   count?: number
   field?: string
+  creatorId?: number
+  creatorName?: string
   teamName?: string
 }

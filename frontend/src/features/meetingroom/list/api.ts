@@ -7,6 +7,22 @@ import type { components } from '../../../shared/types/openapi'
 type RoomResponse = components['schemas']['RoomResponse']
 type ReservationResponse = components['schemas']['ReservationResponse']
 type ReservationRequest = components['schemas']['ReservationRequest']
+type RoomPayload = RoomResponse & {
+  roomId?: number
+  roomName?: string
+  reservations?: ReservationPayload[]
+}
+type ReservationPayload = ReservationResponse & {
+  reservationId?: number
+  roomId?: number
+  scheduleId?: number
+  startAt?: string
+  endAt?: string
+  cancelledAt?: string
+  creatorId?: number
+  creatorName?: string
+  teamName?: string
+}
 
 export function fetchRooms(params: {
   capacity?: string
@@ -45,10 +61,14 @@ export function createReservation(roomId: number, values: ReservationFormValues)
   }).then(toReservation)
 }
 
-export function updateReservation(reservationId: number, values: ReservationFormValues) {
-  return apiFetch<ReservationResponse>(`/api/v1/rooms/reservations/${reservationId}`, {
+export function updateReservation(params: {
+  reservationId: number
+  roomId: number
+  values: ReservationFormValues
+}) {
+  return apiFetch<ReservationResponse>(`/api/v1/rooms/reservations/${params.reservationId}`, {
     method: 'PATCH',
-    body: JSON.stringify(toReservationRequest(values)),
+    body: JSON.stringify(toReservationRequest(params.values, params.roomId)),
   }).then(toReservation)
 }
 
@@ -58,8 +78,9 @@ export function cancelReservation(reservationId: number) {
   })
 }
 
-function toReservationRequest(values: ReservationFormValues): ReservationRequest {
+function toReservationRequest(values: ReservationFormValues, roomId?: number): ReservationRequest {
   return {
+    room_id: roomId,
     title: values.title,
     start_at: `${values.date}T${values.startTime}:00`,
     end_at: `${values.date}T${values.endTime}:00`,
@@ -75,10 +96,10 @@ function toReservationRequest(values: ReservationFormValues): ReservationRequest
   }
 }
 
-function toRoom(room: RoomResponse): Room {
+function toRoom(room: RoomPayload): Room {
   return {
-    roomId: room.room_id ?? 0,
-    roomName: room.room_name ?? '',
+    roomId: room.roomId ?? room.room_id ?? 0,
+    roomName: room.roomName ?? room.room_name ?? '',
     capacity: room.capacity,
     location: room.location,
     field: room.field,
@@ -86,19 +107,21 @@ function toRoom(room: RoomResponse): Room {
   }
 }
 
-function toReservation(reservation: ReservationResponse): Reservation {
+function toReservation(reservation: ReservationPayload): Reservation {
   return {
-    reservationId: reservation.reservation_id ?? 0,
-    roomId: reservation.room_id ?? 0,
-    scheduleId: reservation.schedule_id ?? 0,
+    reservationId: reservation.reservationId ?? reservation.reservation_id ?? 0,
+    roomId: reservation.roomId ?? reservation.room_id ?? 0,
+    scheduleId: reservation.scheduleId ?? reservation.schedule_id ?? 0,
     title: reservation.title ?? '',
-    startAt: reservation.start_at ?? '',
-    endAt: reservation.end_at ?? '',
+    startAt: reservation.startAt ?? reservation.start_at ?? '',
+    endAt: reservation.endAt ?? reservation.end_at ?? '',
     status: reservation.status ?? 'RESERVED',
-    cancelledAt: reservation.cancelled_at,
+    cancelledAt: reservation.cancelledAt ?? reservation.cancelled_at,
     count: reservation.count,
     field: reservation.field,
-    teamName: reservation.team_name,
+    creatorId: reservation.creatorId ?? reservation.creator_id,
+    creatorName: reservation.creatorName ?? reservation.creator_name,
+    teamName: reservation.teamName ?? reservation.team_name,
   }
 }
 

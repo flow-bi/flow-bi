@@ -151,6 +151,12 @@ export interface components {
   schemas: {
     ReservationRequest: {
       /**
+       * Format: int64
+       * @description 변경할 회의실 ID
+       * @example 2
+       */
+      room_id?: number
+      /**
        * @description 예약 제목
        * @example 기획 회의
        */
@@ -245,6 +251,13 @@ export interface components {
       count?: number
       /** @description 회의 상세 설명 */
       field?: string
+      /**
+       * Format: int64
+       * @description 예약자 ID
+       */
+      creator_id?: number
+      /** @description 예약자 이름 */
+      creator_name?: string
       /** @description 예약 팀명 */
       team_name?: string
     }

@@ -24,5 +24,9 @@ public interface ReservationSummary {
 
   String getField();
 
+  Long getCreatorId();
+
+  String getCreatorName();
+
   String getTeamName();
 }

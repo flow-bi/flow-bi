@@ -2,19 +2,14 @@ import { useMemo, useState } from 'react'
 
 import { StatusBadge } from '../../../../shared/components/StatusBadge'
 import { TimeGrid } from '../../../../shared/components/TimeGrid'
+import { ReservationDetailPanel } from '../../reservation/components/ReservationDetailPanel'
 import { ReservationPanel } from '../../reservation/components/ReservationPanel'
 import { ReservationBlock } from '../../status-board/components/ReservationBlock'
-import { useRooms } from '../hooks'
+import { useRoomReservationMap, useRooms } from '../hooks'
 
-import type { Reservation, ReservationStatus, Room } from '../types'
+import type { Reservation, Room } from '../types'
 
-const today = new Date().toISOString().slice(0, 10)
-
-const statusLabels: Record<ReservationStatus, string> = {
-  PENDING: '승인대기',
-  RESERVED: '예약완료',
-  CANCELLED: '취소됨',
-}
+const today = toLocalDateInputValue(new Date())
 
 export function MeetingRoomPage() {
   const [date, setDate] = useState(today)
@@ -23,17 +18,64 @@ export function MeetingRoomPage() {
   const [status, setStatus] = useState('')
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null)
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null)
-  const [isPanelOpen, setIsPanelOpen] = useState(false)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isDetailOpen, setIsDetailOpen] = useState(false)
   const roomsQuery = useRooms({ capacity, date, timeRange, status })
   const rooms = useMemo(() => roomsQuery.data ?? [], [roomsQuery.data])
-  const activeRoom = selectedRoom ?? rooms[0] ?? null
+  const roomIds = useMemo(
+    () => Array.from(new Set(rooms.map((room) => room.roomId).filter((roomId) => roomId > 0))),
+    [rooms],
+  )
+  const reservationMapQuery = useRoomReservationMap(roomIds, date)
+  const roomsWithReservations = useMemo(
+    () =>
+      rooms.map((room) => ({
+        ...room,
+        reservations:
+          reservationMapQuery.reservationsByRoomId.get(room.roomId) ?? room.reservations,
+      })),
+    [reservationMapQuery.reservationsByRoomId, rooms],
+  )
+  const activeRoom =
+    roomsWithReservations.find((room) => room.roomId === selectedRoom?.roomId) ??
+    roomsWithReservations[0] ??
+    null
 
   const rows = useMemo(
     () =>
-      rooms.map((room) => ({
+      roomsWithReservations.map((room) => ({
         id: room.roomId,
-        label: room.roomName,
-        meta: `${room.location ?? '위치 미지정'} · ${room.capacity ?? '-'}명`,
+        header: (
+          <button
+            className={`block w-full rounded-md border px-3 py-2 text-left ${
+              activeRoom?.roomId === room.roomId
+                ? 'border-[var(--color-accent-soft)]'
+                : 'border-transparent'
+            }`}
+            type="button"
+            onClick={() => {
+              setSelectedRoom(room)
+              setSelectedReservation(null)
+              setIsModalOpen(true)
+            }}
+          >
+            <span className="flex items-center justify-between gap-3">
+              <span className="text-sm font-semibold text-[var(--color-text)]">
+                {room.roomName}
+              </span>
+              <StatusBadge
+                tone="success"
+                label={`${room.reservations.filter((item) => item.status === 'RESERVED').length}건`}
+              />
+            </span>
+            <span className="mt-2 block text-xs text-[var(--color-text-muted)]">
+              {room.location ?? '위치 미지정'} · {room.capacity ?? '-'}명
+            </span>
+            <span className="mt-1 block text-xs text-[var(--color-text-muted)]">
+              {room.field ?? '장비 미지정'}
+            </span>
+          </button>
+        ),
         content: (
           <>
             {room.reservations.map((reservation) => (
@@ -43,14 +85,14 @@ export function MeetingRoomPage() {
                 onSelect={(item) => {
                   setSelectedRoom(room)
                   setSelectedReservation(item)
-                  setIsPanelOpen(true)
+                  setIsDetailOpen(true)
                 }}
               />
             ))}
           </>
         ),
       })),
-    [rooms],
+    [activeRoom?.roomId, roomsWithReservations],
   )
 
   return (
@@ -65,7 +107,7 @@ export function MeetingRoomPage() {
           onClick={() => {
             setSelectedRoom(activeRoom)
             setSelectedReservation(null)
-            setIsPanelOpen(true)
+            setIsModalOpen(true)
           }}
         >
           예약하기
@@ -138,97 +180,48 @@ export function MeetingRoomPage() {
         </div>
       ) : null}
 
-      {!roomsQuery.isPending && !roomsQuery.isError ? (
-        <div className="grid gap-6 xl:grid-cols-[320px_1fr]">
-          <div className="space-y-3">
-            {rooms.map((room) => (
-              <button
-                key={room.roomId}
-                className={`w-full rounded-md border bg-[var(--color-surface)] p-4 text-left ${
-                  activeRoom?.roomId === room.roomId
-                    ? 'border-[var(--color-primary)]'
-                    : 'border-[var(--color-border)]'
-                }`}
-                type="button"
-                onClick={() => setSelectedRoom(room)}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-[var(--color-text)]">{room.roomName}</p>
-                  <StatusBadge
-                    tone="success"
-                    label={`${room.reservations.filter((item) => item.status === 'RESERVED').length}건`}
-                  />
-                </div>
-                <p className="mt-2 text-xs text-[var(--color-text-muted)]">
-                  {room.location ?? '위치 미지정'} · {room.capacity ?? '-'}명
-                </p>
-                <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-                  {room.field ?? '장비 미지정'}
-                </p>
-              </button>
-            ))}
-          </div>
-
-          <div className="space-y-4">
-            <TimeGrid rows={rows} />
-            {activeRoom ? (
-              <div className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
-                <p className="text-sm font-semibold text-[var(--color-text)]">
-                  {activeRoom.roomName} 예약
-                </p>
-                <div className="mt-3 space-y-2">
-                  {activeRoom.reservations.length > 0 ? (
-                    activeRoom.reservations.map((reservation) => (
-                      <button
-                        key={reservation.reservationId}
-                        className="flex w-full items-center justify-between gap-3 rounded-md border border-[var(--color-border)] px-3 py-2 text-left"
-                        type="button"
-                        onClick={() => {
-                          setSelectedReservation(reservation)
-                          setIsPanelOpen(true)
-                        }}
-                      >
-                        <span>
-                          <span className="block text-sm font-semibold">{reservation.title}</span>
-                          <span className="block text-xs text-[var(--color-text-muted)]">
-                            {reservation.startAt.slice(11, 16)}-{reservation.endAt.slice(11, 16)} ·{' '}
-                            {reservation.teamName ?? '팀 미지정'}
-                          </span>
-                        </span>
-                        <StatusBadge
-                          tone={
-                            reservation.status === 'RESERVED'
-                              ? 'success'
-                              : reservation.status === 'PENDING'
-                                ? 'warning'
-                                : 'muted'
-                          }
-                          label={statusLabels[reservation.status]}
-                        />
-                      </button>
-                    ))
-                  ) : (
-                    <p className="text-sm text-[var(--color-text-muted)]">
-                      선택한 날짜에 예약이 없습니다.
-                    </p>
-                  )}
-                </div>
-              </div>
-            ) : null}
-          </div>
+      {reservationMapQuery.isError ? (
+        <div className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-6 text-sm text-[var(--color-danger)]">
+          예약 현황을 불러오지 못했습니다.
         </div>
       ) : null}
 
+      {!roomsQuery.isPending && !roomsQuery.isError && !reservationMapQuery.isError ? (
+        <TimeGrid rows={rows} />
+      ) : null}
+
       <ReservationPanel
-        room={selectedRoom ?? activeRoom}
+        key={`${selectedRoom?.roomId ?? activeRoom?.roomId ?? 0}-${selectedReservation?.reservationId ?? 'new'}-${isModalOpen ? 'open' : 'closed'}`}
+        rooms={roomsWithReservations}
+        initialRoom={selectedRoom ?? activeRoom}
         date={date}
         reservation={selectedReservation}
-        isOpen={isPanelOpen}
+        isOpen={isModalOpen}
         onClose={() => {
-          setIsPanelOpen(false)
+          setIsModalOpen(false)
           setSelectedReservation(null)
+        }}
+      />
+      <ReservationDetailPanel
+        room={selectedRoom}
+        reservation={selectedReservation}
+        isOpen={isDetailOpen}
+        onClose={() => {
+          setIsDetailOpen(false)
+          setSelectedReservation(null)
+        }}
+        onEdit={() => {
+          setIsDetailOpen(false)
+          setIsModalOpen(true)
         }}
       />
     </section>
   )
+}
+
+function toLocalDateInputValue(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }

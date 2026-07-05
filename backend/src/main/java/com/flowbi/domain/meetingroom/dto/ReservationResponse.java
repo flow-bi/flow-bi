@@ -14,7 +14,8 @@ public record ReservationResponse(
     @Schema(description = "예약 종료 일시") @JsonProperty("end_at") LocalDateTime endAt,
     @Schema(description = "예약 상태") ReservationStatus status,
     @Schema(description = "취소 일시") @JsonProperty("cancelled_at") LocalDateTime cancelledAt,
-    @Schema(description = "이용 예상 인원") Integer count,
-    @Schema(description = "회의 상세 설명") String field,
+    @Schema(description = "이용 예상 인원") Integer count, @Schema(description = "회의 상세 설명") String field,
+    @Schema(description = "예약자 ID") @JsonProperty("creator_id") Long creatorId,
+    @Schema(description = "예약자 이름") @JsonProperty("creator_name") String creatorName,
     @Schema(description = "예약 팀명") @JsonProperty("team_name") String teamName) {
 }

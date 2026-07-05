@@ -122,8 +122,9 @@ public class RoomReservation {
     return field;
   }
 
-  public void update(String title, LocalDateTime startAt, LocalDateTime endAt, Integer count,
-      String field) {
+  public void update(Long roomId,String title,LocalDateTime startAt,LocalDateTime endAt,
+      Integer count,String field) {
+    this.roomId = roomId;
     this.title = title;
     this.startAt = startAt;
     this.endAt = endAt;

@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 public record ReservationRequest(
+    @Schema(description = "변경할 회의실 ID", example = "2") @JsonProperty("room_id") Long roomId,
     @Schema(description = "예약 제목", example = "기획 회의") @NotBlank @Size(max = 200) String title,
     @Schema(description = "예약 시작 일시", example = "2026-07-05T09:00:00") @JsonProperty("start_at") @NotNull LocalDateTime startAt,
     @Schema(description = "예약 종료 일시", example = "2026-07-05T10:00:00") @JsonProperty("end_at") @NotNull LocalDateTime endAt,
