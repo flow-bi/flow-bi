@@ -1,5 +1,7 @@
+import { LoginPage } from './features/auth/components/LoginPage'
+
 function App() {
-  return <div>Init flow-bi</div>
+  return <LoginPage />
 }
 
 export default App

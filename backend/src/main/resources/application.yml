@@ -22,3 +22,9 @@ spring:
       hibernate:
         format_sql: true
     database-platform: org.hibernate.dialect.H2Dialect
+
+flowbi:
+  jwt:
+    secret: ${FLOWBI_JWT_SECRET:flowbi-local-development-secret-key-change-before-deploy}
+    access-token-ttl: 30m
+    refresh-token-ttl: 14d

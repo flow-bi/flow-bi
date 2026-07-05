@@ -16,6 +16,9 @@
 | 예약 팀 표시 로직 가정 | `rooms_reservations`에 팀 컬럼이 없어 join으로 추정 표시하기로 가정, 확정 아님 | `product-specs/meeting-room.md` | 낮음 |
 | 로그인 시도 제한 미구현 | 무차별 대입 공격 방지 임계치/구현 여부 미정 | `SECURITY.md` 8번 | 낮음 (MVP1 필수 아님) |
 | 회의실 예약 권한 범위 가정 | 수정/취소를 예약자 본인만 가능하게 할지, 팀 전체 가능하게 할지 확인 필요 | `SECURITY.md` 5번 | 낮음 |
+| 비밀번호 변경 MVP2 이월 | 로그인 화면의 비밀번호 변경 진입점과 `PATCH /api/v1/auth/password`는 이번 MVP1 auth 작업에서 제외하고 MVP2 다음 작업으로 진행하기로 확정 | `product-specs/login.md`, `exec-plans/active/auth-domain.md` | 중 |
+| refresh token 응답 노출 규칙 정리 필요 | `AGENTS.md` 5.2/`SECURITY.md` 6번은 refresh token 원문 응답 금지로 읽히지만, `ARCHITECTURE.md` 4번과 `login.md`는 로그인/refresh 성공 시 refresh token 발급을 요구한다. 현재 구현은 클라이언트 저장을 위해 refresh token을 응답한다 | `AGENTS.md`, `SECURITY.md`, `ARCHITECTURE.md`, `product-specs/login.md` | 중 |
+| Springdoc 참고 파일명 불일치 | 작업 지시와 일부 문서가 `springdoc-openapi-llms.txt`를 가리키지만 실제 파일명은 `docs/references/springdoc-openai-llms.txt`다 | `docs/references/` | 낮음 |
 
 ## 알려진 성능 리스크 (구현 후 반드시 재확인)
 
