@@ -1,0 +1,226 @@
+# frontend-stack-llms.txt
+
+Zustand(클라이언트 상태) + TanStack Query(서버 상태) + React Hook Form + Zod(폼) 조합 사용 패턴. 세 라이브러리는 역할이 겹치지 않게 나눠 쓴다:
+
+- **Zustand**: 로그인 여부, 테마 선택 등 여러 컴포넌트가 공유하는 "서버에서 온 게 아닌" 상태
+- **TanStack Query**: 백엔드 API 응답(서버 상태) — 캐싱, 리페칭, 로딩/에러 상태
+- **React Hook Form + Zod**: 폼 입력 상태와 검증
+
+컴포넌트 하나에 국한된 상태(모달 열림/닫힘 등)는 셋 다 쓰지 않고 `useState`로 충분하다.
+
+---
+
+## 1. Zustand (v5)
+
+### 기본 스토어
+
+```ts
+import { create } from 'zustand'
+
+interface AuthState {
+  isAuthenticated: boolean
+  userName: string | null
+  setAuthenticated: (userName: string) => void
+  clear: () => void
+}
+
+export const useAuthStore = create<AuthState>()((set) => ({
+  isAuthenticated: false,
+  userName: null,
+  setAuthenticated: (userName) => set({ isAuthenticated: true, userName }),
+  clear: () => set({ isAuthenticated: false, userName: null }),
+}))
+```
+
+TypeScript 사용 시 `create<State>()(...)` 처럼 **빈 괄호를 한 번 더** 붙이는 curry 문법에 주의한다(안 붙이면 타입 추론이 깨질 수 있음).
+
+### 컴포넌트에서 사용
+
+```tsx
+function Header() {
+  const userName = useAuthStore((state) => state.userName)
+  return <span>{userName}</span>
+}
+```
+
+셀렉터(`(state) => state.userName`)를 반드시 사용해서, 스토어 전체가 아니라 필요한 값만 구독한다. `const { userName, isAuthenticated } = useAuthStore()`처럼 구조분해로 스토어 전체를 가져오면 관련 없는 상태 변경에도 리렌더링된다.
+
+### `persist` 미들웨어 (테마 도메인에서 사용, `theme.md` 참고)
+
+```ts
+import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
+
+type Theme = 'sky' | 'purple'
+
+interface ThemeState {
+  theme: Theme
+  setTheme: (theme: Theme) => void
+}
+
+export const useThemeStore = create<ThemeState>()(
+  persist(
+    (set) => ({
+      theme: 'sky',
+      setTheme: (theme) => set({ theme }),
+    }),
+    { name: 'groupware-theme' }, // localStorage key
+  ),
+)
+```
+
+`theme.md`에서 확정한 대로 백엔드 저장은 하지 않으므로, `persist`만으로 새로고침 후에도 유지된다.
+
+### 슬라이스 패턴 (스토어가 커질 때, 지금은 참고만)
+
+여러 슬라이스를 합칠 때는 미들웨어(devtools, persist 등)를 **개별 슬라이스가 아니라 합쳐진 스토어에만** 적용한다.
+
+```ts
+export const useBoundStore = create<BearSlice & FishSlice>()((...a) => ({
+  ...createBearSlice(...a),
+  ...createFishSlice(...a),
+}))
+```
+
+MVP1 규모(인증 여부, 테마 정도)에서는 슬라이스 분리가 꼭 필요하지 않다. 스토어가 여러 개로 늘어날 때 고려한다.
+
+---
+
+## 2. TanStack Query
+
+### 조회 (`useQuery`)
+
+```ts
+import { useQuery } from '@tanstack/react-query'
+import { fetchSchedules } from '@/features/schedule/api'
+
+function useScheduleList(view: 'month' | 'week' | 'day', date: string) {
+  return useQuery({
+    queryKey: ['schedules', view, date],
+    queryFn: () => fetchSchedules(view, date),
+  })
+}
+```
+
+- `queryKey`는 의존하는 파라미터를 모두 배열에 포함시킨다(`view`, `date`가 바뀌면 자동으로 재조회).
+- 로딩/에러 상태는 `isPending`, `isError`, `error`로 구분해서 쓴다(v5부터 `isLoading` 대신 `isPending` 권장 — `isLoading`은 `isPending && isFetching`의 별칭으로 남아있지만 `isPending`이 더 명확).
+
+### 변경 (`useMutation`)
+
+```ts
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { createSchedule } from '@/features/schedule/api'
+
+function useCreateSchedule() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: createSchedule,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['schedules'] })
+    },
+  })
+}
+```
+
+일정/회의실 예약처럼 생성 후 목록이 바뀌는 경우, `onSuccess`에서 관련 `queryKey`를 `invalidateQueries`로 무효화해서 재조회를 유도한다.
+
+### Envelope 응답과의 연동 (API설계 문서, AGENTS.md 5.1)
+
+백엔드가 항상 `{ success, data, message }` / `{ success: false, error }` 형태로 응답하므로, `queryFn`/`mutationFn`에서 공통으로 언랩하는 API client를 만든다.
+
+```ts
+// shared/api/client.ts
+async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(url, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+  })
+  const json = await res.json()
+  if (!json.success) {
+    throw new Error(json.error?.message ?? '요청 처리 중 오류가 발생했습니다.')
+  }
+  return json.data as T
+}
+```
+
+이렇게 하면 각 도메인의 `api.ts`는 Envelope을 신경 쓰지 않고 `data` 타입만 다루면 된다.
+
+### Zod로 응답 런타임 검증 (선택, 신뢰 경계에서 권장)
+
+백엔드 응답이 실제로 기대한 형태인지 런타임에서 확인하고 싶다면, `apiFetch`가 반환한 데이터를 Zod 스키마로 파싱한다.
+
+```ts
+const ScheduleSchema = z.object({
+  scheduleId: z.number(),
+  title: z.string(),
+  startAt: z.string(),
+  endAt: z.string(),
+})
+
+async function fetchSchedule(id: number) {
+  const data = await apiFetch(`/api/v1/schedules/${id}`)
+  return ScheduleSchema.parse(data) // 형태가 다르면 여기서 명확한 에러 발생
+}
+```
+
+모든 API에 강제하지는 않되, 값이 잘못 들어오면 화면이 깨지기 쉬운 곳(캘린더, 회의실 현황 등)에는 적용을 권장한다.
+
+---
+
+## 3. React Hook Form + Zod
+
+```bash
+npm install react-hook-form zod @hookform/resolvers
+```
+
+### 기본 패턴 (`zodResolver`)
+
+```tsx
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
+
+const profileSchema = z.object({
+  email: z.string().email({ message: '올바른 이메일 형식이 아닙니다.' }),
+  phoneNumber: z.string().min(1, { message: '전화번호를 입력해주세요.' }),
+  status: z.enum(['WORKING', 'ON_LEAVE', 'BUSINESS_TRIP']),
+})
+
+type ProfileFormValues = z.infer<typeof profileSchema>
+
+function MyPageForm({ defaultValues }: { defaultValues: ProfileFormValues }) {
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<ProfileFormValues>({
+    resolver: zodResolver(profileSchema),
+    defaultValues,
+  })
+
+  const { mutate } = useUpdateProfile() // TanStack Query useMutation
+
+  const onSubmit = (values: ProfileFormValues) => mutate(values)
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)}>
+      <input {...register('email')} />
+      {errors.email && <p>{errors.email.message}</p>}
+      {/* ... */}
+    </form>
+  )
+}
+```
+
+- Zod 스키마의 `z.infer<typeof schema>`로 폼 타입을 추론한다 — 타입을 손으로 중복 작성하지 않는다(AGENTS.md의 DTO 원칙과 같은 정신).
+- `resolver: zodResolver(schema)`가 제출 시 자동으로 스키마 검증을 실행하고 `errors`에 채워준다.
+
+### `user-profile.md`의 `status` enum과 연동
+
+`user-domain.md` 실행 계획에서 `users.status` 값이 `WORKING`/`ON_LEAVE`/`BUSINESS_TRIP`로 확정되면(아직 가정 단계), 위 예시처럼 `z.enum([...])`으로 프론트 검증에도 동일 값을 반영한다. 백엔드 enum과 프론트 Zod enum 값이 어긋나지 않도록, 두 값이 바뀔 때 항상 함께 갱신한다.
+
+### TanStack Query와 결합 시 흐름
+
+1. `useQuery`로 초기값(`GET /users/me`) 조회
+2. 조회된 데이터를 폼의 `defaultValues`로 전달 (React Hook Form은 `defaultValues`가 비동기로 늦게 들어오면 `values` prop을 쓰거나 `reset()`으로 채우는 방식을 쓴다 — 단순 폼은 로딩 완료 후에만 폼을 렌더링하는 방식이 제일 간단하다)
+3. 제출 시 `useMutation`으로 `PATCH /users/me` 호출, 성공 시 관련 쿼리 무효화
