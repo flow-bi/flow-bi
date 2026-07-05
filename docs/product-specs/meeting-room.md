@@ -26,10 +26,10 @@
 
 예약 취소 시 연동된 `schedules`도 **함께 삭제**한다. 캘린더에서도 해당 일정이 사라진다. 취소 이력 자체는 `rooms_reservations.status='CANCELLED'`, `cancelled_at`에만 남고, `schedules`/`schedules_details`는 하드 삭제한다.
 
-### 2. "예약 팀" 표시 항목의 데이터 출처
+### 2. "예약 팀" 표시 항목의 데이터 출처 (확정)
 회의실 현황판에 "예약 팀"을 표시해야 하는데, `rooms_reservations` 테이블에는 팀 정보 컬럼이 없다. 예약자(`schedules.creator_id`)의 소속팀(`users.team_id`)을 join해서 보여주는 것으로 추정된다.
 
-**가정(확인 필요)**: 별도 컬럼 추가 없이, 조회 시 `rooms_reservations → schedules.creator_id → users.team_id → teams.team_name`을 join하여 표시한다.
+**확정**: 별도 컬럼 추가 없이, 조회 시 `rooms_reservations → schedules.creator_id → users.team_id → teams.team_name`을 join하여 표시한다. (2026-07-05 사용자 확인)
 
 ## API 개요 (초안)
 

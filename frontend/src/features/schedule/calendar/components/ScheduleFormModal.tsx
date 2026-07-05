@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 
 import { Modal } from '../../../../shared/components/Modal'
+import { useCreateReservation, useRooms } from '../../../meetingroom/list/hooks'
 import { useCreateSchedule } from '../hooks'
 import { scheduleFormSchema } from '../schema'
 
@@ -16,7 +17,10 @@ type ScheduleFormModalProps = {
 
 export function ScheduleFormModal({ isOpen, selectedDate, onClose }: ScheduleFormModalProps) {
   const [scheduleKind, setScheduleKind] = useState<'basic' | 'meeting-room'>('basic')
+  const [selectedRoomId, setSelectedRoomId] = useState('')
   const createMutation = useCreateSchedule()
+  const roomsQuery = useRooms({ date: selectedDate })
+  const createReservationMutation = useCreateReservation(Number(selectedRoomId) || 0)
   const {
     register,
     handleSubmit,
@@ -59,6 +63,7 @@ export function ScheduleFormModal({ isOpen, selectedDate, onClose }: ScheduleFor
   const close = () => {
     reset()
     setScheduleKind('basic')
+    setSelectedRoomId('')
     onClose()
   }
 
@@ -90,28 +95,87 @@ export function ScheduleFormModal({ isOpen, selectedDate, onClose }: ScheduleFor
       </div>
 
       {scheduleKind === 'meeting-room' ? (
-        <div className="space-y-4">
-          <p className="rounded-md border border-dashed border-[var(--color-border)] bg-[var(--color-disabled-bg)] p-4 text-sm leading-6 text-[var(--color-text-muted)]">
-            회의실 목록과 시간대 선택 UI가 들어갈 자리입니다. meetingroom 도메인의 `POST
-            /api/v1/rooms/{'{roomId}'}/reservations` API가 구현되면 이 화면에서 같은 요청을
-            호출합니다.
-          </p>
-          <label className="block space-y-2">
-            <span className="text-sm font-semibold">회의실 ID</span>
+        <form
+          className="space-y-4"
+          onSubmit={(event) => {
+            void handleSubmit((values) => {
+              if (!selectedRoomId) {
+                return
+              }
+              createReservationMutation.mutate(
+                {
+                  title: values.title,
+                  date: values.startAt.slice(0, 10),
+                  startTime: values.startAt.slice(11, 16),
+                  endTime: values.endAt.slice(11, 16),
+                  count: 1,
+                  field: values.content,
+                  attendeeUserIds: values.attendeeUserIds,
+                },
+                { onSuccess: close },
+              )
+            })(event)
+          }}
+        >
+          <Field label="회의실">
+            <select
+              className="form-input"
+              value={selectedRoomId}
+              onChange={(event) => setSelectedRoomId(event.target.value)}
+            >
+              <option value="">회의실 선택</option>
+              {(roomsQuery.data ?? []).map((room) => (
+                <option key={room.roomId} value={room.roomId}>
+                  {room.roomName} · {room.capacity ?? '-'}명
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label="제목" error={errors.title?.message}>
+            <input className="form-input" {...register('title')} />
+          </Field>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="시작 일시" error={errors.startAt?.message}>
+              <input className="form-input" type="datetime-local" {...register('startAt')} />
+            </Field>
+            <Field label="종료 일시" error={errors.endAt?.message}>
+              <input className="form-input" type="datetime-local" {...register('endAt')} />
+            </Field>
+          </div>
+
+          <Field label="참석자 사용자 ID">
             <input
-              className="h-10 w-full rounded-md border border-[var(--color-border)] px-3 text-sm"
-              disabled
-              placeholder="meetingroom API 구현 후 연결"
+              className="form-input"
+              placeholder="예: 2, 3, 4"
+              {...register('attendeeUserIds')}
             />
-          </label>
+          </Field>
+
+          <Field label="상세 설명" error={errors.content?.message}>
+            <textarea
+              className="min-h-24 w-full rounded-md border border-[var(--color-border)] px-3 py-2 text-sm"
+              {...register('content')}
+            />
+          </Field>
+
+          {roomsQuery.isError || createReservationMutation.isError ? (
+            <p className="text-sm text-[var(--color-danger)]">
+              회의실 예약을 저장하지 못했습니다. 시간대와 입력값을 확인해주세요.
+            </p>
+          ) : null}
+
           <button
-            className="h-10 w-full rounded-md bg-[var(--color-disabled-bg)] px-3 text-sm font-semibold text-[var(--color-text-muted)]"
-            disabled
-            type="button"
+            className="h-10 w-full rounded-md bg-[var(--color-primary)] px-3 text-sm font-semibold text-white disabled:opacity-60"
+            disabled={
+              !selectedRoomId || roomsQuery.isPending || createReservationMutation.isPending
+            }
+            type="submit"
           >
-            회의실 예약 API 준비 중
+            회의실 예약
           </button>
-        </div>
+        </form>
       ) : (
         <form
           className="space-y-4"

@@ -12,12 +12,12 @@
 | 배포 환경/CI-CD 미정 | 어디에 배포할지, 파이프라인 여부 결정 안 됨 | `ARCHITECTURE.md` 8번, `RELIABILITY.md` 6번, `SECURITY.md` 9번 | 중 |
 | 테스트 전략 미정 | 커버리지 목표, 통합 테스트 범위 등 | `ARCHITECTURE.md` 8번, `QUALITY_SCORE.md` 6번 | 중 |
 | 도메인 담당자 배정 미정 | 현재 3인 개인 실험 단계 | `AGENTS.md` 8번 | 낮음 (의도적 보류) |
-| 예약 팀 표시 로직 가정 | `rooms_reservations`에 팀 컬럼이 없어 join으로 추정 표시하기로 가정, 확정 아님 | `product-specs/meeting-room.md` | 낮음 |
 | 로그인 시도 제한 미구현 | 무차별 대입 공격 방지 임계치/구현 여부 미정 | `SECURITY.md` 8번 | 낮음 (MVP1 필수 아님) |
 | 회의실 예약 권한 범위 가정 | 수정/취소를 예약자 본인만 가능하게 할지, 팀 전체 가능하게 할지 확인 필요 | `SECURITY.md` 5번 | 낮음 |
 | 일정 공유 대상 존재 검증 미완료 | schedule 생성 시 `schedule_targets`의 USER/TEAM/PROJECT 조합 검증은 구현했지만, user 도메인을 수정하지 않는 범위 제한 때문에 사용자/팀/프로젝트 ID 존재 여부를 user 서비스 레이어로 검증하는 부분은 후속 user 조회 서비스 확장 후 연결 필요 | `exec-plans/active/schedule-domain.md`, `ARCHITECTURE.md` 3.2 | 중 |
-| 회의실 일정 생성 API 미연동 | 캘린더 일정 추가 모달의 "회의실 일정" 분기는 UI만 구현했다. meetingroom 도메인의 `POST /api/v1/rooms/{roomId}/reservations` 구현 후 실제 호출을 연결해야 한다 | `product-specs/schedule.md`, `product-specs/meeting-room.md` | 중 |
 | teams_closure 조회용 매핑 위치 재검토 | 캘린더 조회 쿼리의 TEAM 공유 대상 테스트/로컬 실행을 위해 schedule 도메인에 `teams_closure` 읽기 매핑을 추가했다. user 도메인 조직도 구현 시 해당 매핑 소유 위치를 재검토해야 한다 | `design-docs/schedule-sharing-model.md`, `ARCHITECTURE.md` 3.2 | 낮음 |
+| teams 조회용 매핑 위치 재검토 | 회의실 현황판의 예약 팀 표시(`rooms_reservations → schedules.creator_id → users.team_id → teams.team_name`)를 위해 meetingroom 도메인에 `teams` 읽기 매핑을 추가했다. user 도메인 조직도/팀 조회 구현 시 해당 매핑 소유 위치를 재검토해야 한다 | `product-specs/meeting-room.md`, `ARCHITECTURE.md` 3.2 | 낮음 |
+| references 경로 문서 불일치 | 작업 지시와 일부 문서는 `references/frontend-stack-llms.txt`, `references/springdoc-openapi-llms.txt`를 가리키지만 실제 파일은 `docs/references/frontend-stack-llms.txt`, `docs/references/springdoc-openai-llms.txt`에 있다 | `FRONTEND.md`, `docs/references/` | 낮음 |
 
 ## 알려진 성능 리스크 (구현 후 반드시 재확인)
 
@@ -32,3 +32,5 @@
 
 - **Access/refresh token 만료시간 미정** — `SECURITY.md` 2번에서 확정 (access 30분, refresh 14일, 로테이션 + 재사용 탐지). 해결일: 문서 작성 시점(SECURITY.md 작성 완료).
 - **"회의실 일정" 등록 흐름 미확정** — 캘린더 "일정 추가"와 회의실 "예약하기"를 동일 API로 통합하기로 확정 (`schedule.md` 3번, `meeting-room.md` 참고).
+- **예약 팀 표시 로직 가정** — 사용자 확인으로 `rooms_reservations → schedules.creator_id → users.team_id → teams.team_name` 조인 표시를 확정하고 meetingroom 조회에 반영. 해결일: 2026-07-05.
+- **회의실 일정 생성 API 미연동** — `POST /api/v1/rooms/{roomId}/reservations`를 구현하고 캘린더 "회의실 일정" 분기에서 실제 호출하도록 연결. 해결일: 2026-07-05.

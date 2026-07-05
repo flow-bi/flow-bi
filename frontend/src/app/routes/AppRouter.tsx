@@ -5,6 +5,7 @@ import { defaultAuthenticatedPath, findProtectedRoute } from './routeConfig'
 import { useCurrentPath } from './useCurrentPath'
 import { LoginPage } from '../../features/auth/components/LoginPage'
 import { useAuthStore } from '../../features/auth/store'
+import { MeetingRoomPage } from '../../features/meetingroom/list/components/MeetingRoomPage'
 import { CalendarPage } from '../../features/schedule/calendar/components/CalendarPage'
 import { DashboardPage } from '../../features/schedule/dashboard-widgets/components/DashboardPage'
 import { AppLayout } from '../../shared/components/layout/AppLayout'
@@ -58,6 +59,9 @@ function renderRoute(route: NonNullable<ReturnType<typeof findProtectedRoute>>) 
   }
   if (route.path === '/dashboard') {
     return <DashboardPage />
+  }
+  if (route.path === '/meeting-rooms') {
+    return <MeetingRoomPage />
   }
   return <PlaceholderPage route={route} />
 }

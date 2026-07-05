@@ -4,6 +4,41 @@
  */
 
 export interface paths {
+  '/api/v1/rooms/{roomId}/reservations': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** 회의실 예약 현황 조회 */
+    get: operations['findReservations']
+    put?: never
+    /** 회의실 예약 생성 */
+    post: operations['createReservation']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/v1/rooms': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** 회의실 목록 조회 */
+    get: operations['findRooms']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/v1/schedules': {
     parameters: {
       query?: never
@@ -92,10 +127,157 @@ export interface paths {
     patch: operations['update']
     trace?: never
   }
+  '/api/v1/rooms/reservations/{reservationId}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post?: never
+    /** 회의실 예약 취소 */
+    delete: operations['cancelReservation']
+    options?: never
+    head?: never
+    /** 회의실 예약 수정 */
+    patch: operations['updateReservation']
+    trace?: never
+  }
 }
 export type webhooks = Record<string, never>
 export interface components {
   schemas: {
+    ReservationRequest: {
+      /**
+       * @description 예약 제목
+       * @example 기획 회의
+       */
+      title: string
+      /**
+       * Format: date-time
+       * @description 예약 시작 일시
+       * @example 2026-07-05T09:00:00
+       */
+      start_at: string
+      /**
+       * Format: date-time
+       * @description 예약 종료 일시
+       * @example 2026-07-05T10:00:00
+       */
+      end_at: string
+      /**
+       * Format: int32
+       * @description 이용 예상 인원
+       * @example 5
+       */
+      count?: number
+      /** @description 회의 상세 설명 */
+      field?: string
+      /**
+       * @description 일정 유형
+       * @example PERSONAL
+       * @enum {string}
+       */
+      schedule_type?: 'PERSONAL' | 'TEAM' | 'PROJECT'
+      /**
+       * @description 열람 가능 범위
+       * @example PRIVATE
+       * @enum {string}
+       */
+      visibility?: 'PUBLIC' | 'PRIVATE' | 'TEAM_ONLY'
+      /**
+       * @description 일정 색상 라벨
+       * @example 파랑
+       */
+      color_label?: string
+      /** @description 일정 공유 대상 목록 */
+      targets?: components['schemas']['ScheduleTargetRequest'][]
+    }
+    ApiResponseReservationResponse: {
+      success?: boolean
+      data?: components['schemas']['ReservationResponse']
+      message?: string
+    }
+    ReservationResponse: {
+      /**
+       * Format: int64
+       * @description 예약 ID
+       */
+      reservation_id?: number
+      /**
+       * Format: int64
+       * @description 회의실 ID
+       */
+      room_id?: number
+      /**
+       * Format: int64
+       * @description 연동 일정 ID
+       */
+      schedule_id?: number
+      /** @description 예약 제목 */
+      title?: string
+      /**
+       * Format: date-time
+       * @description 예약 시작 일시
+       */
+      start_at?: string
+      /**
+       * Format: date-time
+       * @description 예약 종료 일시
+       */
+      end_at?: string
+      /**
+       * @description 예약 상태
+       * @enum {string}
+       */
+      status?: 'PENDING' | 'RESERVED' | 'CANCELLED'
+      /**
+       * Format: date-time
+       * @description 취소 일시
+       */
+      cancelled_at?: string
+      /**
+       * Format: int32
+       * @description 이용 예상 인원
+       */
+      count?: number
+      /** @description 회의 상세 설명 */
+      field?: string
+      /** @description 예약 팀명 */
+      team_name?: string
+    }
+    ApiResponseListRoomResponse: {
+      success?: boolean
+      data?: components['schemas']['RoomResponse'][]
+      message?: string
+    }
+    RoomResponse: {
+      /**
+       * Format: int64
+       * @description 회의실 ID
+       */
+      room_id?: number
+      /** @description 회의실 이름 */
+      room_name?: string
+      /**
+       * Format: int64
+       * @description 수용 인원
+       */
+      capacity?: number
+      /** @description 위치 */
+      location?: string
+      /** @description 장비/비고 */
+      field?: string
+      /** @description 조회 날짜의 예약 목록 */
+      reservations?: components['schemas']['ReservationResponse'][]
+    }
+    ApiResponseListReservationResponse: {
+      success?: boolean
+      data?: components['schemas']['ReservationResponse'][]
+      message?: string
+    }
     ScheduleRequest: {
       /**
        * @description 일정 제목
@@ -341,6 +523,81 @@ export interface components {
 }
 export type $defs = Record<string, never>
 export interface operations {
+  findReservations: {
+    parameters: {
+      query: {
+        date: string
+      }
+      header?: never
+      path: {
+        roomId: number
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          '*/*': components['schemas']['ApiResponseListReservationResponse']
+        }
+      }
+    }
+  }
+  createReservation: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        roomId: number
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ReservationRequest']
+      }
+    }
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          '*/*': components['schemas']['ApiResponseReservationResponse']
+        }
+      }
+    }
+  }
+  findRooms: {
+    parameters: {
+      query?: {
+        capacity?: number
+        date?: string
+        timeRange?: string
+        status?: 'PENDING' | 'RESERVED' | 'CANCELLED'
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          '*/*': components['schemas']['ApiResponseListRoomResponse']
+        }
+      }
+    }
+  }
   findCalendar: {
     parameters: {
       query?: {
@@ -526,6 +783,54 @@ export interface operations {
         }
         content: {
           '*/*': components['schemas']['ApiResponseScheduleResponse']
+        }
+      }
+    }
+  }
+  cancelReservation: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        reservationId: number
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          '*/*': components['schemas']['ApiResponseVoid']
+        }
+      }
+    }
+  }
+  updateReservation: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        reservationId: number
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ReservationRequest']
+      }
+    }
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          '*/*': components['schemas']['ApiResponseReservationResponse']
         }
       }
     }

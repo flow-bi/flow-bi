@@ -12,10 +12,19 @@ public enum ErrorCode {
                           HttpStatus.NOT_FOUND), SCHEDULE_ACCESS_DENIED("SCHEDULE_002",
                               "일정에 대한 권한이 없습니다.", HttpStatus.FORBIDDEN), SCHEDULE_INVALID_TARGET(
                                   "SCHEDULE_003", "일정 공유 대상이 올바르지 않습니다.",
-                                  HttpStatus.BAD_REQUEST), VALIDATION_FAILED("COMMON_001",
-                                      "요청 값이 올바르지 않습니다.",
-                                      HttpStatus.BAD_REQUEST), INTERNAL_ERROR("COMMON_999",
-                                          "서버 오류가 발생했습니다.", HttpStatus.INTERNAL_SERVER_ERROR);
+                                  HttpStatus.BAD_REQUEST), MEETINGROOM_ROOM_NOT_FOUND(
+                                      "MEETINGROOM_001", "회의실을 찾을 수 없습니다.",
+                                      HttpStatus.NOT_FOUND), MEETINGROOM_RESERVATION_NOT_FOUND(
+                                          "MEETINGROOM_002", "회의실 예약을 찾을 수 없습니다.",
+                                          HttpStatus.NOT_FOUND), MEETINGROOM_RESERVATION_CONFLICT(
+                                              "MEETINGROOM_003", "이미 예약된 시간대입니다.",
+                                              HttpStatus.CONFLICT), MEETINGROOM_CANCELLED_RESERVATION(
+                                                  "MEETINGROOM_004", "취소된 예약은 수정할 수 없습니다.",
+                                                  HttpStatus.BAD_REQUEST), VALIDATION_FAILED(
+                                                      "COMMON_001", "요청 값이 올바르지 않습니다.",
+                                                      HttpStatus.BAD_REQUEST), INTERNAL_ERROR(
+                                                          "COMMON_999", "서버 오류가 발생했습니다.",
+                                                          HttpStatus.INTERNAL_SERVER_ERROR);
 
   private final String code;
   private final String message;
