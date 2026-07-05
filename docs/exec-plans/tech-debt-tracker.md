@@ -19,6 +19,7 @@
 | 비밀번호 변경 MVP2 이월 | 로그인 화면의 비밀번호 변경 진입점과 `PATCH /api/v1/auth/password`는 이번 MVP1 auth 작업에서 제외하고 MVP2 다음 작업으로 진행하기로 확정 | `product-specs/login.md`, `exec-plans/active/auth-domain.md` | 중 |
 | refresh token 응답 노출 규칙 정리 필요 | `AGENTS.md` 5.2/`SECURITY.md` 6번은 refresh token 원문 응답 금지로 읽히지만, `ARCHITECTURE.md` 4번과 `login.md`는 로그인/refresh 성공 시 refresh token 발급을 요구한다. 현재 구현은 클라이언트 저장을 위해 refresh token을 응답한다 | `AGENTS.md`, `SECURITY.md`, `ARCHITECTURE.md`, `product-specs/login.md` | 중 |
 | Springdoc 참고 파일명 불일치 | 작업 지시와 일부 문서가 `springdoc-openapi-llms.txt`를 가리키지만 실제 파일명은 `docs/references/springdoc-openai-llms.txt`다 | `docs/references/` | 낮음 |
+| 관리 탭 시각적 구분 기준 누락 | `layout.md`가 `DESIGN.md`의 "관리 탭 시각적 구분"을 참조하지만 현재 `DESIGN.md`에는 해당 섹션이 없다. 이번 구현은 `layout.md`의 비활성 톤 요구에 맞춰 placeholder를 처리했다 | `DESIGN.md`, `product-specs/layout.md` | 낮음 |
 
 ## 알려진 성능 리스크 (구현 후 반드시 재확인)
 

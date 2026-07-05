@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 
 import { ApiError } from '../../../shared/api/client'
@@ -8,7 +9,11 @@ import { useAuthStore } from '../store'
 
 import type { LoginFormValues } from '../types'
 
-export function LoginPage() {
+type LoginPageProps = {
+  onAuthenticated?: () => void
+}
+
+export function LoginPage({ onAuthenticated }: LoginPageProps) {
   const user = useAuthStore((state) => state.user)
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
   const loginMutation = useLoginMutation()
@@ -32,6 +37,12 @@ export function LoginPage() {
       : loginMutation.error
         ? '로그인 요청을 처리하지 못했습니다.'
         : null
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      onAuthenticated?.()
+    }
+  }, [isAuthenticated, onAuthenticated])
 
   return (
     <main className="min-h-screen bg-[var(--color-bg)] px-5 py-10 text-[var(--color-text)]">
