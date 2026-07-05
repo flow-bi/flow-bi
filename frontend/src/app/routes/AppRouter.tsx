@@ -5,6 +5,8 @@ import { defaultAuthenticatedPath, findProtectedRoute } from './routeConfig'
 import { useCurrentPath } from './useCurrentPath'
 import { LoginPage } from '../../features/auth/components/LoginPage'
 import { useAuthStore } from '../../features/auth/store'
+import { CalendarPage } from '../../features/schedule/calendar/components/CalendarPage'
+import { DashboardPage } from '../../features/schedule/dashboard-widgets/components/DashboardPage'
 import { AppLayout } from '../../shared/components/layout/AppLayout'
 import { PlaceholderPage } from '../../shared/components/layout/PlaceholderPage'
 
@@ -45,9 +47,19 @@ export function AppRouter() {
 
   return (
     <AppLayout activePath={route?.path ?? defaultAuthenticatedPath}>
-      {route ? <PlaceholderPage route={route} /> : null}
+      {route ? renderRoute(route) : null}
     </AppLayout>
   )
+}
+
+function renderRoute(route: NonNullable<ReturnType<typeof findProtectedRoute>>) {
+  if (route.path === '/schedule') {
+    return <CalendarPage />
+  }
+  if (route.path === '/dashboard') {
+    return <DashboardPage />
+  }
+  return <PlaceholderPage route={route} />
 }
 
 function parseCurrentPath(path: string) {

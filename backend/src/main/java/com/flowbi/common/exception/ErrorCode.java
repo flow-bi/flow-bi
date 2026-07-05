@@ -8,9 +8,14 @@ public enum ErrorCode {
           HttpStatus.UNAUTHORIZED), AUTH_REFRESH_TOKEN_REUSED("AUTH_003", "다시 로그인이 필요합니다.",
               HttpStatus.UNAUTHORIZED), AUTH_TOKEN_EXPIRED("AUTH_004", "토큰이 만료되었습니다.",
                   HttpStatus.UNAUTHORIZED), AUTH_ACCESS_DENIED("AUTH_005", "로그인이 필요합니다.",
-                      HttpStatus.UNAUTHORIZED), VALIDATION_FAILED("COMMON_001", "요청 값이 올바르지 않습니다.",
-                          HttpStatus.BAD_REQUEST), INTERNAL_ERROR("COMMON_999", "서버 오류가 발생했습니다.",
-                              HttpStatus.INTERNAL_SERVER_ERROR);
+                      HttpStatus.UNAUTHORIZED), SCHEDULE_NOT_FOUND("SCHEDULE_001", "일정을 찾을 수 없습니다.",
+                          HttpStatus.NOT_FOUND), SCHEDULE_ACCESS_DENIED("SCHEDULE_002",
+                              "일정에 대한 권한이 없습니다.", HttpStatus.FORBIDDEN), SCHEDULE_INVALID_TARGET(
+                                  "SCHEDULE_003", "일정 공유 대상이 올바르지 않습니다.",
+                                  HttpStatus.BAD_REQUEST), VALIDATION_FAILED("COMMON_001",
+                                      "요청 값이 올바르지 않습니다.",
+                                      HttpStatus.BAD_REQUEST), INTERNAL_ERROR("COMMON_999",
+                                          "서버 오류가 발생했습니다.", HttpStatus.INTERNAL_SERVER_ERROR);
 
   private final String code;
   private final String message;

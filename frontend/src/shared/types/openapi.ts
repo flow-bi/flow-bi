@@ -4,6 +4,24 @@
  */
 
 export interface paths {
+  '/api/v1/schedules': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** 캘린더 일정 조회 */
+    get: operations['findCalendar']
+    put?: never
+    /** 일정 생성 */
+    post: operations['create']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/v1/auth/refresh': {
     parameters: {
       query?: never
@@ -55,10 +73,176 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/v1/schedules/{scheduleId}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** 일정 상세 조회 */
+    get: operations['findById']
+    put?: never
+    post?: never
+    /** 일정 삭제 */
+    delete: operations['delete']
+    options?: never
+    head?: never
+    /** 일정 수정 */
+    patch: operations['update']
+    trace?: never
+  }
 }
 export type webhooks = Record<string, never>
 export interface components {
   schemas: {
+    ScheduleRequest: {
+      /**
+       * @description 일정 제목
+       * @example 주간 회의
+       */
+      title: string
+      /**
+       * @description 일정 유형
+       * @example TEAM
+       * @enum {string}
+       */
+      schedule_type: 'PERSONAL' | 'TEAM' | 'PROJECT'
+      /**
+       * @description 열람 가능 범위
+       * @example PRIVATE
+       * @enum {string}
+       */
+      visibility: 'PUBLIC' | 'PRIVATE' | 'TEAM_ONLY'
+      /**
+       * Format: date-time
+       * @description 시작 일시
+       * @example 2026-07-05T09:00:00
+       */
+      start_at: string
+      /**
+       * Format: date-time
+       * @description 종료 일시
+       * @example 2026-07-05T10:00:00
+       */
+      end_at: string
+      /**
+       * @description 색상 라벨
+       * @example 파랑
+       */
+      color_label?: string
+      /**
+       * @description 장소
+       * @example 본관 3층
+       */
+      location?: string
+      /** @description 일정 상세 설명 */
+      content?: string
+      /** @description 공유 대상 목록 */
+      targets?: components['schemas']['ScheduleTargetRequest'][]
+    }
+    ScheduleTargetRequest: {
+      /**
+       * @description 공유 대상 유형
+       * @example USER
+       * @enum {string}
+       */
+      target_type: 'USER' | 'PROJECT' | 'TEAM'
+      /**
+       * Format: int64
+       * @description 사용자 ID
+       */
+      user_id?: number
+      /**
+       * Format: int64
+       * @description 프로젝트 ID
+       */
+      project_id?: number
+      /**
+       * Format: int64
+       * @description 공유 기준 상위 팀 ID
+       */
+      ancestor_team_id?: number
+      /**
+       * Format: int64
+       * @description 팀 ID
+       */
+      team_id?: number
+    }
+    ApiResponseScheduleResponse: {
+      success?: boolean
+      data?: components['schemas']['ScheduleResponse']
+      message?: string
+    }
+    ScheduleResponse: {
+      /**
+       * Format: int64
+       * @description 일정 ID
+       */
+      schedule_id?: number
+      /** @description 일정 제목 */
+      title?: string
+      /**
+       * @description 일정 유형
+       * @enum {string}
+       */
+      schedule_type?: 'PERSONAL' | 'TEAM' | 'PROJECT'
+      /**
+       * @description 열람 가능 범위
+       * @enum {string}
+       */
+      visibility?: 'PUBLIC' | 'PRIVATE' | 'TEAM_ONLY'
+      /**
+       * Format: date-time
+       * @description 시작 일시
+       */
+      start_at?: string
+      /**
+       * Format: date-time
+       * @description 종료 일시
+       */
+      end_at?: string
+      /**
+       * Format: int64
+       * @description 등록자 ID
+       */
+      creator_id?: number
+      /** @description 색상 라벨 */
+      color_label?: string
+      /** @description 장소 */
+      location?: string
+      /** @description 일정 상세 설명 */
+      content?: string
+      /** @description 공유 대상 목록 */
+      targets?: components['schemas']['ScheduleTargetResponse'][]
+    }
+    ScheduleTargetResponse: {
+      /**
+       * @description 공유 대상 유형
+       * @enum {string}
+       */
+      target_type?: 'USER' | 'PROJECT' | 'TEAM'
+      /**
+       * Format: int64
+       * @description 사용자 ID
+       */
+      user_id?: number
+      /**
+       * Format: int64
+       * @description 프로젝트 ID
+       */
+      project_id?: number
+      /**
+       * Format: int64
+       * @description 공유 기준 상위 팀 ID
+       */
+      ancestor_team_id?: number
+      /**
+       * Format: int64
+       * @description 팀 ID
+       */
+      team_id?: number
+    }
     RefreshTokenRequest: {
       /** @description 리프레시 토큰 */
       refresh_token: string
@@ -138,6 +322,16 @@ export interface components {
        */
       device_info?: string
     }
+    ApiResponseListScheduleResponse: {
+      success?: boolean
+      data?: components['schemas']['ScheduleResponse'][]
+      message?: string
+    }
+    ApiResponseVoid: {
+      success?: boolean
+      data?: Record<string, never>
+      message?: string
+    }
   }
   responses: never
   parameters: never
@@ -147,6 +341,53 @@ export interface components {
 }
 export type $defs = Record<string, never>
 export interface operations {
+  findCalendar: {
+    parameters: {
+      query?: {
+        view?: string
+        date?: string
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          '*/*': components['schemas']['ApiResponseListScheduleResponse']
+        }
+      }
+    }
+  }
+  create: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ScheduleRequest']
+      }
+    }
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          '*/*': components['schemas']['ApiResponseScheduleResponse']
+        }
+      }
+    }
+  }
   refresh: {
     parameters: {
       query?: never
@@ -215,6 +456,76 @@ export interface operations {
         }
         content: {
           '*/*': components['schemas']['ApiResponseAuthTokenResponse']
+        }
+      }
+    }
+  }
+  findById: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        scheduleId: number
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          '*/*': components['schemas']['ApiResponseScheduleResponse']
+        }
+      }
+    }
+  }
+  delete: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        scheduleId: number
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          '*/*': components['schemas']['ApiResponseVoid']
+        }
+      }
+    }
+  }
+  update: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        scheduleId: number
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ScheduleRequest']
+      }
+    }
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          '*/*': components['schemas']['ApiResponseScheduleResponse']
         }
       }
     }
