@@ -11,7 +11,7 @@ extends = "worker-base"
 glob_scan_max_depth = 5
 
 [permissions.fe-worker.filesystem.":workspace_roots"]
-"frontend/src/**" = "write"
+"frontend/src/" = "write"
 "backend/**" = "read"
 
 [permissions.fe-worker.network]
