@@ -1,0 +1,5 @@
+.codex-logs/
+.agents/**/__pycache__/
+.agents/**/*.py[cod]
+
+.env
