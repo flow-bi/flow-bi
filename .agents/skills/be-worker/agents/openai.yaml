@@ -1,0 +1,4 @@
+interface:
+  display_name: "be-worker"
+  short_description: "백엔드 애플리케이션 구현 및 유지보수 작업 수행"
+  default_prompt: "$be-worker를 사용해 요청한 백엔드 변경 사항을 구현해 주세요."

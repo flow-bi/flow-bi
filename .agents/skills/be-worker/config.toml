@@ -1,0 +1,19 @@
+model = "gpt-5.6-terra"
+model_reasoning_effort = "medium"
+
+default_permissions = "be-worker"
+
+[permissions.be-worker]
+description = "Backend worker with read-only project access and backend write access."
+extends = "worker-base"
+
+[permissions.be-worker.filesystem]
+glob_scan_max_depth = 5
+
+[permissions.be-worker.filesystem.":workspace_roots"]
+"backend/src/**" = "write"
+"frontend/**" = "read"
+
+
+[permissions.be-worker.network]
+enabled = false

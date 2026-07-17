@@ -1,52 +1,62 @@
 # ============================================================
 # Base configuration
 # ============================================================
-
 model = "gpt-5.6-sol"
 model_reasoning_effort = "medium"
 personality = "pragmatic"
 
 approval_policy = "never"
-web_search = "disabled"
 project_root_markers = [".git"]
 
 # ============================================================
 # Default permission
 # ============================================================
 
-default_permissions = "orchestrator"
+default_permissions = ":danger-full-access"
+
+
 
 # ============================================================
-# Shared read-only base
+# worker-base
 # ============================================================
 
-[permissions.project-read-only]
-description = "Read-only project access with sensitive files denied."
-extends = ":read-only"
+[permissions.worker-base]
+description = "worker base config"
 
-[permissions.project-read-only.filesystem]
-glob_scan_max_depth = 5
-
-[permissions.project-read-only.filesystem.":workspace_roots"]
-"**/*.env" = "deny"
-"**/.env" = "deny"
-"**/.env.*" = "deny"
-
-# ============================================================
-# Main orchestrator
-# ============================================================
-
-[permissions.orchestrator]
-description = "Read-only project access with sensitive files denied."
-extends = "project-read-only"
-
-[permissions.orchestrator.filesystem]
+[permissions.worker-base.filesystem]
 glob_scan_max_depth = 3
 
-[permissions.orchestrator.filesystem.":workspace_roots"]
+[permissions.worker-base.filesystem.":workspace_roots"]
+"." = "read"
 "**/*.env" = "deny"
 "**/.env" = "deny"
 "**/.env.*" = "deny"
+
+[permissions.worker-base.network]
+enabled = false
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # ============================================================
 # Frontend worker
