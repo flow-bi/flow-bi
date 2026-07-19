@@ -64,7 +64,7 @@ def read_config_overrides(config_path: Path) -> list[str]:
         for key, value in config.items()
     ]
 
-
+# codex exec 명령어 생성
 def build_codex_command(
     config_path: Path,
     output_path: Path,
@@ -76,7 +76,7 @@ def build_codex_command(
     command.append("-")
     return command
 
-
+# Worker 실행에 필요한 환경변수 구성
 def build_subprocess_environment(
     worker: str,
     run_id: str,
