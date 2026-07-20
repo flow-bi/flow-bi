@@ -1,17 +1,14 @@
 import { SUMMARY_REQUEST } from "./config.mjs";
 
+// 하네스가 명시적으로 전달한 worker 환경변수를 먼저 확인하고 없으면 primary
 export function resolveWorker(environment = process.env) {
   if (["fe-worker", "be-worker"].includes(environment.FLOW_BI_WORKER)) {
     return environment.FLOW_BI_WORKER;
   }
-  if (
-    ["fe-worker", "be-worker"].includes(environment.CODEX_PERMISSION_PROFILE)
-  ) {
-    return environment.CODEX_PERMISSION_PROFILE;
-  }
   return "primary";
 }
 
+// 훅이나 시스템이 생성하면 pass
 export function isSyntheticPrompt(input) {
   return (
     input?.prompt === SUMMARY_REQUEST ||
@@ -30,19 +27,22 @@ export function pendingForSession(pending, sessionId) {
 
 export function commonRecord(state, occurredAt) {
   return {
-    detail: {
-      occurred_at: occurredAt,
+    occurred_at: occurredAt,
+
+    context: {
       session_id: state.session_id,
       turn_id: state.turn_id,
-      parent_id: state.parent_id,
-      ...(state.parent_session_id
-        ? { parent_session_id: state.parent_session_id }
-        : {}),
-      depth: state.depth,
-      hierarchy_resolved: state.hierarchy_resolved,
+      node_id: state.node_id,
     },
-
-    worker: state.worker,
-    ...(state.agent_type ? { agent_type: state.agent_type } : {}),
+    hierarchy: {
+      parent_id: state.parent_id,
+      parent_session_id: state.parent_session_id ?? null,
+      depth: state.depth,
+      resolved: state.hierarchy_resolved,
+    },
+    executor: {
+      worker: state.worker,
+      agent_type: state.agent_type ?? null,
+    },
   };
 }
