@@ -15,6 +15,7 @@ import {
   STALE_LOCK_MS,
   storagePaths,
 } from "./config.mjs";
+import { buildPromptDetailTree } from "./tree.mjs";
 
 function sleep(milliseconds) {
   return new Promise((resolvePromise) => setTimeout(resolvePromise, milliseconds));
@@ -79,6 +80,7 @@ export async function withStorage(projectRoot, mutate) {
     records.sort((left, right) => left.occurred_at.localeCompare(right.occurred_at));
     atomicWriteJson(storage.logFile, records);
     atomicWriteJson(storage.pendingFile, pending);
+    atomicWriteJson(storage.treeFile, buildPromptDetailTree(records));
     return result;
   } finally {
     try {

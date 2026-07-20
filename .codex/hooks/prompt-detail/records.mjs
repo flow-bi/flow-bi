@@ -22,7 +22,7 @@ export function pendingForSession(pending, sessionId) {
   const matches = pending.filter(
     (item) => item.session_id === sessionId && item.kind === "task",
   );
-  return matches.length === 1 ? matches[0] : null;
+  return matches.at(-1) ?? null;
 }
 
 export function commonRecord(state, occurredAt) {

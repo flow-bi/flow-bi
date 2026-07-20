@@ -1,4 +1,4 @@
-import { PROJECT_ROOT } from "./config.mjs";
+import { PROJECT_ROOT, TREE_VERSION } from "./config.mjs";
 import { commonRecord } from "./records.mjs";
 import { withStorage } from "./storage.mjs";
 
@@ -9,9 +9,9 @@ export async function handleSubagentStart(
   const result = await withStorage(projectRoot, ({ records, pending }) => {
     const turnNode = `turn:${input.turn_id}`;
     const candidates = pending.filter(
-      (item) => item.node_id === turnNode || (item.kind === "agent" && item.turn_id === input.turn_id),
+      (item) => item.kind === "task" && item.node_id === turnNode,
     );
-    const parent = candidates.length === 1 && candidates[0].node_id === turnNode ? candidates[0] : null;
+    const parent = candidates.length === 1 ? candidates[0] : null;
     const state = {
       kind: "agent",
       session_id: input.session_id,
@@ -21,12 +21,14 @@ export async function handleSubagentStart(
       parent_session_id: input.session_id,
       depth: parent ? parent.depth + 1 : 0,
       hierarchy_resolved: Boolean(parent),
-      worker: "primary",
+      worker: parent?.worker ?? "primary",
+      tree_version: parent ? parent.tree_version : TREE_VERSION,
       agent_type: input.agent_type,
       agent_id: input.agent_id,
     };
     records.push({
       record_type: "agent_start",
+      tree_version: state.tree_version,
       ...commonRecord(state, now().toISOString()),
     });
     pending.push(state);
@@ -54,6 +56,7 @@ export async function handleSubagentStop(
     const state = pending[index];
     records.push({
       record_type: "agent_end",
+      tree_version: state.tree_version,
       ...commonRecord(state, now().toISOString()),
       status: "completed",
       summary: input.last_assistant_message || "Subagent completed without a captured final summary.",

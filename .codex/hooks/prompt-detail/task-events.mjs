@@ -1,4 +1,4 @@
-import { PROJECT_ROOT, SUMMARY_REQUEST } from "./config.mjs";
+import { PROJECT_ROOT, SUMMARY_REQUEST, TREE_VERSION } from "./config.mjs";
 import {
   commonRecord,
   isSyntheticPrompt,
@@ -57,12 +57,14 @@ export async function handleUserPromptSubmit(
 
       hierarchy_resolved: hierarchyResolved,
       worker,
+      tree_version: parent ? parent.tree_version : TREE_VERSION,
 
       run_id: environment.FLOW_BI_RUN_ID || null,
       summary_requested: false,
     };
     records.push({
       record_type: "task_start",
+      tree_version: state.tree_version,
       ...commonRecord(state, occurredAt),
       prompt: input.prompt,
       cwd: input.cwd,
@@ -96,6 +98,7 @@ export async function handleStop(
 
     records.push({
       record_type: "task_end",
+      tree_version: state.tree_version,
       ...commonRecord(state, now().toISOString()),
       status: "completed",
       exit_code: 0,
@@ -134,6 +137,7 @@ export async function recordWorkerEnd(
 
     records.push({
       record_type: "task_end",
+      tree_version: state.tree_version,
       ...commonRecord(state, now().toISOString()),
 
       status: {
