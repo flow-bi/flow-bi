@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "harness_exec.py"
@@ -169,6 +170,16 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual([worker for worker, _ in calls], ["be-worker", "be-worker", "fe-worker"])
         self.assertIn("be-1", calls[0][1])
         self.assertNotIn("be-2", calls[0][1])
+
+    def test_invoke_worker_uses_run_worker_entrypoint(self) -> None:
+        with mock.patch.object(harness_exec.subprocess, "run") as run:
+            harness_exec.invoke_worker("fe-worker", "$fe-worker build UI", self.root)
+
+        command = run.call_args.args[0]
+        self.assertEqual(Path(command[1]).name, "run-worker.py")
+        self.assertEqual(command[2], "$fe-worker build UI")
+        self.assertEqual(run.call_args.kwargs["cwd"], self.root)
+        self.assertTrue(run.call_args.kwargs["check"])
 
 if __name__ == "__main__":
     unittest.main()
