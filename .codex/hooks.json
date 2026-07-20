@@ -5,8 +5,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$(git rev-parse --show-toplevel)/.codex/hooks/log-prompt.mjs\"",
-            "commandWindows": "node (Join-Path (git rev-parse --show-toplevel) '.codex/hooks/log-prompt.mjs')",
+            "command": "node \"$(git rev-parse --show-toplevel)/.codex/hooks/log-prompt-detail.mjs\"",
+            "commandWindows": "node (Join-Path (git rev-parse --show-toplevel) '.codex/hooks/log-prompt-detail.mjs')",
             "timeout": 30
           }
         ]
@@ -17,6 +17,42 @@
             "type": "command",
             "command": "node \"$(git rev-parse --show-toplevel)/.codex/hooks/validate-harness-exec.mjs\"",
             "commandWindows": "node (Join-Path (git rev-parse --show-toplevel) '.codex/hooks/validate-harness-exec.mjs')",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/.codex/hooks/log-prompt-detail.mjs\"",
+            "commandWindows": "node (Join-Path (git rev-parse --show-toplevel) '.codex/hooks/log-prompt-detail.mjs')",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/.codex/hooks/log-prompt-detail.mjs\"",
+            "commandWindows": "node (Join-Path (git rev-parse --show-toplevel) '.codex/hooks/log-prompt-detail.mjs')",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/.codex/hooks/log-prompt-detail.mjs\"",
+            "commandWindows": "node (Join-Path (git rev-parse --show-toplevel) '.codex/hooks/log-prompt-detail.mjs')",
             "timeout": 30
           }
         ]
