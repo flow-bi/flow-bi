@@ -6,6 +6,7 @@ import subprocess
 
 from .models import ExecutionReport, HarnessRequest, Task, WorkerFailure
 from .worker_gateway import invoke_worker
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 
 
 WorkerInvoker = Callable[[str, str], object]
@@ -38,7 +39,7 @@ def _build_worker_prompt(
                 task.body,
             ]
         )
-    return "\n".join(parts)
+    return '\n'.join(parts)
 
 
 def _return_code(result: object) -> int:
@@ -48,6 +49,141 @@ def _return_code(result: object) -> int:
     return return_code if isinstance(return_code, int) else 0
 
 
+def _execute_worker(
+    worker: str,
+    tasks: Sequence[Task],
+    request: HarnessRequest,
+    plan_path: Path,
+    project_root: Path,
+    call_worker: WorkerInvoker,
+) -> WorkerFailure | None:
+    worker_tasks = [
+        task
+        for task in tasks
+        if task.worker == worker
+    ]
+
+    if not worker_tasks:
+        return None
+
+    prompt = _build_worker_prompt(
+        worker_tasks,
+        plan_path,
+        project_root,
+        request.additional_request,
+    )
+
+    try:
+        result = call_worker(worker, prompt)
+        return_code = _return_code(result)
+
+        if return_code != 0:
+            return WorkerFailure(
+                worker,
+                return_code=return_code,
+            )
+
+    except subprocess.TimeoutExpired as error:
+        return WorkerFailure(
+            worker,
+            return_code=124,
+            timed_out=True,
+            message=str(error),
+        )
+
+    except subprocess.CalledProcessError as error:
+        return WorkerFailure(
+            worker,
+            return_code=error.returncode,
+            message=str(error),
+        )
+
+    except Exception as error:
+        return WorkerFailure(
+            worker,
+            message=str(error),
+        )
+
+    return None
+
+def _execute_workers_parallel(
+    workers: Sequence[str],
+    tasks: Sequence[Task],
+    request: HarnessRequest,
+    plan_path: Path,
+    project_root: Path,
+    call_worker: WorkerInvoker,
+) -> tuple[WorkerFailure, ...]:
+    failures: list[WorkerFailure] = []
+
+    max_workers = len(workers)
+    if max_workers == 0:
+        return ()
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures: dict[Future[WorkerFailure | None], str] = {
+            executor.submit(
+                _execute_worker,
+                worker,
+                tasks,
+                request,
+                plan_path,
+                project_root,
+                call_worker,
+            ): worker
+            for worker in workers
+        }
+
+        for future in as_completed(futures):
+            worker = futures[future]
+
+            try:
+                failure = future.result()
+            except Exception as error:
+                failure = WorkerFailure(
+                    worker,
+                    message=str(error),
+                )
+
+            if failure is not None:
+                failures.append(failure)
+
+    failure_by_worker = {
+        failure.worker: failure
+        for failure in failures
+    }
+
+    return tuple(
+        failure_by_worker[worker]
+        for worker in workers
+        if worker in failure_by_worker
+    )
+
+def _execute_workers_sequentially(
+    workers: Sequence[str],
+    tasks: Sequence[Task],
+    request: HarnessRequest,
+    plan_path: Path,
+    project_root: Path,
+    call_worker: WorkerInvoker,
+) -> tuple[WorkerFailure, ...]:
+    failures: list[WorkerFailure] = []
+
+    for worker in workers:
+        failure = _execute_worker(
+            worker,
+            tasks,
+            request,
+            plan_path,
+            project_root,
+            call_worker,
+        )
+
+        if failure is not None:
+            failures.append(failure)
+
+    return tuple(failures)
+
 def execute_workers(
     tasks: Sequence[Task],
     request: HarnessRequest,
@@ -56,33 +192,39 @@ def execute_workers(
     invoker: WorkerInvoker | None = None,
 ) -> ExecutionReport:
     call_worker = invoker or (
-        lambda worker, prompt: invoke_worker(worker, prompt, project_root)
-    )
-    workers: list[str] = []
-    failures: list[WorkerFailure] = []
-
-    for worker in request.worker_order:
-        worker_tasks = [task for task in tasks if task.worker == worker]
-        if not worker_tasks:
-            continue
-        workers.append(worker)
-        prompt = _build_worker_prompt(
-            worker_tasks, plan_path, project_root, request.additional_request
+        lambda worker, prompt: invoke_worker(
+            worker,
+            prompt,
+            project_root,
         )
-        try:
-            result = call_worker(worker, prompt)
-            return_code = _return_code(result)
-            if return_code != 0:
-                failures.append(WorkerFailure(worker, return_code=return_code))
-        except subprocess.TimeoutExpired as error:
-            failures.append(
-                WorkerFailure(worker, return_code=124, timed_out=True, message=str(error))
-            )
-        except subprocess.CalledProcessError as error:
-            failures.append(
-                WorkerFailure(worker, return_code=error.returncode, message=str(error))
-            )
-        except Exception as error:
-            failures.append(WorkerFailure(worker, message=str(error)))
+    )
 
-    return ExecutionReport(tuple(workers), tuple(failures))
+    workers = tuple(
+        worker
+        for worker in request.worker_order
+        if any(task.worker == worker for task in tasks)
+    )
+
+    if request.parallel:
+        failures = _execute_workers_parallel(
+            workers,
+            tasks,
+            request,
+            plan_path,
+            project_root,
+            call_worker,
+        )
+    else:
+        failures = _execute_workers_sequentially(
+            workers,
+            tasks,
+            request,
+            plan_path,
+            project_root,
+            call_worker,
+        )
+
+    return ExecutionReport(
+        workers,
+        failures,
+    )

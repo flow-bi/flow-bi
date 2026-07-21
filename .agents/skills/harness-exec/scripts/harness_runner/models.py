@@ -28,6 +28,7 @@ class HarnessRequest:
     plan_id: str
     worker_order: tuple[str, str] = DEFAULT_WORKER_ORDER
     additional_request: str = ""
+    parallel: bool  = False
 
 
 @dataclass(frozen=True)
