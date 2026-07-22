@@ -7,8 +7,10 @@ import re
 
 from .models import DEFAULT_WORKER_ORDER, PlanValidationError, Task
 
+# 읽거나 수정할 수 잇는 파일을 런타임에만 들어서 강제할 수도있겠다, 속성 패턴에 추가하고 config생성시 넣으면
 
-PLAN_ID_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*-[0-9]{2}$")
+
+# Task 헤딩 및 속성 추출
 TASK_HEADING_PATTERN = re.compile(r"^##[ \t]+Task:[ \t]*(.*?)[ \t]*$", re.MULTILINE)
 ATTRIBUTE_PATTERNS = {
     "worker": re.compile(r"^[ \t]*-[ \t]*worker:[ \t]*(.*?)[ \t]*$", re.MULTILINE),
@@ -26,11 +28,18 @@ class _ParsedTask:
 
 
 def repository_root() -> Path:
-    return Path(__file__).resolve().parents[5]
+    current = Path(__file__).resolve().parent
+
+    for directory in (current, *current.parents):
+        if (directory / ".git").exists():
+            return directory
+
+    raise RuntimeError("저장소 루트를 찾을 수 없습니다.")
 
 
+# plan이 확정되면 그에 따라 수정이 필요 
 def _parse_plan_text(text: str) -> list[_ParsedTask]:
-    """Parse task sections without filesystem access."""
+    """ Task 섹션들을 추출 """
 
     headings = list(TASK_HEADING_PATTERN.finditer(text))
     if not headings:
@@ -38,10 +47,12 @@ def _parse_plan_text(text: str) -> list[_ParsedTask]:
 
     parsed: list[_ParsedTask] = []
     for index, heading in enumerate(headings):
+        
         section_end = headings[index + 1].start() if index + 1 < len(headings) else len(text)
         section = text[heading.end() : section_end]
         attributes: dict[str, tuple[str, ...]] = {}
         ends: list[int] = []
+
         for name, pattern in ATTRIBUTE_PATTERNS.items():
             matches = list(pattern.finditer(section))
             attributes[name] = tuple(match.group(1).strip() for match in matches)
@@ -116,19 +127,8 @@ def _validate_tasks(parsed_tasks: Sequence[_ParsedTask], project_root: Path) -> 
 
 
 def load_active_plan(plan_id: str, project_root: Path) -> tuple[Path, list[Task]]:
-    if not PLAN_ID_PATTERN.fullmatch(plan_id):
-        raise PlanValidationError(
-            "plan ID는 소문자 kebab-case와 두 자리 번호 형식이어야 합니다 (예: dashboard-01)."
-        )
-
     active_root = (project_root / "docs" / "plan" / "active").resolve()
     plan_path = (active_root / f"{plan_id}.md").resolve()
-    try:
-        plan_path.relative_to(active_root)
-    except ValueError as error:
-        raise PlanValidationError("plan 경로가 docs/plan/active 밖을 가리킬 수 없습니다.") from error
-    if not plan_path.is_file():
-        raise PlanValidationError(f"active plan이 없습니다: docs/plan/active/{plan_id}.md")
 
     complete_path = _complete_path(plan_path, project_root)
     if complete_path.exists():
