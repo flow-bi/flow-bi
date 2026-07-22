@@ -20,6 +20,9 @@ description: Validate and execute an active repository plan only when explicitly
 python .agents/skills/harness-exec/scripts/harness_exec.py '<USER_REQUEST>'
 ```
 
+위 명령을 실행하는 shell 도구의 `timeout_ms`는 반드시 30분(`1800000`)으로
+설정한다. 더 짧은 값을 임의로 지정하거나 기본 timeout에 맡기지 않는다.
+
 runner의 오류 또는 worker 실패를 숨기지 말고 사용자에게 보고한다.
 기본적으로 BE task 묶음이 있으면 먼저 실행하고, FE task 묶음을 실행한다.
 하지만 명시적인 순서를 지정해줬을 경우에는 그를 따른다.

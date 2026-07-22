@@ -37,6 +37,8 @@ def _build_worker_prompt(
                 f"- 관련 설계 문서: {_display_design_docs(task)}",
                 "",
                 task.body,
+                "마지막에는 작업 내용과 작업 성공 여부 그리고 전체적인 리뷰를 같이 넣어서 정리 해서 메시지 남겨줘",
+                "작업이 끝난다음에는 review subagent 실행해서 결과 알려줘"
             ]
         )
     return '\n'.join(parts)
