@@ -85,7 +85,11 @@ export function buildPromptDetailTree(records) {
     }
 
     let parent = entry.parentId ? entries.get(entry.parentId) : null;
-    if (!parent && entry.node.kind === "task" && entry.node.executor.worker !== "primary") {
+    if (
+      !parent &&
+      entry.parentSessionId &&
+      (entry.node.kind === "agent" || entry.node.executor.worker !== "primary")
+    ) {
       parent = [...entries.values()]
         .filter(
           (candidate) =>

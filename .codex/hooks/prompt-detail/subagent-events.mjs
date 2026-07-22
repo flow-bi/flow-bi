@@ -1,5 +1,5 @@
 import { PROJECT_ROOT, TREE_VERSION } from "./config.mjs";
-import { commonRecord } from "./records.mjs";
+import { commonRecord, pendingForSession } from "./records.mjs";
 import { withStorage } from "./storage.mjs";
 
 export async function handleSubagentStart(
@@ -11,7 +11,9 @@ export async function handleSubagentStart(
     const candidates = pending.filter(
       (item) => item.kind === "task" && item.node_id === turnNode,
     );
-    const parent = candidates.length === 1 ? candidates[0] : null;
+    const parent =
+      (candidates.length === 1 ? candidates[0] : null) ??
+      pendingForSession(pending, input.session_id);
     const state = {
       kind: "agent",
       session_id: input.session_id,
