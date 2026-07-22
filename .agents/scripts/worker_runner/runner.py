@@ -13,8 +13,8 @@ from .codex import (
     PROJECT_ROOT,
     build_codex_command,
     build_subprocess_environment,
-    resolve_config_path,
 )
+from .config import resolve_config_path
 
 
 SubprocessRunner = Callable[..., subprocess.CompletedProcess[str]]
