@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Command-line entry point for the harness runner."""
+"""하네스 실행기를 위한 명령줄 진입점"""
 
 from pathlib import Path as _Path
 import sys as _sys

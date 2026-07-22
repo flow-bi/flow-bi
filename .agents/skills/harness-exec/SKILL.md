@@ -17,7 +17,7 @@ description: Validate and execute an active repository plan only when explicitly
 다음 명령을 실행하되 `<USER_REQUEST>`에는 현재 사용자의 요청 원문을 넣는다.
 
 ```bash
-python .agents/skills/harness-exec/scripts/harness_exec.py "<USER_REQUEST>"
+python .agents/skills/harness-exec/scripts/harness_exec.py '<USER_REQUEST>'
 ```
 
 runner의 오류 또는 worker 실패를 숨기지 말고 사용자에게 보고한다.
