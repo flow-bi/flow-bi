@@ -82,9 +82,6 @@ harness-plan은 계획 생성 전용이다.
 - Worker는 아래 값만 사용한다.
   - `frontend-worker`
   - `backend-worker`
-  - `test-worker`
-  - `docs-worker`
-  - `main`
 - 수정 가능 경로와 수정 금지 경로를 명확히 분리한다.
 - 각 Task에는 구현 항목, 검증 항목, 완료 조건, 실패 조건, 제외 범위를 포함한다.
 - 각 Task와 전체 완료 조건에는 `quality_score` 기준을 포함한다.
