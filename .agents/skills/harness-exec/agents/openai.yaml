@@ -1,0 +1,7 @@
+interface:
+  display_name: "Harness Exec"
+  short_description: "Active plan을 검증하고 BE·FE worker를 순차 실행"
+  default_prompt: "Use $harness-exec dashboard-01 to validate and execute an active plan."
+
+policy:
+  allow_implicit_invocation: false

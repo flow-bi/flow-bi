@@ -1,0 +1,18 @@
+model = "gpt-5.6-terra"
+model_reasoning_effort = "medium"
+
+default_permissions = "fe-worker"
+
+[permissions.fe-worker]
+description = "Frontend worker with read-only project access and frontend write access."
+extends = "worker-base"
+
+[permissions.fe-worker.filesystem]
+glob_scan_max_depth = 5
+
+[permissions.fe-worker.filesystem.":workspace_roots"]
+"frontend/src/" = "write"
+"backend/**" = "read"
+
+[permissions.fe-worker.network]
+enabled = false
