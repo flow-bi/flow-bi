@@ -129,7 +129,7 @@ Agent의 자체 선언만으로 작업은 완료되지 않는다. Task는 최소
 Active Plan 파일명은 다음 형식을 MUST 따른다.
 
 ```text
-{feature-name}_{NN}.md
+{feature-name}-{NN}.md
 ```
 
 - `{feature-name}`은 영문 `kebab-case`를 사용한다.
