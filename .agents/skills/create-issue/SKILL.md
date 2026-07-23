@@ -1,144 +1,173 @@
 ---
 name: create-issue
 description: >-
-  $create-issue, Issue 생성, GitHub Issue 초안 작성 요청에 사용한다.
-  사용자 요청, 관련 Plan, 관련 문서, 저장소의 Issue Template을 확인해 Issue 제목과 본문 초안을 작성한다.
-  사용자가 명시적으로 승인한 경우에만 GitHub Issue를 생성한다.
+  $create-issue, activePlan 기반 GitHub Issue 초안 작성과 Issue 번호 기반 브랜치 생성 요청에 사용한다.
+  관련 activePlan, Issue Template, title-rules, checklist를 확인해 Issue 초안을 작성한다.
+  사용자가 승인한 경우에만 GitHub Issue를 생성하고 해당 Issue 번호로 새 브랜치를 만든 뒤 이동한다.
 ---
 
 # create-issue
 
 ## 목적
 
-사용자 요청, Plan, 관련 문서를 분석하여 작업 유형을 판단하고  
-저장소의 GitHub Issue Template에 맞는 Issue 제목과 본문 초안을 작성한다.
+activePlan을 기준으로 GitHub Issue 초안을 작성하고, 승인 후 Issue를 생성한 뒤 Issue 번호 기반 작업 브랜치를 만든다.
 
 기본 동작은 Issue 초안 작성이다.  
-실제 GitHub Issue 생성은 사용자 승인 후에만 수행한다.
+GitHub Issue 생성과 브랜치 생성은 사용자가 명시적으로 승인한 경우에만 수행한다.
 
-## 지원 유형
+## 사용 시점
 
-- `feat`: 새로운 기능 추가 또는 기존 기능 확장
-- `bug`: 기대 동작과 실제 동작이 다른 문제 수정
-- `refactor`: 외부 동작을 유지하면서 코드 또는 구조 개선
-- `documents`: 문서 추가, 수정, 규칙 정의 또는 문서 구조 정리
+다음 요청이 들어오면 사용한다.
+
+- `$create-issue`
+- `$create-issue {plan-id}`
+- `{plan-id} 이슈 만들어줘`
+- `이 작업으로 이슈 만들고 브랜치 파줘`
+
+예시:
+
+```text
+$create-issue dashboard-01
+$create-issue calendar-02
+```
 
 ## 작업 흐름
 
-1. 사용자 요청을 확인한다.
-2. 작업 유형을 판단한다.
-3. 관련 Plan을 찾는다.
-   - `docs/plans/active/`
-   - `docs/plans/completed/`
-4. 관련 문서를 찾는다.
-   - `docs/product-specs/`
-   - `docs/design-docs/`
-   - `docs/quality/`
-5. 저장소의 Issue Template을 읽는다.
+1. 사용자 요청에서 Plan ID를 확인한다.
+   - 형식: `{feature}-{NN}`
+   - 예시: `dashboard-01`
+2. 관련 activePlan을 읽는다.
+   - `docs/plans/active/{feature}-{NN}.md`
+3. 저장소 Issue Template을 읽는다.
    - `.github/ISSUE_TEMPLATE/`
-6. Template 형식에 맞춰 Issue 제목과 본문 초안을 작성한다.
-7. 사용자에게 초안을 먼저 보여준다.
-8. 사용자가 명시적으로 요청한 경우에만 GitHub Issue를 생성한다.
-9. 생성 결과를 보고한다.
+4. 참고 규칙을 읽는다.
+   - `.agents/skills/create-issue/references/checklist.md`
+   - `.agents/skills/create-issue/references/title-rules.md`
+5. activePlan 기준으로 작업 범위와 작업 유형을 판단한다.
+6. Issue 제목과 본문 초안을 작성한다.
+7. 생성 예정 브랜치명을 제안한다.
+8. 사용자에게 초안을 보여주고 승인을 기다린다.
+9. 사용자가 승인하면 GitHub Issue를 생성한다.
+10. 생성된 Issue 번호로 브랜치를 만든다.
+11. 새 브랜치로 이동한다.
+12. 결과를 보고한다.
 
-## 작성 규칙
+## activePlan 규칙
 
-- 저장소에 Issue Template이 있으면 그 형식과 섹션 순서를 따른다.
-- Skill 내부에 별도 Issue Template을 복사해서 관리하지 않는다.
-- 관련 Plan이 없으면 `없음`으로 표시한다.
-- 관련 문서가 없으면 `없음` 또는 `확인되지 않음`으로 표시한다.
-- Issue 번호를 추측하지 않는다.
-- 동일하거나 유사한 열린 Issue가 있으면 새로 만들지 않는다.
-- 제목과 본문이 비어 있으면 생성하지 않는다.
+- Issue는 activePlan을 기준으로 만든다.
+- 관련 activePlan이 없으면 Issue를 만들지 않는다.
+- Plan ID가 애매하면 임의로 고르지 않고 사용자 확인을 요청한다.
+- Issue 본문에는 activePlan의 작업 목적, Task 요약, 검증 기준을 반영한다.
+- activePlan에 사람 검증 필요 항목이 있으면 Issue 본문에 남긴다.
 
-## 제목 규칙
+## 작업 범위 규칙
 
-기존 Issue 제목 규칙이 있으면 그 규칙을 따른다.
+범위는 아래 값 중 하나를 사용한다.
 
-기존 규칙이 확인되지 않으면 아래 형식을 사용한다.
+- `fe`: 프론트엔드
+- `be`: 백엔드
+- `all`: 프론트엔드와 백엔드 또는 전체 기능
+- `docs`: 문서
+- `infra`: 인프라, 배포, CI/CD
+- `harness`: 하네스, Skill, Hook, 자동화 스크립트
 
-- `[FE] - ✔ Feat: {작업 내용}`
-- `[BE] - ✔ Feat: {작업 내용}`
-- `[ALL] - ✔ Feat: {작업 내용}`
-- `[DOCS] - 📚 Documents: {작업 내용}`
-- `[FIX] - 🐛 Bug: {문제 내용}`
-- `[REFACTOR] - ♻ Refactor: {개선 내용}`
+범위가 애매하면 사용자 확인이 필요하다.
 
-## GitHub Issue 생성 조건
+## 작업 유형 규칙
 
-Issue 초안을 작성한 직후에는 실제 Issue를 생성하지 않는다.
+유형은 아래 값 중 하나를 사용한다.
 
-다음 조건을 모두 만족한 경우에만 생성한다.
+- `feat`: 기능 추가 또는 기능 확장
+- `bug`: 버그 수정
+- `refactor`: 동작 변경 없는 구조 개선
+- `docs`: 문서 작업
+- `chore`: 설정, 빌드, 관리 작업
 
-- 제목과 본문 초안이 작성됨
-- 사용자 검토가 완료됨
-- 사용자가 `이대로 생성해줘`, `GitHub에 올려줘`, `Issue 생성해줘`처럼 명시적으로 요청함
-- 대상 GitHub 저장소가 확인됨
-- 사용 가능한 GitHub 인증 수단이 확인됨
-- 동일하거나 유사한 열린 Issue가 없음
+## 브랜치 규칙
 
-## GitHub 생성 방법
+Issue 생성 후 생성된 Issue 번호를 기준으로 브랜치를 만든다.
 
-GitHub CLI를 사용할 수 있으면 아래 명령을 사용한다.
+브랜치명 형식:
+
+```text
+{scope}/{type}/{issue-number}
+```
+
+예시:
+
+```text
+fe/feat/16
+be/bug/17
+all/refactor/18
+docs/docs/19
+harness/chore/20
+```
+
+규칙:
+
+- 브랜치는 현재 브랜치에서 생성한다.
+- 브랜치명에는 `#`을 넣지 않는다.
+- Issue 번호는 GitHub에서 실제 생성된 번호를 사용한다.
+- Issue 생성 전에 Issue 번호를 추측하지 않는다.
+- 같은 이름의 브랜치가 있으면 새로 만들지 않는다.
+- 원격 Push는 사용자가 따로 승인한 경우에만 한다.
+
+브랜치 생성 명령:
 
 ```bash
-gh auth status
+git switch -c <scope>/<type>/<issue-number>
+```
 
+## GitHub Issue 생성
+
+사용자 승인 전에는 GitHub Issue를 생성하지 않는다.
+
+승인 문구 예시:
+
+- `이대로 생성해줘`
+- `GitHub에 올려줘`
+- `Issue 만들고 브랜치 파줘`
+- `ㅇㅋ 생성해줘`
+
+GitHub CLI를 사용할 수 있으면 아래 방식을 우선한다.
+
+```bash
 gh issue create \
   --title "<검토된 제목>" \
   --body-file "<Issue 본문 파일>"
 ```
 
-GitHub CLI를 사용할 수 없으면 안전한 인증 수단을 이용해 GitHub REST API로 생성할 수 있다.
-
-인증 정보는 출력하지 않는다.  
-인증 정보를 파일에 저장하지 않는다.
+Issue 생성 후 반환된 Issue 번호로 브랜치를 만든다.
 
 ## 하지 말아야 할 것
 
+- activePlan 없이 Issue를 만들지 않는다.
 - 사용자 승인 없이 GitHub Issue를 생성하지 않는다.
-- 저장소의 Issue Template을 무시하지 않는다.
-- Skill 내부에 Issue Template 전문을 복사하지 않는다.
-- 관련 Plan이나 문서를 임의로 지어내지 않는다.
+- 사용자 승인 없이 브랜치를 생성하지 않는다.
 - Issue 번호를 추측하지 않는다.
-- 동일하거나 유사한 Issue가 있는데 새 Issue를 만들지 않는다.
-- 인증 정보를 출력하지 않는다.
-- 인증 정보를 파일에 저장하지 않는다.
-- 실패 원인을 숨기지 않는다.
+- 브랜치명에 `#`을 넣지 않는다.
+- 기존 브랜치를 덮어쓰지 않는다.
+- Issue Template을 무시하지 않는다.
+- 관련 Plan이나 문서를 임의로 지어내지 않는다.
+- 인증 정보를 출력하거나 저장하지 않는다.
+- 원격 Push를 임의로 하지 않는다.
 
-## 출력 형식
+## 출력
 
-Issue 초안 작성 후에는 아래 형식으로 보고한다.
+초안 작성 후에는 아래를 보고한다.
 
-```text
-Issue 초안 작성 완료
+- 관련 activePlan
+- 작업 범위
+- 작업 유형
+- Issue 제목
+- Issue 본문
+- 생성 예정 브랜치명
+- 사용자 승인 대기 여부
 
-유형: <feat | bug | refactor | documents>
-제목: <Issue 제목>
-관련 Plan: <Plan 경로 또는 없음>
-관련 문서: <문서 경로 또는 없음>
-생성 여부: 사용자 승인 대기
+생성 완료 후에는 아래를 보고한다.
 
-본문:
-<Issue 본문>
-```
-
-GitHub Issue 생성 성공 시 아래 형식으로 보고한다.
-
-```text
-GitHub Issue 생성 완료
-
-제목: <Issue 제목>
-Issue: #<Issue 번호>
-URL: <생성된 Issue URL>
-```
-
-GitHub Issue 생성 실패 시 아래 형식으로 보고한다.
-
-```text
-GitHub Issue 생성 실패
-
-단계: <실패 단계>
-원인: <실패 원인>
-조치: <필요한 조치>
-```
+- 생성된 Issue 번호
+- Issue URL
+- 기준 브랜치
+- 생성된 브랜치
+- 현재 브랜치
