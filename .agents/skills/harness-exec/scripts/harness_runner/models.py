@@ -3,13 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
-DEFAULT_WORKER_ORDER = ("be-worker", "fe-worker")
-ALLOWED_WORKER_ORDERS = (
-    DEFAULT_WORKER_ORDER,
-    tuple(reversed(DEFAULT_WORKER_ORDER)),
-)
-
-
 class PlanValidationError(ValueError):
     """Raised when an invocation or active plan is invalid."""
 
@@ -33,9 +26,14 @@ class ParsedPlan:
 @dataclass(frozen=True)
 class HarnessRequest:
     plan_id: str
-    worker_order: tuple[str, str] = DEFAULT_WORKER_ORDER
     additional_request: str = ""
-    parallel: bool  = False
+
+
+@dataclass(frozen=True)
+class TaskInvocation:
+    common_prompt: str
+    additional_request: str
+    task: Task
 
 
 @dataclass(frozen=True)
@@ -47,10 +45,27 @@ class WorkerFailure:
 
 
 @dataclass(frozen=True)
+class TaskResult:
+    task_number: int
+    title: str
+    status: str
+    return_code: int | None = None
+    timed_out: bool = False
+    message: str = ""
+
+
+@dataclass(frozen=True)
 class ExecutionReport:
-    workers: tuple[str, ...]
-    failures: tuple[WorkerFailure, ...]
+    results: tuple[TaskResult, ...]
 
     @property
     def succeeded(self) -> bool:
-        return not self.failures
+        return all(result.status == "succeeded" for result in self.results)
+
+    @property
+    def failures(self) -> tuple[TaskResult, ...]:
+        return tuple(
+            result
+            for result in self.results
+            if result.status in {"failed", "blocked"}
+        )

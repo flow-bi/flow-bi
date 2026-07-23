@@ -1,232 +1,189 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
+import heapq
 from pathlib import Path
 import subprocess
 
-from .models import ExecutionReport, HarnessRequest, Task, WorkerFailure
-from .worker_gateway import invoke_worker
-from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+from .models import (
+    ExecutionReport,
+    HarnessRequest,
+    ParsedPlan,
+    Task,
+    TaskInvocation,
+    TaskResult,
+)
+from .worker_gateway import invoke_task
 
 
-WorkerInvoker = Callable[[str, str], object]
-
-
-def _display_design_docs(task: Task) -> str:
-    return ", ".join(task.design_docs) if task.design_docs else "없음"
-
-
-def _build_worker_prompt(
-    tasks: Sequence[Task],
-    plan_path: Path,
-    project_root: Path,
-    additional_request: str,
-) -> str:
-    relative_plan = plan_path.resolve().relative_to(project_root.resolve()).as_posix()
-    parts = [
-        "다음 active plan의 배정된 task를 문서 순서대로 모두 수행하세요.",
-        f"plan 경로: {relative_plan}",
-        f"추가 사용자 요청: {additional_request.strip() or '없음'}",
-    ]
-    for task in tasks:
-        parts.extend(
-            [
-                "",
-                f"## Task: {task.task_id}",
-                f"- 작업 유형: {task.work_type}",
-                f"- 관련 설계 문서: {_display_design_docs(task)}",
-                "",
-                task.body,
-                "마지막에는 작업 내용과 작업 성공 여부 그리고 전체적인 리뷰를 같이 넣어서 정리 해서 메시지 남겨줘",
-                "작업이 끝난다음에는 review subagent 실행해서 결과 알려줘"
-            ]
-        )
-    return '\n'.join(parts)
+WorkerInvoker = Callable[[TaskInvocation], object]
 
 
 def _return_code(result: object) -> int:
-    if isinstance(result, int):
+    if type(result) is int:
         return result
     return_code = getattr(result, "returncode", 0)
-    return return_code if isinstance(return_code, int) else 0
+    return return_code if type(return_code) is int else 0
 
 
-def _execute_worker(
-    worker: str,
-    tasks: Sequence[Task],
-    request: HarnessRequest,
-    plan_path: Path,
-    project_root: Path,
+def _execute_task(
+    task: Task,
+    invocation: TaskInvocation,
     call_worker: WorkerInvoker,
-) -> WorkerFailure | None:
-    worker_tasks = [
-        task
-        for task in tasks
-        if task.worker == worker
-    ]
-
-    if not worker_tasks:
-        return None
-
-    prompt = _build_worker_prompt(
-        worker_tasks,
-        plan_path,
-        project_root,
-        request.additional_request,
-    )
+) -> TaskResult:
+    status = "succeeded"
+    return_code: int | None = None
+    timed_out = False
+    message = ""
 
     try:
-        result = call_worker(worker, prompt)
-        return_code = _return_code(result)
-
+        return_code = _return_code(call_worker(invocation))
         if return_code != 0:
-            return WorkerFailure(
-                worker,
-                return_code=return_code,
-            )
-
+            status = "failed"
     except subprocess.TimeoutExpired as error:
-        return WorkerFailure(
-            worker,
-            return_code=124,
-            timed_out=True,
-            message=str(error),
-        )
-
+        status = "failed"
+        return_code = 124
+        timed_out = True
+        message = str(error)
     except subprocess.CalledProcessError as error:
-        return WorkerFailure(
-            worker,
-            return_code=error.returncode,
-            message=str(error),
-        )
-
+        status = "failed"
+        return_code = error.returncode
+        message = str(error)
     except Exception as error:
-        return WorkerFailure(
-            worker,
-            message=str(error),
-        )
+        status = "failed"
+        message = str(error)
 
-    return None
-
-def _execute_workers_parallel(
-    workers: Sequence[str],
-    tasks: Sequence[Task],
-    request: HarnessRequest,
-    plan_path: Path,
-    project_root: Path,
-    call_worker: WorkerInvoker,
-) -> tuple[WorkerFailure, ...]:
-    failures: list[WorkerFailure] = []
-
-    max_workers = len(workers)
-    if max_workers == 0:
-        return ()
-
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures: dict[Future[WorkerFailure | None], str] = {
-            executor.submit(
-                _execute_worker,
-                worker,
-                tasks,
-                request,
-                plan_path,
-                project_root,
-                call_worker,
-            ): worker
-            for worker in workers
-        }
-
-        for future in as_completed(futures):
-            worker = futures[future]
-
-            try:
-                failure = future.result()
-            except Exception as error:
-                failure = WorkerFailure(
-                    worker,
-                    message=str(error),
-                )
-
-            if failure is not None:
-                failures.append(failure)
-
-    failure_by_worker = {
-        failure.worker: failure
-        for failure in failures
-    }
-
-    return tuple(
-        failure_by_worker[worker]
-        for worker in workers
-        if worker in failure_by_worker
+    return TaskResult(
+        task_number=task.number,
+        title=task.title,
+        status=status,
+        return_code=return_code,
+        timed_out=timed_out,
+        message=message,
     )
 
-def _execute_workers_sequentially(
-    workers: Sequence[str],
-    tasks: Sequence[Task],
-    request: HarnessRequest,
-    plan_path: Path,
-    project_root: Path,
-    call_worker: WorkerInvoker,
-) -> tuple[WorkerFailure, ...]:
-    failures: list[WorkerFailure] = []
 
-    for worker in workers:
-        failure = _execute_worker(
-            worker,
-            tasks,
-            request,
-            plan_path,
-            project_root,
-            call_worker,
-        )
+def _block_failed_descendants(
+    tasks_by_number: dict[int, Task],
+    statuses: dict[int, str],
+    results: dict[int, TaskResult],
+) -> None:
+    changed = True
+    while changed:
+        changed = False
+        for task_number in sorted(tasks_by_number):
+            if statuses[task_number] != "pending":
+                continue
+            task = tasks_by_number[task_number]
+            failed_prerequisites = tuple(
+                prerequisite
+                for prerequisite in task.prerequisite_numbers
+                if statuses.get(prerequisite) in {"failed", "blocked"}
+            )
+            if not failed_prerequisites:
+                continue
+            statuses[task_number] = "blocked"
+            results[task_number] = TaskResult(
+                task_number=task.number,
+                title=task.title,
+                status="blocked",
+                message=(
+                    "실패하거나 차단된 선행 Task: "
+                    + ", ".join(
+                        f"Task {number}" for number in failed_prerequisites
+                    )
+                ),
+            )
+            changed = True
 
-        if failure is not None:
-            failures.append(failure)
-
-    return tuple(failures)
 
 def execute_workers(
-    tasks: Sequence[Task],
+    plan: ParsedPlan,
     request: HarnessRequest,
     plan_path: Path,
     project_root: Path,
     invoker: WorkerInvoker | None = None,
+    max_parallel_tasks: int = 4,
+    *,
+    call_worker: WorkerInvoker | None = None,
 ) -> ExecutionReport:
-    call_worker = invoker or (
-        lambda worker, prompt: invoke_worker(
-            worker,
-            prompt,
-            project_root,
+    del plan_path, project_root
+    if type(max_parallel_tasks) is not int or max_parallel_tasks < 1:
+        raise ValueError(
+            "max_parallel_tasks는 1 이상의 정수여야 합니다."
         )
-    )
+    if invoker is not None and call_worker is not None:
+        raise ValueError("invoker와 call_worker 중 하나만 전달해야 합니다.")
+    worker_call = call_worker if call_worker is not None else invoker
+    if worker_call is None:
+        worker_call = invoke_task
 
-    workers = tuple(
-        worker
-        for worker in request.worker_order
-        if any(task.worker == worker for task in tasks)
-    )
+    tasks_by_number = {task.number: task for task in plan.tasks}
+    statuses = {task.number: "pending" for task in plan.tasks}
+    results: dict[int, TaskResult] = {}
+    ready = [
+        task.number
+        for task in plan.tasks
+        if not task.prerequisite_numbers
+    ]
+    heapq.heapify(ready)
+    submitted = set(ready)
+    running: dict[Future[TaskResult], int] = {}
 
-    if request.parallel:
-        failures = _execute_workers_parallel(
-            workers,
-            tasks,
-            request,
-            plan_path,
-            project_root,
-            call_worker,
-        )
-    else:
-        failures = _execute_workers_sequentially(
-            workers,
-            tasks,
-            request,
-            plan_path,
-            project_root,
-            call_worker,
+    with ThreadPoolExecutor(max_workers=max_parallel_tasks) as executor:
+        while ready or running:
+            while ready and len(running) < max_parallel_tasks:
+                task_number = heapq.heappop(ready)
+                task = tasks_by_number[task_number]
+                statuses[task_number] = "running"
+                invocation = TaskInvocation(
+                    common_prompt=plan.common_prompt,
+                    additional_request=request.additional_request,
+                    task=task,
+                )
+                future = executor.submit(
+                    _execute_task,
+                    task,
+                    invocation,
+                    worker_call,
+                )
+                running[future] = task_number
+
+            if not running:
+                break
+
+            completed, _ = wait(running, return_when=FIRST_COMPLETED)
+            for future in sorted(completed, key=lambda item: running[item]):
+                task_number = running.pop(future)
+                result = future.result()
+                results[task_number] = result
+                statuses[task_number] = result.status
+
+            _block_failed_descendants(tasks_by_number, statuses, results)
+
+            for task_number in sorted(tasks_by_number):
+                if statuses[task_number] != "pending" or task_number in submitted:
+                    continue
+                task = tasks_by_number[task_number]
+                if all(
+                    statuses.get(prerequisite) == "succeeded"
+                    for prerequisite in task.prerequisite_numbers
+                ):
+                    heapq.heappush(ready, task_number)
+                    submitted.add(task_number)
+
+    for task_number in sorted(tasks_by_number):
+        if statuses[task_number] != "pending":
+            continue
+        task = tasks_by_number[task_number]
+        results[task_number] = TaskResult(
+            task_number=task.number,
+            title=task.title,
+            status="blocked",
+            message="선행 Task 조건을 충족할 수 없어 차단되었습니다.",
         )
 
     return ExecutionReport(
-        workers,
-        failures,
+        tuple(results[number] for number in sorted(results))
     )

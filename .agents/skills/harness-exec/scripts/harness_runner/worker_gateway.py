@@ -1,18 +1,22 @@
 from __future__ import annotations
 
-from pathlib import Path
+from dataclasses import asdict
+import json
 import subprocess
 import sys
 
+from .models import TaskInvocation
 from .plan import repository_root
 
 
-def invoke_worker(
-    worker: str, prompt: str, project_root: Path | None = None
+def invoke_task(
+    invocation: TaskInvocation,
 ) -> subprocess.CompletedProcess[bytes]:
-    root = (project_root or repository_root()).resolve()
+    root = repository_root().resolve()
     run_worker = root / ".agents" / "scripts" / "run-worker.py"
-    invocation = f"${worker} {prompt}"
+    payload = json.dumps(asdict(invocation), ensure_ascii=False)
     return subprocess.run(
-        [sys.executable, str(run_worker), invocation], cwd=root, check=True
+        [sys.executable, str(run_worker), payload],
+        cwd=root,
+        check=True,
     )
