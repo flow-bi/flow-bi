@@ -15,8 +15,8 @@ from worker_runner import (
 
 
 def main() -> None:
-    worker, prompt = read_invocation()
-    execute_worker(worker, prompt)
+    prompt, allowed_paths, forbidden_paths = read_invocation()
+    execute_worker(prompt, allowed_paths, forbidden_paths)
 
 
 if __name__ == "__main__":
