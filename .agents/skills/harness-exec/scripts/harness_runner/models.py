@@ -16,11 +16,18 @@ class PlanValidationError(ValueError):
 
 @dataclass(frozen=True)
 class Task:
-    task_id: str
-    worker: str
-    work_type: str
-    design_docs: tuple[str, ...]
-    body: str
+    number: int
+    title: str
+    prerequisite_numbers: tuple[int, ...]
+    allowed_paths: tuple[str, ...]
+    forbidden_paths: tuple[str, ...]
+    task_prompt: str
+
+
+@dataclass(frozen=True)
+class ParsedPlan:
+    common_prompt: str
+    tasks: tuple[Task, ...]
 
 
 @dataclass(frozen=True)
