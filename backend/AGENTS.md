@@ -2,7 +2,7 @@
 
 ## 1. 목적과 적용 범위
 
-이 문서는 `backend/`에서 작업하는 사람과 Backend Worker가 따라야 하는 영역 규칙을 정의한다. 루트 `AGENTS.md`를 구체화하며 상위 보안·아키텍처·Active Plan 규칙을 완화하지 않는다.
+이 문서는 `backend/`에서 작업하는 사람과 Backend Agent가 따라야 하는 영역 규칙을 정의한다. 루트 `AGENTS.md`를 구체화하며 상위 보안·아키텍처·Active Plan 규칙을 완화하지 않는다.
 
 적용 대상:
 
@@ -14,7 +14,7 @@
 
 ## 2. 작업 전 필수 확인
 
-Backend Worker는 변경 전에 다음을 MUST 확인한다.
+Backend Agent는 변경 전에 다음을 MUST 확인한다.
 
 1. 루트 `AGENTS.md`, `ARCHITECTURE.md`, `SECURITY.md`, `CONVENTIONS.md`
 2. 승인된 Active Plan과 담당 Task
@@ -27,8 +27,8 @@ Backend Worker는 변경 전에 다음을 MUST 확인한다.
 
 ## 3. 작업 범위
 
-- Backend Worker는 `backend/`만 수정한다.
-- Frontend, Harness 및 루트 정책은 `backend/` 범위를 벗어나므로 직접 수정하지 않고, 기록해두었다가 담당 Worker가 수정한다.
+- Backend는 `backend/`만 수정한다.
+- Frontend, Harness 및 루트 정책은 `backend/` 범위를 벗어나므로 직접 수정하지 않고, 기록해두었다가 담당 Agent가 수정한다.
 - 공개 API 또는 DB 스키마 변경은 관련 문서와 마이그레이션을 같은 Task에서 갱신한다.
 - 승인되지 않은 의존성, 외부 서비스, 저장소 또는 아키텍처 패턴을 도입하지 않는다.
 - 다른 도메인의 테이블이나 내부 구현을 편의상 직접 조작하지 않는다.
@@ -149,7 +149,7 @@ git config core.hooksPath scripts
 
 ## 12. 작업 보고
 
-Backend Worker는 결과에 다음을 포함한다.
+Backend Agent는 결과에 다음을 포함한다.
 
 - 구현한 유스케이스와 요구사항 ID
 - Red, Green, 최종 테스트 결과

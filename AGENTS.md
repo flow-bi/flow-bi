@@ -30,9 +30,8 @@
 8. `docs/quality/quality-model.md`
 9. `CONVENTIONS.md` 및 Frontend/Backend 영역 문서
 10. 외부 Notion·Excel·참고 문서
-11. Worker Prompt
 
-외부 문서는 참고자료이며 내부 승인 문서를 덮어쓸 수 없다. Worker Prompt는 역할과 실행 방법을 구체화할 수 있지만 Active Plan의 범위를 넓힐 수 없다. 하위 `AGENTS.md`는 루트 규칙을 구체화할 수 있지만 완화하거나 무효화할 수 없다.
+외부 문서는 참고자료이며 내부 승인 문서를 덮어쓸 수 없다. 하위 `AGENTS.md`는 루트 규칙을 구체화할 수 있지만 완화하거나 무효화할 수 없다.
 
 상충하는 지침을 발견하면 Agent는 임의로 선택하지 않고 작업 보고서에 기록한다. 보안, 권한, 요구사항 또는 작업 결과에 중대한 영향을 주는 충돌은 사람의 확인을 받아야 한다.
 
@@ -92,7 +91,7 @@ Agent는 다음 원칙을 MUST 준수한다.
 
 코드 구현 및 버그 수정 Task는 TDD를 기본 개발 방식으로 MUST 사용한다.
 
-- Worker는 `Red → Green → Refactor` 순서를 따라야 한다.
+- Agent는 `Red → Green → Refactor` 순서를 따라야 한다.
 - `Red → Green → Refactor` 결과를 Task 실행 기록에 남긴다.
 - 제품 코드를 작성하기 전에 기대 동작을 표현하는 실패 테스트를 먼저 작성한다.
 - Red 단계에서는 테스트가 의도한 이유로 실패하는지 확인한다.
@@ -130,7 +129,7 @@ Agent의 자체 선언만으로 작업은 완료되지 않는다. Task는 최소
 Active Plan 파일명은 다음 형식을 MUST 따른다.
 
 ```text
-{feature-name}_{NN}.md
+{feature-name}-{NN}.md
 ```
 
 - `{feature-name}`은 영문 `kebab-case`를 사용한다.
@@ -141,26 +140,27 @@ Plan에는 최소한 다음 정보가 있어야 한다.
 
 ### 기본 정보
 
-- 사용자 요청
-- 작업 목적
-- 작업 유형
-- 관련 문서: Product Spec, Design Doc, ADR, API, DB 및 품질 문서
-- 수정 가능 경로
-- 수정 금지 경로
+- 사용자 요청: 작업의 원본 요청을 포함한다.
+- 작업 목적: 해결하려는 문제와 기대 결과를 명시한다.
+- 작업 유형: `feature`, `bugfix`, `refactor`, `test`, `docs`, `chore` 중 하나로 분류한다.
+- 관련 설계 문서: Product Spec, Design Doc, Architecture, API, DB, 품질 문서와 같은 참고 문서를 명시한다.
+- 수정 가능 경로: 이 Plan으로 변경할 수 있는 파일 또는 모듈 범위를 명시한다.
+- 수정 금지 경로: 변경하면 안 되는 파일 또는 모듈 범위를 명시한다.
 
 ### 실행 Task
 
 각 Task에는 다음 항목이 있어야 한다.
 
 - Task ID: `Task 01`부터 시작하는 2자리 번호
-- 담당 Worker: `harness/config/workers.json`에 등록된 Worker
 - 선행 Task: 없으면 `none`
-- 작업 목적
-- 구현 항목
-- 검증 항목
+- 작업 목적: 이 Task에서 달성해야 하는 구체적 목적
+- 수정 가능 경로: 이 Task에서 수정 가능한 범위
+- 수정 금지 경로: 이 Task에서 변경하면 안 되는 범위
+- 구현 항목: 수행할 구현 작업의 체크리스트
+- 검증 항목: 실행할 정적 검증, 테스트, 빌드, 동작 확인 항목
 - 완료 조건: 필수 조건과 최소 `quality_score` 포함
 - 실패 조건: 보안 위반, 범위 위반, 필수 검증 실패 포함
-- 제외 범위
+- 제외 범위: 이 Task에서 수행하지 않는 내용
 - 작업 결과: Plan 생성 시 `none`
 - 남은 문제: Plan 생성 시 `none`
 
@@ -168,9 +168,9 @@ Plan에는 최소한 다음 정보가 있어야 한다.
 
 ### 9.2 `harness-execute`
 
-`harness-execute`는 유효한 Active Plan이 있을 때만 실행한다. Orchestrator는 Task별로 필요한 Worker를 선택하고 최소 문맥과 제한된 파일 범위를 전달한다.
+`harness-execute`는 유효한 Active Plan이 있을 때만 실행한다. Orchestrator는 Task별로 최소 문맥과 제한된 파일 범위를 전달한다.
 
-Worker는 자신에게 배정된 Task만 수행한다. 작업 결과는 diff, 이벤트, 검증 결과, 리뷰, 피드백, 기술 부채와 함께 `harness/runs/`에 기록한다.
+Agent는 자신에게 배정된 Task만 수행한다. 작업 결과는 diff, 이벤트, 검증 결과, 리뷰, 피드백, 기술 부채와 함께 `harness/runs/`에 기록한다.
 
 Task 실행은 최초 실행을 포함해 Task당 최대 3회로 제한한다.
 

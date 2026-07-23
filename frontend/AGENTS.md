@@ -2,7 +2,7 @@
 
 ## 1. 목적과 적용 범위
 
-이 문서는 `frontend/`에서 작업하는 사람과 Frontend Worker가 따라야 하는 영역별 규칙을 정의한다. 루트 `AGENTS.md`를 구체화하며, 상위 보안·아키텍처·Active Plan 규칙을 완화하지 않는다.
+이 문서는 `frontend/`에서 작업하는 사람과 Frontend Agent가 따라야 하는 영역별 규칙을 정의한다. 루트 `AGENTS.md`를 구체화하며, 상위 보안·아키텍처·Active Plan 규칙을 완화하지 않는다.
 
 적용 대상:
 
@@ -14,7 +14,7 @@
 
 ## 2. 작업 전 필수 확인
 
-Frontend Worker는 변경 전에 다음을 MUST 확인한다.
+Frontend Agent는 변경 전에 다음을 MUST 확인한다.
 
 1. 루트 `AGENTS.md`, `ARCHITECTURE.md`, `SECURITY.md`, `CONVENTIONS.md`
 2. 승인된 Active Plan과 담당 Task
@@ -28,8 +28,8 @@ API 계약이 없거나 화면 요구사항과 충돌하면 응답 형식을 추
 
 ## 3. 작업 범위
 
-- Frontend Worker는 `frontend/`만 수정한다.
-- Backend, DB 스키마, Harness, 루트 정책 문서는 `frontend/` 범위를 벗어나므로 직접 수정하지 않고, 기록해두었다가 담당 Worker가 수정한다.
+- Frontend는 `frontend/`만 수정한다.
+- Backend, DB 스키마, Harness, 루트 정책 문서는 `frontend/` 범위를 벗어나므로 직접 수정하지 않고, 기록해두었다가 담당 Agent가 수정한다.
 - API 변경이 필요하면 백엔드 코드를 임의로 수정하지 않고 계약 변경 필요사항을 보고한다.
 - 관련 없는 화면 정리, 전역 스타일 변경, 의존성 교체를 함께 수행하지 않는다.
 - 디자인 시안에 없는 신규 UX를 임의로 확정하지 않는다.
@@ -114,7 +114,7 @@ Frontend Task는 다음 조건을 충족해야 한다.
 
 ## 12. 작업 보고
 
-Frontend Worker는 결과에 다음을 포함한다.
+Frontend Agent는 결과에 다음을 포함한다.
 
 - 변경한 화면과 사용자 동작
 - Red, Green, 최종 테스트 결과

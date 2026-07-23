@@ -1,13 +1,13 @@
 ---
 name: review-aggregator
-description: 여러 Worker가 생성한 리뷰를 중복과 충돌을 정리한 하나의 최종 리뷰로 통합한다. Worker Review가 1개 이상 있고 Task 정보와 리뷰 결과가 전달되어, Orchestrator가 구현 변경 없이 최종 판정과 후속 조치를 정리해야 할 때 사용한다.
+description: 여러 Agent가 생성한 리뷰를 중복과 충돌을 정리한 하나의 최종 리뷰로 통합한다. Agent Review가 1개 이상 있고 Task 정보와 리뷰 결과가 전달되어, Orchestrator가 구현 변경 없이 최종 판정과 후속 조치를 정리해야 할 때 사용한다.
 ---
 
 # Review Aggregator
 
 ## 사용 목적
 
-Frontend Worker, Backend Worker 및 Review Worker가 생성한 리뷰 결과를 하나의 통합 리뷰로 정리한다.
+Frontend Agent, Backend Agent 및 Review Agent가 생성한 리뷰 결과를 하나의 통합 리뷰로 정리한다.
 
 기존 리뷰의 근거와 출처를 보존하면서 중복을 병합하고, 충돌을 식별하며, 개발자가 실행할 수 있는 Action Item과 최종 상태를 제시한다. 새로운 코드 리뷰를 수행하거나 제품 코드를 변경하지 않는다.
 
@@ -15,7 +15,7 @@ Frontend Worker, Backend Worker 및 Review Worker가 생성한 리뷰 결과를 
 
 필수 입력:
 
-- Worker Review 1개 이상
+- Agent Review 1개 이상
 - Task 정보
 
 선택 입력:
@@ -29,7 +29,7 @@ Frontend Worker, Backend Worker 및 Review Worker가 생성한 리뷰 결과를 
 
 ## 작업 흐름
 
-1. 모든 Worker Review와 전달된 선택 입력을 읽고 각 출처를 기록한다.
+1. 모든 Agent Review와 전달된 선택 입력을 읽고 각 출처를 기록한다.
 2. 각 리뷰 항목을 다음 필드로 정규화한다.
    - `source`
    - `severity`
@@ -72,7 +72,7 @@ Frontend Worker, Backend Worker 및 Review Worker가 생성한 리뷰 결과를 
 
 최종 출력 전에 다음을 확인한다.
 
-- 전달된 모든 Worker Review를 반영했는가.
+- 전달된 모든 Agent Review를 반영했는가.
 - 각 이슈에 추적 가능한 출처와 근거가 있는가.
 - 중복 항목을 병합하면서 출처나 근거를 잃지 않았는가.
 - 충돌하는 의견을 임의로 숨기지 않고 해결 근거 또는 `Decision Required`를 남겼는가.
@@ -86,7 +86,7 @@ Frontend Worker, Backend Worker 및 Review Worker가 생성한 리뷰 결과를 
 
 - 제품 코드, 문서 또는 설정을 수정하지 않는다.
 - 전달된 리뷰에 없는 새로운 리뷰 이슈를 생성하지 않는다.
-- Worker나 다른 Agent를 실행하지 않는다.
+- Agent를 실행하지 않는다.
 - Git 상태, Branch, Commit 또는 파일을 변경하지 않는다.
 - 근거가 없는 내용을 사실처럼 추측하지 않는다.
 - 이슈를 병합하거나 요약하면서 반대 의견, 출처 또는 근거를 누락하지 않는다.
