@@ -14,7 +14,6 @@ from .codex import (
     build_codex_command,
     build_subprocess_environment,
 )
-from .config import resolve_config_path
 
 
 SubprocessRunner = Callable[..., subprocess.CompletedProcess[str]]
@@ -51,8 +50,9 @@ def invoke_worker_logger(
 
 
 def execute_worker(
-    worker: str,
     prompt: str,
+    allowed_paths: tuple[str, ...],
+    forbidden_paths: tuple[str, ...],
     project_root: Path = PROJECT_ROOT,
     executable: str | None = None,
     base_environment: dict[str, str] | None = None,
@@ -71,17 +71,17 @@ def execute_worker(
 
     # Codex 출력 파일 생성
     descriptor, raw_output_path = tempfile.mkstemp(
-        prefix=f"{worker}-{run_id}-", suffix=".txt", dir=pending_directory
+        prefix=f"task-runner-{run_id}-", suffix=".txt", dir=pending_directory
     )
     os.close(descriptor)
     output_path = Path(raw_output_path)
 
     # Worker 실행 환경 구성
-    environment = build_subprocess_environment(worker, run_id, base_environment)
+    environment = build_subprocess_environment(run_id, base_environment)
     
     # codex exec 명령 생성
     command = build_codex_command(
-        resolve_config_path(worker, project_root), output_path, executable
+        allowed_paths, forbidden_paths, output_path, executable
     )
 
     try:

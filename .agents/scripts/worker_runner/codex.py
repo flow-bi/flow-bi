@@ -35,13 +35,14 @@ def resolve_codex_home() -> Path:
 
 # codex exec 명령어 생성
 def build_codex_command(
-    config_path: Path,
+    allowed_paths: tuple[str, ...],
+    forbidden_paths: tuple[str, ...],
     output_path: Path,
     executable: str | None = None,
 ) -> list[str]:
     command = [executable or resolve_codex_executable(), "exec", "-o", str(output_path)]
     
-    for override in read_config_overrides(config_path):
+    for override in read_config_overrides(allowed_paths, forbidden_paths):
         command.extend(["-c", override])
     
     command.append("-")
@@ -49,7 +50,6 @@ def build_codex_command(
 
 # Worker 실행에 필요한 환경변수 구성
 def build_subprocess_environment(
-    worker: str,
     run_id: str,
     base_environment: dict[str, str] | None = None,
 ) -> dict[str, str]:
@@ -61,10 +61,8 @@ def build_subprocess_environment(
 
     environment["CODEX_HOME"] = str(resolve_codex_home())
     environment["FLOW_BI_RUN_ID"] = run_id
-    
-    if worker in WORKERS:
-        environment["FLOW_BI_WORKER"] = worker
-        environment["CODEX_PERMISSION_PROFILE"] = worker
+    environment.pop("FLOW_BI_WORKER", None)
+    environment.pop("CODEX_PERMISSION_PROFILE", None)
 
     parent_session_id = environment.get("CODEX_THREAD_ID")
     if parent_session_id:
