@@ -205,7 +205,7 @@ def load_active_plan(plan_id: str, project_root: Path) -> tuple[Path, ParsedPlan
 
 
 def _complete_path(plan_path: Path, project_root: Path) -> Path:
-    return (project_root / "docs" / "plan" / "complete" / plan_path.name).resolve()
+    return (project_root / "docs" / "plans" / "complete" / plan_path.name).resolve()
 
 
 def complete_plan(plan_path: Path, project_root: Path) -> Path:
