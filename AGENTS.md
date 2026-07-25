@@ -39,6 +39,7 @@
 
 모든 Agent는 코드나 문서를 변경하기 전에 다음을 수행해야 한다.
 
+0. Context에 한번 읽었던 문서가 있다면 다시 읽지 않고, 변경된 구간만 확인한다.
 1. 루트 `AGENTS.md`, `ARCHITECTURE.md`, `SECURITY.md`, `CONVENTIONS.md`를 읽는다.
 2. 작업 대상 디렉터리에 하위 `AGENTS.md`가 있으면 읽는다.
 3. 관련 Product Spec, Design Doc, Active Plan, ADR을 확인한다.
