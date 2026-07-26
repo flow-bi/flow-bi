@@ -1,29 +1,15 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-import re
 import sys
 
+from .parse import parse_invocation
 from .execution import execute_workers
-from .models import HarnessRequest, PlanValidationError, TaskResult
+from .models import PlanValidationError, TaskResult
 from .plan import complete_plan, load_active_plan, repository_root
 
 
-# $harness-exec <plan-id> [추가 요청]
-INVOCATION_PATTERN = re.compile(
-    r"^\s*\$harness-exec\s+(?P<plan_id>\S+)(?P<remainder>[\s\S]*)$"
-)
 
-
-def parse_request(raw_request: str) -> HarnessRequest:
-    match = INVOCATION_PATTERN.fullmatch(raw_request)
-    if match is None:
-        raise PlanValidationError(
-            "호출 형식은 '$harness-exec <plan-id> [추가 요청]'입니다."
-        )
-
-    plan_id = match.group("plan_id")
-    return HarnessRequest(plan_id, match.group("remainder").strip())
 
 
 # 실패 알리기
@@ -55,7 +41,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
 
     try:
-        request = parse_request(arguments[0])
+        request = parse_invocation(arguments[0])
         root = repository_root()
         plan_path, tasks = load_active_plan(request.plan_id, root)
     except PlanValidationError as error:
