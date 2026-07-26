@@ -52,7 +52,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
 
     # plan에서 읽은 작업 목록,  request, 현재 active plan경로, 저장소 루트
-    report = execute_workers(tasks, request, plan_path, root)
+    report = execute_workers(tasks, request)
 
     # worker가 실패하면 실패를 출력하고 종료코드 1반환 plan은 이동하지 않는다.
     if not report.succeeded:

@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 import heapq
-from pathlib import Path
 import subprocess
 
 from .models import (
@@ -16,6 +15,7 @@ from .models import (
 )
 from .worker_gateway import invoke_task
 
+MAX_PARALLEL_TASKS = 4
 
 WorkerInvoker = Callable[[TaskInvocation], object]
 
@@ -101,18 +101,12 @@ def _block_failed_descendants(
 def execute_workers(
     plan: ParsedPlan,
     request: HarnessRequest,
-    plan_path: Path,
-    project_root: Path,
     invoker: WorkerInvoker | None = None,
-    max_parallel_tasks: int = 4,
+    max_parallel_tasks: int = MAX_PARALLEL_TASKS,
     *,
     call_worker: WorkerInvoker | None = None,
 ) -> ExecutionReport:
-    del plan_path, project_root
-    if type(max_parallel_tasks) is not int or max_parallel_tasks < 1:
-        raise ValueError(
-            "max_parallel_tasks는 1 이상의 정수여야 합니다."
-        )
+    
     if invoker is not None and call_worker is not None:
         raise ValueError("invoker와 call_worker 중 하나만 전달해야 합니다.")
     worker_call = call_worker if call_worker is not None else invoker
