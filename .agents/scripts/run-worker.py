@@ -16,7 +16,8 @@ from worker_runner import (
 
 def main() -> None:
     prompt, allowed_paths, forbidden_paths = read_invocation()
-    execute_worker(prompt, allowed_paths, forbidden_paths)
+    result = execute_worker(prompt, allowed_paths, forbidden_paths)
+    raise SystemExit(result.returncode)
 
 
 if __name__ == "__main__":

@@ -100,7 +100,8 @@ def _bullet_values(body: str) -> tuple[str, ...]:
     for line in body.splitlines():
         match = re.match(r"^[ \t]*-[ \t]+(.*?)[ \t]*$", line)
         if match:
-            values.append(match.group(1).strip("` \t"))
+            value = re.sub(r"^\[[ xX]\][ \t]+", "", match.group(1))
+            values.append(value.strip("` \t"))
     return tuple(values)
 
 
@@ -125,6 +126,14 @@ def _prerequisite_numbers(body: str) -> tuple[int, ...]:
 
     # 순서를 유지하면서 중복 제거
     return tuple(dict.fromkeys(numbers))
+
+
+def _minimum_quality_score(body: str) -> int | None:
+    match = re.search(
+        r"`?quality_score`?[^0-9]*`?(\d+)`?[ \t]*이상",
+        body,
+    )
+    return int(match.group(1)) if match else None
 
 def parse_plan_text(text: str) -> ParsedPlan:
     """Active Plan 문자열을 ParsedPlan으로 변환"""
@@ -156,6 +165,9 @@ def parse_plan_text(text: str) -> ParsedPlan:
             sections,
             "수정 금지 경로",
         )
+        implementation_body = _section_body(sections, "구현 항목")
+        verification_body = _section_body(sections, "검증 항목")
+        completion_body = _section_body(sections, "완료 조건")
 
         task_prompt = "\n\n".join(
             raw
@@ -176,6 +188,9 @@ def parse_plan_text(text: str) -> ParsedPlan:
                     forbidden_paths_body
                 ),
                 task_prompt=task_prompt,
+                implementation_items=_bullet_values(implementation_body),
+                verification_items=_bullet_values(verification_body),
+                minimum_quality_score=_minimum_quality_score(completion_body),
             )
         )
 

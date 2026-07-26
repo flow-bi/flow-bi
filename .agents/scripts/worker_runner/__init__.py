@@ -14,12 +14,13 @@ from .config import (
     resolve_config_path,
 )
 from .invocation import parse_invocation, read_invocation
-from .runner import execute_worker, invoke_worker_logger
+from .runner import WorkerExecutionResult, execute_worker, invoke_worker_logger
 
 __all__ = (
     "DEFAULT_TIMEOUT_SECONDS",
     "PROJECT_ROOT",
     "WORKERS",
+    "WorkerExecutionResult",
     "build_codex_command",
     "build_subprocess_environment",
     "execute_worker",

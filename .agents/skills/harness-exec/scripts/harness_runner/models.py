@@ -15,6 +15,9 @@ class Task:
     allowed_paths: tuple[str, ...]
     forbidden_paths: tuple[str, ...]
     task_prompt: str
+    implementation_items: tuple[str, ...] = ()
+    verification_items: tuple[str, ...] = ()
+    minimum_quality_score: int | None = None
 
 
 @dataclass(frozen=True)
@@ -60,7 +63,9 @@ class ExecutionReport:
 
     @property
     def succeeded(self) -> bool:
-        return all(result.status == "succeeded" for result in self.results)
+        return bool(self.results) and all(
+            result.status == "succeeded" for result in self.results
+        )
 
     @property
     def failures(self) -> tuple[TaskResult, ...]:
