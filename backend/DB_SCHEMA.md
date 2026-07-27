@@ -301,3 +301,6 @@ schedules 1 --- N rooms_reservations
 3. 주요 결정은 ADR로 승인한다.
 4. ERD와 이 문서를 함께 갱신한다.
 5. 승인된 Migration을 작성하고 검증한다.
+
+- 이미 적용된 Migration 파일은 수정하지 않고 새 Migration을 추가한다.
+- 파괴적 변경은 데이터 보존·전환·복구 계획과 사람의 승인이 선행되어야 한다.

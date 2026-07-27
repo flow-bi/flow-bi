@@ -15,6 +15,7 @@
 | Framework | Spring Boot 3.5.7 |
 | Build | Gradle Groovy DSL |
 | Production Database | PostgreSQL |
+| Current Test Database | H2 In-memory, MySQL Compatibility Mode |
 | Cache | Redis |
 | Persistence | Spring Data JPA |
 | Authentication | JWT |
@@ -23,6 +24,10 @@
 | Test | JUnit via Spring Boot Starter Test |
 
 미확정 기술은 ADR 또는 승인된 Active Plan 없이 임의로 도입하지 않는다.
+
+- 현재 Spring Security 의존성은 초기 테스트 편의를 위해 주석 처리되어 있지만 `SECURITY.md`의 요구사항은 완화되지 않는다. 인증 기능이나 보호 API를 완료하기 전에는 Spring Security를 활성화하고 관련 테스트를 통과해야 한다.
+- H2는 테스트 전용이며 PostgreSQL과 SQL·제약 동작이 다르므로 H2 테스트만으로 운영 DB 호환성을 보장했다고 판단하지 않는다.
+- H2 Console은 개발·테스트 Profile에서만 활성화하고 운영 환경에서는 노출하지 않는다.
 
 ## 3. 책임과 경계
 
@@ -71,14 +76,20 @@ backend/src/
 - Entity와 DTO는 각각 영속 모델과 API 모델로 나눈다.
 - Controller가 Repository를 직접 사용하지 않도록 한다.
 - 한 도메인의 Service가 다른 도메인의 Repository를 직접 참조하지 않도록 하고, 필요한 경우 해당 도메인의 Service를 통해 협력한다.
+- `global/`에는 기술 공통 기능만 두고 특정 도메인의 비즈니스 규칙·DTO·Entity·Repository를 두지 않는다.
+- 사용하지 않는 계층이나 빈 패키지를 미리 만들지 않으며 역방향·순환 의존을 허용하지 않는다.
 
 ## 6. 데이터와 트랜잭션
 
 - PostgreSQL을 기준 저장소로 사용한다.
 - 스키마 변경은 마이그레이션과 문서 갱신을 함께 수행한다.
 - 강한 정합성이 필요한 작업은 하나의 트랜잭션 경계로 처리한다.
+- 외부 시스템 호출을 긴 DB 트랜잭션 안에서 수행하지 않는다.
+- 동시성 제약은 사전 조회만으로 보장하지 않고 DB 제약 또는 승인된 동시성 제어를 함께 사용한다.
+- DB 무결성 오류는 일반 서버 오류로 숨기지 않고 클라이언트가 처리할 수 있는 도메인 충돌로 변환한다.
 - 데이터 삭제·비활성화 방식은 관련 Product Spec과 Design Doc을 따른다.
 - DB 제약과 애플리케이션 검증을 함께 사용한다.
+- 목록 조회는 N+1, 무제한 조회와 불필요한 대형 컬럼 로딩을 피한다.
 
 ## 7. API·인증·보안
 
@@ -95,6 +106,7 @@ backend/src/
 
 - Redis는 캐시, 짧은 수명의 상태, 분산 제어에만 사용한다.
 - 영속 데이터의 유일한 기준 저장소로 사용하지 않는다.
+- Redis 장애가 영속 데이터 손실로 이어지지 않아야 하며 Key, TTL과 무효화 정책을 명시한다.
 - 외부 시스템 접근은 Service가 조정하고 Controller에 기술 세부사항을 노출하지 않는다.
 - 외부 서비스의 구체적인 도입 방식은 Design Doc 또는 ADR에서 결정한다.
 
@@ -103,6 +115,8 @@ backend/src/
 - 구현과 버그 수정은 루트 `AGENTS.md`의 TDD 및 예외 규칙을 따른다.
 - Domain, Service, API, Persistence Integration, Security, Concurrency 테스트 계층을 구분한다.
 - 테스트는 구현 세부보다 사용자의 관찰 가능한 동작과 핵심 규칙을 검증한다.
+- Controller 테스트만으로 도메인 규칙을 검증한 것으로 간주하지 않는다.
+- Mock이 실제 권한·트랜잭션·쿼리 동작을 가리지 않도록 하고, PostgreSQL 고유 동작은 적용 가능한 통합 테스트로 검증한다.
 - 코드 스타일은 Spotless 규칙을 따른다.
 
 ## 10. 미결정 사항
