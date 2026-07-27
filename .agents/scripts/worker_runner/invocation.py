@@ -28,20 +28,6 @@ def _integer_field(value: dict[str, Any], field: str, location: str) -> int:
     return field_value
 
 
-def _integer_tuple_field(
-    value: dict[str, Any],
-    field: str,
-    location: str,
-) -> tuple[int, ...]:
-    field_value = _required_field(value, field, location)
-    if not isinstance(field_value, list) or any(
-        not isinstance(item, int) or isinstance(item, bool)
-        for item in field_value
-    ):
-        raise ValueError(f"{location}.{field} 필드는 정수 배열이어야 합니다.")
-    return tuple(field_value)
-
-
 def _string_tuple_field(
     value: dict[str, Any],
     field: str,
@@ -54,18 +40,6 @@ def _string_tuple_field(
         raise ValueError(f"{location}.{field} 필드는 문자열 배열이어야 합니다.")
     return tuple(field_value)
 
-
-def _task_heading(
-    number: int,
-    title: str,
-    prerequisite_numbers: tuple[int, ...],
-) -> str:
-    prerequisites = (
-        ", ".join(f"Task {value}" for value in prerequisite_numbers)
-        if prerequisite_numbers
-        else "없음"
-    )
-    return f"Task {number}. {title}\n\n선행 Task: {prerequisites}"
 
 
 def _result_contract(
@@ -98,7 +72,6 @@ def _result_contract(
             }
             for item in verification_items
         ],
-        "remaining_issues": [],
         "decision": (
             "PASS | PASS_WITH_FOLLOW_UP | RETRY | "
             "HUMAN_REVIEW_REQUIRED | FAILED | BLOCKED"
@@ -138,11 +111,7 @@ def parse_invocation(raw_invocation: str) -> InvocationResult:
 
     number = _integer_field(task, "number", "TaskInvocation.task")
     title = _string_field(task, "title", "TaskInvocation.task")
-    prerequisite_numbers = _integer_tuple_field(
-        task,
-        "prerequisite_numbers",
-        "TaskInvocation.task",
-    )
+
     allowed_paths = _string_tuple_field(
         task,
         "allowed_paths",
@@ -153,7 +122,9 @@ def parse_invocation(raw_invocation: str) -> InvocationResult:
         "forbidden_paths",
         "TaskInvocation.task",
     )
+
     task_prompt = _string_field(task, "task_prompt", "TaskInvocation.task")
+
     _string_tuple_field(task, "implementation_items", "TaskInvocation.task")
     verification_items = _string_tuple_field(
         task,
@@ -163,11 +134,12 @@ def parse_invocation(raw_invocation: str) -> InvocationResult:
     _integer_field(task, "minimum_quality_score", "TaskInvocation.task")
 
     prompt_parts = [common_prompt]
+
     if additional_request:
         prompt_parts.append(additional_request)
     prompt_parts.extend(
         (
-            _task_heading(number, title, prerequisite_numbers),
+            title,
             task_prompt,
             _result_contract(number, verification_items),
         )

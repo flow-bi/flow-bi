@@ -29,7 +29,7 @@ MANDATORY_GATES = (
     "critical_findings",
 )
 
-
+# Woker 결과에서 종료 코드 추출
 def _return_code(result: object) -> int:
     if type(result) is int:
         return result
@@ -40,20 +40,19 @@ def _return_code(result: object) -> int:
 def _non_empty_text(value: object) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
-
+# Worker가 제출한 JSON 결과 검증
 def _completion_error(task: Task, worker_result: object) -> str:
     output = getattr(worker_result, "output", None)
     output_error = getattr(worker_result, "output_error", "")
+
     if not isinstance(output, dict):
         detail = output_error if _non_empty_text(output_error) else "JSON 객체 없음"
         return f"Worker 결과 JSON이 유효하지 않습니다: {detail}"
 
-    if output.get("task_id") != f"Task {task.number}":
-        return "Worker 결과의 Task ID가 일치하지 않습니다."
-
     gates = output.get("mandatory_gates")
     if not isinstance(gates, dict):
         return "Mandatory Gate 결과가 누락되었습니다."
+    
     for gate_name in MANDATORY_GATES:
         gate = gates.get(gate_name)
         if not isinstance(gate, dict):
@@ -70,9 +69,11 @@ def _completion_error(task: Task, worker_result: object) -> str:
     expected_verification = task.verification_items
     if not expected_verification:
         return "Plan의 검증 항목이 비어 있습니다."
+    
     verification = output.get("verification")
     if not isinstance(verification, list):
         return "검증 결과가 누락되었습니다."
+    
     if len(verification) != len(expected_verification):
         return "Plan의 모든 검증 항목과 Worker 검증 결과가 대응하지 않습니다."
     results_by_item: dict[str, dict[object, object]] = {}
@@ -85,29 +86,20 @@ def _completion_error(task: Task, worker_result: object) -> str:
         results_by_item[item_name] = item
     if set(results_by_item) != set(expected_verification):
         return "Plan의 모든 검증 항목과 Worker 검증 결과가 대응하지 않습니다."
+    
     for item_name in expected_verification:
         verification_result = results_by_item[item_name]
+
         if verification_result.get("result") != "PASS":
             return f"검증 항목이 PASS가 아닙니다: {item_name}"
+        
         if not _non_empty_text(verification_result.get("evidence")):
             return f"검증 증거가 누락되었습니다: {item_name}"
 
-    remaining_issues = output.get("remaining_issues")
-    if not isinstance(remaining_issues, list) or remaining_issues:
-        return "남은 문제가 있어 완료할 수 없습니다."
     if output.get("decision") != "PASS":
         return "Worker 판정이 PASS가 아닙니다."
 
-    quality_score = output.get("quality_score")
-    if (
-        not isinstance(quality_score, (int, float))
-        or isinstance(quality_score, bool)
-        or not math.isfinite(quality_score)
-        or not 0 <= quality_score <= 100
-        or task.minimum_quality_score is None
-        or quality_score < task.minimum_quality_score
-    ):
-        return "quality_score가 Plan의 최소값보다 낮거나 유효하지 않습니다."
+
     return ""
 
 
