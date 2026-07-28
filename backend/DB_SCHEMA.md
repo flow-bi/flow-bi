@@ -277,7 +277,7 @@ schedules 1 --- N rooms_reservations
 - 회의실 중복 예약의 DB 수준 제약
 - Refresh Token 원문 저장 또는 Hash 저장 정책
 - Status 허용값과 상태 전이
-- 확정된 삭제 정책을 표현할 상태·비활성화·Soft Delete 컬럼: 직원·팀 비활성화, 일정·예약 취소 또는 Soft Delete
+- 삭제·비활성화·취소 정책 확정 후 필요한 상태 컬럼과 제약
 - `Field` 예비 컬럼과 회의실 장비 모델
 - `capacity`, `level`, `content`, `location` 타입과 길이
 - Index, Foreign Key 삭제 정책과 감사 필드 제약
@@ -293,8 +293,6 @@ schedules 1 --- N rooms_reservations
 - 개인 일정은 작성자와 참석자에게 공개한다.
 - 팀 일정은 연결된 팀 소속 사용자와 참석자에게 공개한다.
 - 프로젝트 일정은 연결된 프로젝트 참여자와 참석자에게 공개한다.
-- 직원과 팀은 삭제하지 않고 비활성화한다.
-- 일정과 예약은 취소 또는 Soft Delete하며 일반 기능에서 물리 삭제하지 않는다.
 
 ## 8. 변경 절차
 
@@ -303,3 +301,6 @@ schedules 1 --- N rooms_reservations
 3. 주요 결정은 ADR로 승인한다.
 4. ERD와 이 문서를 함께 갱신한다.
 5. 승인된 Migration을 작성하고 검증한다.
+
+- 이미 적용된 Migration 파일은 수정하지 않고 새 Migration을 추가한다.
+- 파괴적 변경은 데이터 보존·전환·복구 계획과 사람의 승인이 선행되어야 한다.
