@@ -2,7 +2,7 @@
 
 ## 1. 목적
 
-이 문서는 `flow-bi` 저장소에서 사용하는 공통 명명, 코드, 문서, API, DB, Git 및 Agent 작업 규칙을 정의한다. 영역별 상세 규칙은 하위 문서에서 추가한다.
+이 문서는 `flow-bi` 저장소에서 사용하는 공통 명명, 코드, 문서, API, DB 및 Git 규칙을 정의한다. 영역별 상세 규칙은 하위 문서에서 추가한다.
 
 ## 2. 공통 원칙
 
@@ -66,9 +66,6 @@
 - TypeScript의 엄격한 타입 검사를 활성화하는 방향을 기본으로 한다.
 - `any`는 사용하지 않는 것을 원칙으로 하며 불가피하면 범위와 이유를 기록한다.
 - 서버 응답 타입과 UI 표현 타입을 무조건 동일시하지 않는다.
-- 서버 상태는 TanStack Query로 관리한다.
-- 전역 클라이언트 상태는 Zustand로 관리하되 로컬 상태로 충분한 값을 전역화하지 않는다.
-- 폼은 React Hook Form을 사용하고 Zod 스키마로 입력을 검증한다.
 - 컴포넌트는 한 가지 주요 책임을 가지도록 분리한다.
 - 권한에 따른 UI 숨김은 사용자 경험을 위한 것이며 서버 인가를 대체하지 않는다.
 - 접근 가능한 HTML 구조, 키보드 조작, 명확한 레이블과 오류 메시지를 제공한다.
@@ -77,17 +74,11 @@
 
 ## 7. Java 및 Spring Boot 규칙
 
-- Java 17과 Spring Boot 3.5.7을 기준으로 한다.
-- Build는 Gradle Groovy DSL을 사용한다.
-- Java Formatting은 Spotless 7.0.4의 Eclipse Formatter를 사용한다.
+- Java Formatting은 프로젝트에 설정된 Spotless와 Eclipse Formatter를 사용한다.
 - `check`는 `spotlessCheck`를 포함해야 한다.
 - 사용하지 않는 Import를 제거하고, 후행 공백을 제거하며, 파일 끝 개행을 유지한다.
 - 패키지는 소문자로 작성한다.
 - 클래스는 역할이 드러나는 접미사를 사용하되 의미 없는 계층 복제를 피한다.
-- 컨트롤러는 HTTP 요청 변환과 응답 조립에 집중한다.
-- 애플리케이션 서비스는 유스케이스와 트랜잭션 경계를 조정한다.
-- 핵심 비즈니스 규칙은 도메인 모델 또는 명시적인 도메인 서비스에 둔다.
-- Repository 인터페이스와 영속성 구현의 책임을 구분한다.
 - Entity를 API 요청·응답으로 직접 노출하지 않는다.
 - 검증 실패와 비즈니스 오류를 일반적인 서버 오류와 구분한다.
 - `Optional`은 반환 타입의 부재 표현에 제한적으로 사용하고 필드나 요청 DTO에 남용하지 않는다.
@@ -95,48 +86,7 @@
 
 세부 패키지와 의존 규칙은 `backend/BACKEND.md`에서 정의한다.
 
-### 7.1 Pre-commit Formatting 설정
-
-Repository를 Clone한 개발자는 최초 한 번 다음 명령을 실행해야 한다.
-
-```bash
-chmod +x scripts/pre-commit
-git config core.hooksPath scripts
-```
-
-설정 확인:
-
-```bash
-git config --get core.hooksPath
-```
-
-정상 결과는 `scripts`다. Pre-commit Hook은 Commit 대상인 Staged Java 파일을 확인하고 Spotless Formatting을 적용한다.
-
-예상 출력 형식:
-
-```text
-🧹 Auto-formatting code with Spotless...
-📝 Checked staged files:
-- src/main/java/com/flowbi/global/common/FormatTest.java
-✅ Pre-commit checks complete!
-```
-
-Hook 동작을 검증할 때는 다음을 확인한다.
-
-1. 사용하지 않는 Import와 의도적으로 깨진 들여쓰기가 있는 임시 Java 파일을 준비한다.
-2. 파일을 Stage하고 팀 Commit 형식으로 Commit한다.
-3. Hook 실행 결과에서 대상 파일과 완료 메시지를 확인한다.
-4. 파일에서 미사용 Import가 제거되고 Formatting이 적용됐는지 확인한다.
-5. `git diff --cached`로 실제 Commit 대상 내용을 다시 확인한다.
-6. 검증 전용 파일은 제품 코드에 남기지 않는다.
-
-검증 Commit 예시:
-
-```text
-✅ test / #42 - Pre-commit 포맷팅 동작 확인
-```
-
-Pre-commit Hook은 로컬 보조 장치다. Hook을 우회할 수 있으므로 Harness와 CI에서도 `spotlessCheck`를 실행해야 한다.
+Pre-commit Hook은 로컬 보조 장치이며 Harness와 CI에서도 `spotlessCheck`를 실행한다. 설치 방법은 `backend/README.md`를 따른다.
 
 ## 8. API 규칙
 
@@ -200,7 +150,7 @@ API의 공통 응답 및 오류 형식은 `backend/API.md`에서 확정한다.
 
 ## 13. 문서 작성 규칙
 
-- 문서는 한국어를 기본으로 하고 코드 식별자와 표준 기술 용어는 영어를 사용할 수 있다. (todo: 영어로 변환?)
+- 문서는 한국어를 기본으로 하고 코드 식별자와 표준 기술 용어는 영어를 사용할 수 있다.
 - 제목 구조를 일관되게 사용하고 하나의 문서 안에서 용어를 바꾸지 않는다.
 - 규칙에는 가능한 경우 목적과 검증 방법을 함께 적는다.
 - 요구사항 구현 문서에는 관련 FR/NFR ID를 기록한다.
@@ -218,6 +168,8 @@ API의 공통 응답 및 오류 형식은 `backend/API.md`에서 확정한다.
 - 비밀정보, 로컬 설정, 빌드 산출물을 커밋하지 않는다.
 - 기존 변경을 임의로 되돌리지 않는다.
 - 병합 충돌은 의미를 확인한 뒤 해결하며 한쪽을 무조건 선택하지 않는다.
+- main에 직접 커밋하지 않는다. 항상 feature 브랜치 + PR.
+- 파괴적 명령(reset --hard 등)은 사람이 직접 실행한다.
 
 ## 15. 주석과 TODO
 

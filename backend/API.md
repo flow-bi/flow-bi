@@ -121,13 +121,13 @@ Refresh Token의 Cookie 또는 Body 전달 방식은 인증 Design Doc에서 결
 | `POST` | `/api/users` | 관리자 직원 등록 |
 | `GET` | `/api/users/{userId}` | 직원 조회 |
 | `PUT` | `/api/users/{userId}` | 관리자 직원 수정 |
-| `DELETE` | `/api/users/{userId}` | 직원 비활성화 |
+| `DELETE` | `/api/users/{userId}` | 직원 삭제 또는 비활성화 요청 |
 | `GET` | `/api/teams` | 팀 목록 또는 조직도 조회 |
 | `POST` | `/api/teams` | 관리자 팀 생성 |
 | `PUT` | `/api/teams/{teamId}` | 관리자 팀 수정 |
-| `DELETE` | `/api/teams/{teamId}` | 관리자 팀 비활성화 |
+| `DELETE` | `/api/teams/{teamId}` | 관리자 팀 삭제 또는 비활성화 요청 |
 
-직원·팀의 `DELETE`는 물리 삭제가 아니라 비활성화를 의미한다. 이미 비활성화된 대상에 대한 반복 요청은 안전한 멱등 응답을 제공해야 한다.
+직원·팀의 구체적인 삭제·비활성화 방식은 관련 Product Spec과 Design Doc에서 결정한다.
 
 ### 8.3 Profile
 
@@ -146,7 +146,7 @@ Refresh Token의 Cookie 또는 Body 전달 방식은 인증 Design Doc에서 결
 | `POST` | `/api/schedules` | 일정 생성 |
 | `GET` | `/api/schedules/{scheduleId}` | 일정 상세 조회 |
 | `PUT` | `/api/schedules/{scheduleId}` | 일정 수정 |
-| `DELETE` | `/api/schedules/{scheduleId}` | 일정 취소 또는 Soft Delete |
+| `DELETE` | `/api/schedules/{scheduleId}` | 일정 삭제 또는 취소 요청 |
 
 일정 생성·수정 요청은 유형을 정확히 하나만 가져야 한다. `TEAM` 일정은 하나 이상의 팀 ID, `PROJECT` 일정은 하나 이상의 프로젝트 ID를 가질 수 있고 모든 유형은 여러 참석자 ID를 가질 수 있다. 유형과 맞지 않는 팀·프로젝트 대상 조합은 `400 Bad Request`로 거부한다.
 
@@ -208,6 +208,6 @@ AI 모델과 Action Routing이 미확정이므로 Endpoint를 아직 확정하�
 - 공통 성공 Envelope 사용 여부
 - Cursor와 Page Pagination 선택
 - Refresh Token 전달 방식
-- 취소와 Soft Delete의 세부 상태값 및 응답 DTO
+- 삭제·비활성화·취소 정책과 관련 상태값 및 응답 DTO
 - 상세 DTO와 Error Code 목록
 - OpenAPI 및 API 문서 자동화 도구

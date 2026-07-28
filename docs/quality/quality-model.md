@@ -16,7 +16,7 @@
 이 모델은 다음 작업에 적용한다.
 
 - `harness-plan`이 생성하는 Active Plan 검증
-- `harness-execute`가 실행하는 Task 검증
+- `harness-exec`가 실행하는 Task 검증
 - Frontend 및 Backend 코드 구현
 - 버그 수정과 리팩터링
 - API와 DB 스키마 변경
@@ -225,7 +225,7 @@ quality_score = round(86 / 95 × 100) = 91
 | `RETRY` | Gate 수정 가능 또는 `70 ≤ quality_score < 85` |
 | `FAILED` | `quality_score < 70`, 재시도 3회 도달 또는 필수 조건 복구 불가 |
 
-Active Plan은 위험도에 따라 최소 점수를 85보다 높게 설정할 수 있지만 낮출 수 없다. 보안·인증, 권한, 개인정보, DB Migration과 동시성 작업은 최소 90점을 SHOULD 요구한다.
+Active Plan은 위험도에 따라 최소 점수를 85보다 높게 설정할 수 있지만 낮출 수 없다. 보안·인증, 권한, 개인정보, DB Migration과 동시성 작업은 최소 90점을 요구한다.
 
 ## 8. 작업 유형별 필수 검증
 
