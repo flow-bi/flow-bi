@@ -7,41 +7,6 @@ from typing import Any
 
 InvocationResult = tuple[str, tuple[str, ...], tuple[str, ...]]
 
-
-def _required_field(value: dict[str, Any], field: str, location: str) -> Any:
-    if field not in value:
-        raise ValueError(f"{location}.{field} 필드가 필요합니다.")
-    return value[field]
-
-
-def _string_field(value: dict[str, Any], field: str, location: str) -> str:
-    field_value = _required_field(value, field, location)
-    if not isinstance(field_value, str):
-        raise ValueError(f"{location}.{field} 필드는 문자열이어야 합니다.")
-    return field_value
-
-
-def _integer_field(value: dict[str, Any], field: str, location: str) -> int:
-    field_value = _required_field(value, field, location)
-    if not isinstance(field_value, int) or isinstance(field_value, bool):
-        raise ValueError(f"{location}.{field} 필드는 정수여야 합니다.")
-    return field_value
-
-
-def _string_tuple_field(
-    value: dict[str, Any],
-    field: str,
-    location: str,
-) -> tuple[str, ...]:
-    field_value = _required_field(value, field, location)
-    if not isinstance(field_value, list) or any(
-        not isinstance(item, str) for item in field_value
-    ):
-        raise ValueError(f"{location}.{field} 필드는 문자열 배열이어야 합니다.")
-    return tuple(field_value)
-
-
-
 def _result_contract(
     number: int,
     verification_items: tuple[str, ...],
@@ -96,47 +61,24 @@ def parse_invocation(raw_invocation: str) -> InvocationResult:
     except (json.JSONDecodeError, TypeError) as error:
         raise ValueError("TaskInvocation은 유효한 JSON이어야 합니다.") from error
 
-    if not isinstance(invocation, dict):
-        raise ValueError("TaskInvocation JSON의 최상위 값은 객체여야 합니다.")
+    task = invocation["task"]
 
-    common_prompt = _string_field(invocation, "common_prompt", "TaskInvocation")
-    additional_request = _string_field(
-        invocation,
-        "additional_request",
-        "TaskInvocation",
-    )
-    task = _required_field(invocation, "task", "TaskInvocation")
-    if not isinstance(task, dict):
-        raise ValueError("TaskInvocation.task 필드는 객체여야 합니다.")
+    common_prompt = invocation["common_prompt"]
+    additional_request = invocation["additional_request"]
 
-    number = _integer_field(task, "number", "TaskInvocation.task")
-    title = _string_field(task, "title", "TaskInvocation.task")
+    number = task["number"]
+    title = task["title"]
+    task_prompt = task["task_prompt"]
 
-    allowed_paths = _string_tuple_field(
-        task,
-        "allowed_paths",
-        "TaskInvocation.task",
-    )
-    forbidden_paths = _string_tuple_field(
-        task,
-        "forbidden_paths",
-        "TaskInvocation.task",
-    )
-
-    task_prompt = _string_field(task, "task_prompt", "TaskInvocation.task")
-
-    _string_tuple_field(task, "implementation_items", "TaskInvocation.task")
-    verification_items = _string_tuple_field(
-        task,
-        "verification_items",
-        "TaskInvocation.task",
-    )
-    _integer_field(task, "minimum_quality_score", "TaskInvocation.task")
+    allowed_paths = tuple(task["allowed_paths"])
+    forbidden_paths = tuple(task["forbidden_paths"])
+    verification_items = tuple(task["verification_items"])
 
     prompt_parts = [common_prompt]
 
     if additional_request:
         prompt_parts.append(additional_request)
+
     prompt_parts.extend(
         (
             title,
@@ -144,8 +86,12 @@ def parse_invocation(raw_invocation: str) -> InvocationResult:
             _result_contract(number, verification_items),
         )
     )
-    return "\n\n".join(prompt_parts), allowed_paths, forbidden_paths
 
+    return (
+        "\n\n".join(prompt_parts),
+        allowed_paths,
+        forbidden_paths,
+    )
 
 def read_invocation(arguments: list[str] | None = None) -> InvocationResult:
     """명령줄에서 정확히 하나의 TaskInvocation JSON 인자를 읽는다."""
