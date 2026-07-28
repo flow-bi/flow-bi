@@ -1,0 +1,6 @@
+interface:
+  display_name: "harness plan"
+  short_description: "docs등을 참고해 harness 실행을 위한 plan을 생성하는 skill"
+
+policy:
+  allow_implicit_invocation: false
