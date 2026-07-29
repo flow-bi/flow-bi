@@ -31,7 +31,7 @@ export function validatePrompt(input, projectRoot = PROJECT_ROOT) {
     );
   }
 
-  const activeRoot = resolve(projectRoot, "docs", "plan", "active");
+  const activeRoot = resolve(projectRoot, "docs", "plans", "active");
   const planPath = resolve(activeRoot, `${planId}.md`);
 
   const relativePlanPath = relative(activeRoot, planPath);

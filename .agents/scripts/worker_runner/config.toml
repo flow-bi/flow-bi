@@ -1,0 +1,16 @@
+model = "gpt-5.6-terra"
+model_reasoning_effort = "medium"
+
+default_permissions = "task-worker"
+
+[permissions.task-worker]
+description = "Task worker with execution-specific write and deny paths."
+extends = "worker-base"
+
+[permissions.task-worker.filesystem]
+glob_scan_max_depth = 5
+
+[permissions.task-worker.filesystem.":workspace_roots"]
+
+[permissions.task-worker.network]
+enabled = false

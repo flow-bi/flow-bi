@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 from collections.abc import Callable
+from dataclasses import dataclass
+import json
 import os
 import shutil
 import subprocess
@@ -14,11 +16,30 @@ from .codex import (
     build_codex_command,
     build_subprocess_environment,
 )
-from .config import resolve_config_path
 
 
 SubprocessRunner = Callable[..., subprocess.CompletedProcess[str]]
 WorkerLogger = Callable[[str, int, Path, Path], None]
+
+
+@dataclass(frozen=True)
+class WorkerExecutionResult:
+    returncode: int
+    output: object | None
+    output_error: str = ""
+
+
+def _read_worker_output(output_path: Path) -> tuple[object | None, str]:
+    def reject_non_json_constant(value: str) -> None:
+        raise ValueError(f"유효한 JSON 숫자가 아닙니다: {value}")
+
+    try:
+        return json.loads(
+            output_path.read_text(encoding="utf-8"),
+            parse_constant=reject_non_json_constant,
+        ), ""
+    except (OSError, UnicodeError, ValueError) as error:
+        return None, str(error)
 
 
 def invoke_worker_logger(
@@ -51,15 +72,16 @@ def invoke_worker_logger(
 
 
 def execute_worker(
-    worker: str,
     prompt: str,
+    allowed_paths: tuple[str, ...],
+    forbidden_paths: tuple[str, ...],
     project_root: Path = PROJECT_ROOT,
     executable: str | None = None,
     base_environment: dict[str, str] | None = None,
     runner: SubprocessRunner = subprocess.run,
     logger: WorkerLogger = invoke_worker_logger,
     timeout: int = DEFAULT_TIMEOUT_SECONDS,
-) -> subprocess.CompletedProcess[str]:
+) -> WorkerExecutionResult:
     """"Worker 하나를 실행하고 종료 결과를 반환한다."""
 
     # Worker 실행을 식별하기 위한 고유 ID
@@ -71,17 +93,17 @@ def execute_worker(
 
     # Codex 출력 파일 생성
     descriptor, raw_output_path = tempfile.mkstemp(
-        prefix=f"{worker}-{run_id}-", suffix=".txt", dir=pending_directory
+        prefix=f"task-runner-{run_id}-", suffix=".txt", dir=pending_directory
     )
     os.close(descriptor)
     output_path = Path(raw_output_path)
 
     # Worker 실행 환경 구성
-    environment = build_subprocess_environment(worker, run_id, base_environment)
+    environment = build_subprocess_environment(run_id, base_environment)
     
     # codex exec 명령 생성
     command = build_codex_command(
-        resolve_config_path(worker, project_root), output_path, executable
+        allowed_paths, forbidden_paths, output_path, executable
     )
 
     try:
@@ -111,10 +133,12 @@ def execute_worker(
         # 종료 결과 기록
         logger(run_id, result.returncode, output_path, project_root)
         
-        # Worker가 실패 종료
-        if result.returncode != 0:
-            raise subprocess.CalledProcessError(result.returncode, command)
-        return result
+        output, output_error = _read_worker_output(output_path)
+        return WorkerExecutionResult(
+            returncode=result.returncode,
+            output=output,
+            output_error=output_error,
+        )
     finally:
         
         # 임시 출력 파일 삭제

@@ -1,18 +1,28 @@
 from __future__ import annotations
 
+from dataclasses import asdict
 from pathlib import Path
-import subprocess
+import json
 import sys
 
+from .models import TaskInvocation
 from .plan import repository_root
 
 
-def invoke_worker(
-    worker: str, prompt: str, project_root: Path | None = None
-) -> subprocess.CompletedProcess[bytes]:
-    root = (project_root or repository_root()).resolve()
-    run_worker = root / ".agents" / "scripts" / "run-worker.py"
-    invocation = f"${worker} {prompt}"
-    return subprocess.run(
-        [sys.executable, str(run_worker), invocation], cwd=root, check=True
+WORKER_SCRIPTS = Path(__file__).resolve().parents[4] / "scripts"
+if str(WORKER_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(WORKER_SCRIPTS))
+
+from worker_runner import execute_worker, parse_invocation
+
+
+def invoke_task(invocation: TaskInvocation) -> object:
+    root = repository_root().resolve()
+    payload = json.dumps(asdict(invocation), ensure_ascii=False)
+    prompt, allowed_paths, forbidden_paths = parse_invocation(payload)
+    return execute_worker(
+        prompt,
+        allowed_paths,
+        forbidden_paths,
+        project_root=root,
     )
