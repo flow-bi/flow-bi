@@ -8,16 +8,16 @@
 
 ## 2. 기술 스택
 
-| 구분 | 기술 |
-| --- | --- |
-| UI | React + TypeScript |
-| Build | Vite |
-| 서버 상태 | TanStack Query |
-| 클라이언트 전역 상태 | Zustand |
-| Form | React Hook Form |
-| Schema 검증 | Zod |
-| Styling | Tailwind CSS |
-| Package Manager | npm |
+| 구분                 | 기술               |
+| -------------------- | ------------------ |
+| UI                   | React + TypeScript |
+| Build                | Vite               |
+| 서버 상태            | TanStack Query     |
+| 클라이언트 전역 상태 | Zustand            |
+| Form                 | React Hook Form    |
+| Schema 검증          | Zod                |
+| Styling              | Tailwind CSS       |
+| Package Manager      | npm                |
 
 미확정 기술은 기능 구현의 필요만으로 임의 선택하지 않는다. Design Doc 또는 Active Plan에서 근거와 검증 방법을 정하고 승인을 받은 뒤 도입한다.
 
