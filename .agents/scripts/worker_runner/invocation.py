@@ -7,6 +7,12 @@ from typing import Any
 
 InvocationResult = tuple[str, tuple[str, ...], tuple[str, ...]]
 
+DISCOVERY_GUIDANCE = (
+    "저장소 지침 파일은 `rg --files -g AGENTS.md`로 검색하고, "
+    "build 및 Gradle 캐시 디렉터리를 재귀 탐색하지 마십시오."
+)
+
+
 def _result_contract(
     number: int,
     verification_items: tuple[str, ...],
@@ -74,7 +80,7 @@ def parse_invocation(raw_invocation: str) -> InvocationResult:
     forbidden_paths = tuple(task["forbidden_paths"])
     verification_items = tuple(task["verification_items"])
 
-    prompt_parts = [common_prompt]
+    prompt_parts = [common_prompt, DISCOVERY_GUIDANCE]
 
     if additional_request:
         prompt_parts.append(additional_request)

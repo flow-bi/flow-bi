@@ -69,6 +69,7 @@ def load_config(
     allowed_paths: Iterable[str],
     forbidden_paths: Iterable[str],
     config_path: Path | None = None,
+    readable_paths: Iterable[str] = (),
 ) -> dict[str, object]:
     """공통 설정을 읽고 실행별 경로 권한을 병합한다."""
 
@@ -117,9 +118,11 @@ def load_config(
     for allowed_path in allowed_paths:
         workspace_roots[allowed_path] = "write"
 
-    # 같은 경로가 양쪽에 있으면 deny가 우선한다.
     for forbidden_path in forbidden_paths:
-        workspace_roots[forbidden_path] = "deny"
+        workspace_roots[forbidden_path] = "read"
+
+    for readable_path in readable_paths:
+        filesystem[readable_path] = "read"
 
     return config
 
@@ -129,8 +132,14 @@ def read_config_overrides(
     allowed_paths: Iterable[str],
     forbidden_paths: Iterable[str],
     config_path: Path | None = None,
+    readable_paths: Iterable[str] = (),
 ) -> list[str]:
-    config = load_config(allowed_paths, forbidden_paths, config_path)
+    config = load_config(
+        allowed_paths,
+        forbidden_paths,
+        config_path,
+        readable_paths,
+    )
 
     return [
         f"{format_toml_key(key)}={format_toml_value(value)}"

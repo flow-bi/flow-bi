@@ -99,11 +99,20 @@ def execute_worker(
     output_path = Path(raw_output_path)
 
     # Worker 실행 환경 구성
-    environment = build_subprocess_environment(run_id, base_environment)
+    environment = build_subprocess_environment(
+        run_id,
+        base_environment,
+        project_root=project_root,
+    )
     
     # codex exec 명령 생성
+    java_home = environment.get("JAVA_HOME")
     command = build_codex_command(
-        allowed_paths, forbidden_paths, output_path, executable
+        allowed_paths,
+        forbidden_paths,
+        output_path,
+        executable,
+        readable_paths=(java_home,) if java_home else (),
     )
 
     try:

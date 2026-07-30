@@ -1,0 +1,24 @@
+gradle.projectsEvaluated {
+    def root = gradle.rootProject
+
+    if (root.tasks.findByName('resolveAllDependencies') == null) {
+        root.tasks.register('resolveAllDependencies') {
+            group = 'build setup'
+            description = 'Resolves every resolvable dependency configuration.'
+
+            doLast {
+                root.allprojects.each { project ->
+                    project.configurations
+                            .findAll { configuration -> configuration.canBeResolved }
+                            .sort { left, right -> left.name <=> right.name }
+                            .each { configuration ->
+                                logger.lifecycle(
+                                        "Resolving ${project.path}:${configuration.name}"
+                                )
+                                configuration.resolve()
+                            }
+                }
+            }
+        }
+    }
+}
