@@ -150,6 +150,35 @@ class BrowserVerifierTests(unittest.TestCase):
         self.assertIn("passing", succeeded.output)
         self.assertEqual(runner.call_count, 2)
 
+    def test_failed_cypress_screenshots_are_isolated_and_cleaned(self) -> None:
+        captured_screenshots_path: Path | None = None
+
+        def failing_runner(*_args, **kwargs):
+            nonlocal captured_screenshots_path
+            captured_screenshots_path = Path(
+                kwargs["env"]["CYPRESS_screenshotsFolder"]
+            )
+            captured_screenshots_path.mkdir(parents=True)
+            (captured_screenshots_path / "failed.png").write_bytes(b"screenshot")
+            return subprocess.CompletedProcess(
+                ["npm", "run", "test:e2e"],
+                1,
+                stdout="1 failing",
+            )
+
+        with BrowserVerifier(
+            self.root,
+            runner=failing_runner,
+            npm_executable="npm",
+        ) as verifier:
+            result = request_cypress_verification(verifier.environment)
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIsNotNone(captured_screenshots_path)
+        assert captured_screenshots_path is not None
+        self.assertFalse(captured_screenshots_path.exists())
+        self.assertFalse((self.root / "frontend" / "cypress" / "screenshots").exists())
+
     def test_worker_prompt_explains_host_verification_and_retry_command(self) -> None:
         payload = """
         {
@@ -175,6 +204,8 @@ class BrowserVerifierTests(unittest.TestCase):
         self.assertIn("재호출하지", prompt)
         self.assertIn("실패", prompt)
         self.assertIn("재실행", prompt)
+        self.assertIn("backend_verifier.py", prompt)
+        self.assertIn("`gradlew`를 직접 실행하지", prompt)
 
     def test_gateway_merges_verifier_connection_into_worker_environment(self) -> None:
         invocation = mock.Mock()
@@ -219,13 +250,20 @@ class BrowserVerifierTests(unittest.TestCase):
         )
         self.assertIn("PATH", base_environment)
 
-    def test_harness_lifecycle_passes_verifier_environment_to_worker(self) -> None:
-        verifier_environment = {
+    def test_harness_lifecycle_passes_both_verifier_environments_to_worker(self) -> None:
+        browser_environment = {
             "FLOW_BI_BROWSER_VERIFIER_URL": "http://127.0.0.1:4321",
             "FLOW_BI_BROWSER_VERIFIER_TOKEN": "token",
         }
-        verifier = mock.MagicMock()
-        verifier.__enter__.return_value.environment = verifier_environment
+        backend_environment = {
+            "FLOW_BI_BACKEND_VERIFIER_URL": "http://127.0.0.1:9876/verify/gradle",
+            "FLOW_BI_BACKEND_VERIFIER_TOKEN": "backend-token",
+        }
+        browser_verifier = mock.MagicMock()
+        browser_verifier.__enter__.return_value.environment = browser_environment
+        backend_verifier = mock.MagicMock()
+        backend_verifier.__enter__.return_value.environment = backend_environment
+        backend_verifier.__enter__.return_value.environment_for_task.return_value = backend_environment
         plan_path = self.root / "docs" / "plans" / "active" / "test-01.md"
         destination = self.root / "docs" / "plans" / "complete" / "test-01.md"
         invocation = mock.Mock()
@@ -245,7 +283,12 @@ class BrowserVerifierTests(unittest.TestCase):
             mock.patch.object(
                 cli,
                 "BrowserVerifier",
-                return_value=verifier,
+                return_value=browser_verifier,
+            ),
+            mock.patch.object(
+                cli,
+                "BackendVerifier",
+                return_value=backend_verifier,
             ),
             mock.patch.object(
                 cli,
@@ -265,9 +308,14 @@ class BrowserVerifierTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         invoke_task.assert_called_once_with(
             invocation,
-            environment_overrides=verifier_environment,
+            environment_overrides={**browser_environment, **backend_environment},
         )
-        verifier.__exit__.assert_called_once()
+        backend_verifier.__enter__.return_value.environment_for_task.assert_called_once_with(
+            invocation.task.allowed_paths,
+            invocation.task.forbidden_paths,
+        )
+        browser_verifier.__exit__.assert_called_once()
+        backend_verifier.__exit__.assert_called_once()
 
 
 if __name__ == "__main__":
