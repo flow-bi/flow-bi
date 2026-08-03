@@ -9,6 +9,7 @@ import os
 import secrets
 import shutil
 import subprocess
+import tempfile
 import threading
 import urllib.error
 import urllib.request
@@ -76,24 +77,30 @@ class BrowserVerifier:
             environment = os.environ.copy()
             environment.pop(BROWSER_VERIFIER_URL, None)
             environment.pop(BROWSER_VERIFIER_TOKEN, None)
-            try:
-                result = self._runner(
-                    [executable, "run", "test:e2e"],
-                    cwd=self._project_root / "frontend",
-                    env=environment,
-                    timeout=self._timeout,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace",
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    check=False,
+            with tempfile.TemporaryDirectory(
+                prefix="flow-bi-cypress-artifacts-"
+            ) as artifact_root:
+                environment["CYPRESS_screenshotsFolder"] = str(
+                    Path(artifact_root) / "screenshots"
                 )
-            except subprocess.TimeoutExpired as error:
-                output = error.stdout or ""
-                if isinstance(output, bytes):
-                    output = output.decode("utf-8", errors="replace")
-                return BrowserVerificationResult(124, output, timed_out=True)
+                try:
+                    result = self._runner(
+                        [executable, "run", "test:e2e"],
+                        cwd=self._project_root / "frontend",
+                        env=environment,
+                        timeout=self._timeout,
+                        text=True,
+                        encoding="utf-8",
+                        errors="replace",
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        check=False,
+                    )
+                except subprocess.TimeoutExpired as error:
+                    output = error.stdout or ""
+                    if isinstance(output, bytes):
+                        output = output.decode("utf-8", errors="replace")
+                    return BrowserVerificationResult(124, output, timed_out=True)
 
         return BrowserVerificationResult(
             result.returncode,
