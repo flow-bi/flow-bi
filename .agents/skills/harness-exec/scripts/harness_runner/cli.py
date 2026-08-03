@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from functools import partial
 import sys
 
 from .parse import parse_invocation
 from .execution import execute_workers
 from .models import PlanValidationError, TaskResult
 from .plan import complete_plan, load_active_plan, repository_root
+from .worker_gateway import invoke_task
 
-
-
+from worker_runner.browser_verifier import BrowserVerifier
 
 
 # 실패 알리기
@@ -51,8 +52,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"plan 준비 실패: {error}", file=sys.stderr)
         return 1
 
-    # plan에서 읽은 작업 목록,  request, 현재 active plan경로, 저장소 루트
-    report = execute_workers(tasks, request)
+    # 브라우저 프로세스는 부모에서 실행하고 Worker에는 제한된 호출 정보만 전달한다.
+    with BrowserVerifier(root) as browser_verifier:
+        worker_call = partial(
+            invoke_task,
+            environment_overrides=browser_verifier.environment,
+        )
+        report = execute_workers(tasks, request, call_worker=worker_call)
 
     # worker가 실패하면 실패를 출력하고 종료코드 1반환 plan은 이동하지 않는다.
     if not report.succeeded:

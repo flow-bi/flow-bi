@@ -12,6 +12,26 @@ DISCOVERY_GUIDANCE = (
     "build 및 Gradle 캐시 디렉터리를 재귀 탐색하지 마십시오."
 )
 
+TASK_WORKER_GUIDANCE = (
+    "현재 세션은 이미 Harness Task Worker입니다. 전달된 Task를 허용 경로 안에서 "
+    "직접 구현하고 검증하십시오. harness-exec, harness-plan 또는 다른 Harness "
+    "Skill과 실행 스크립트를 재호출하지 마십시오."
+)
+
+BROWSER_VERIFICATION_GUIDANCE = (
+    "Cypress 브라우저 검증은 Worker에서 직접 실행하지 말고 "
+    "부모가 전달한 `FLOW_BI_PYTHON_EXECUTABLE`로 "
+    "`.agents/scripts/run-browser-verifier.py cypress`를 실행하십시오. "
+    "macOS/Linux shell에서는 "
+    "`\"$FLOW_BI_PYTHON_EXECUTABLE\" .agents/scripts/run-browser-verifier.py cypress`, "
+    "Windows PowerShell에서는 "
+    "`& $env:FLOW_BI_PYTHON_EXECUTABLE .agents/scripts/run-browser-verifier.py cypress`를 "
+    "사용하십시오. "
+    "이 명령은 Harness 부모에서 `npm run test:e2e`를 실행하고 동일한 종료 코드와 "
+    "로그를 반환합니다. 검증이 실패하면 로그를 분석해 허용 범위의 구현 또는 "
+    "테스트를 수정한 뒤 같은 명령을 재실행하여 Green을 확인하십시오."
+)
+
 
 def _result_contract(
     number: int,
@@ -80,7 +100,12 @@ def parse_invocation(raw_invocation: str) -> InvocationResult:
     forbidden_paths = tuple(task["forbidden_paths"])
     verification_items = tuple(task["verification_items"])
 
-    prompt_parts = [common_prompt, DISCOVERY_GUIDANCE]
+    prompt_parts = [
+        common_prompt,
+        DISCOVERY_GUIDANCE,
+        TASK_WORKER_GUIDANCE,
+        BROWSER_VERIFICATION_GUIDANCE,
+    ]
 
     if additional_request:
         prompt_parts.append(additional_request)

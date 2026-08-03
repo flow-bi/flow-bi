@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from pathlib import Path
 import json
+import os
 import sys
 
 from .models import TaskInvocation
@@ -16,13 +17,21 @@ if str(WORKER_SCRIPTS) not in sys.path:
 from worker_runner import execute_worker, parse_invocation
 
 
-def invoke_task(invocation: TaskInvocation) -> object:
+def invoke_task(
+    invocation: TaskInvocation,
+    *,
+    environment_overrides: dict[str, str] | None = None,
+) -> object:
     root = repository_root().resolve()
     payload = json.dumps(asdict(invocation), ensure_ascii=False)
     prompt, allowed_paths, forbidden_paths = parse_invocation(payload)
+    environment = os.environ.copy()
+    if environment_overrides:
+        environment.update(environment_overrides)
     return execute_worker(
         prompt,
         allowed_paths,
         forbidden_paths,
         project_root=root,
+        base_environment=environment,
     )
