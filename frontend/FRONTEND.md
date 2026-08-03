@@ -18,6 +18,7 @@
 | Schema 검증          | Zod                |
 | Styling              | Tailwind CSS       |
 | Package Manager      | npm                |
+| 브라우저/E2E         | Cypress            |
 
 미확정 기술은 기능 구현의 필요만으로 임의 선택하지 않는다. Design Doc 또는 Active Plan에서 근거와 검증 방법을 정하고 승인을 받은 뒤 도입한다.
 
@@ -95,7 +96,6 @@ frontend/
 ## 9. 미결정 사항
 
 - Router
-- 테스트 및 E2E 도구
 - 날짜 처리 라이브러리
 - API Client 및 OpenAPI 코드 생성 방식
 - 인증 Token의 브라우저 저장 방식
