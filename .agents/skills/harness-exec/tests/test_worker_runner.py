@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
 import os
 import subprocess
 import sys
@@ -19,6 +20,7 @@ from worker_runner.codex import (
 )
 from worker_runner.runner import execute_worker
 import worker_runner.runner as worker_runner_module
+from worker_runner.invocation import parse_invocation
 
 
 class WorkerReadablePathTests(unittest.TestCase):
@@ -213,6 +215,110 @@ class WorkerReadablePathTests(unittest.TestCase):
             build_command.call_args.kwargs["readable_paths"],
             readable_paths,
         )
+
+
+class WorkerInvocationTests(unittest.TestCase):
+    def payload(self, execution_context: dict[str, object]) -> str:
+        return json.dumps(
+            {
+                "common_prompt": "common",
+                "additional_request": "",
+                "task": {
+                    "number": 2,
+                    "title": "worker rerun",
+                    "allowed_paths": [".agents/scripts/worker_runner"],
+                    "forbidden_paths": ["backend"],
+                    "task_prompt": "implement",
+                    "verification_items": ["unit test"],
+                },
+                "execution_context": execution_context,
+            }
+        )
+
+    def test_new_or_changed_revision_requires_fresh_tdd_without_prior_evidence(self) -> None:
+        prompt, _allowed, _forbidden = parse_invocation(
+            self.payload(
+                {
+                    "plan_id": "rerun-01",
+                    "fingerprint": "new-fingerprint",
+                    "mode": "new_or_changed",
+                    "prior_tdd_evidence": None,
+                }
+            )
+        )
+
+        self.assertIn('"mode": "new_or_changed"', prompt)
+        self.assertIn("Red → Green → Refactor", prompt)
+        self.assertIn("과거 TDD 증거를 재사용하지 마십시오", prompt)
+
+    def test_same_revision_rerun_references_prior_evidence_and_current_regression(self) -> None:
+        prompt, _allowed, _forbidden = parse_invocation(
+            self.payload(
+                {
+                    "plan_id": "rerun-01",
+                    "fingerprint": "same-fingerprint",
+                    "mode": "rerun",
+                    "prior_tdd_evidence": {
+                        "result": "PASS",
+                        "evidence": "red-green-refactor record",
+                    },
+                }
+            )
+        )
+
+        self.assertIn('"mode": "rerun"', prompt)
+        self.assertIn("plan:rerun-01:task:2:fingerprint:same-fingerprint", prompt)
+        self.assertIn("새로운 Red 실패를 인위적으로 만들지 마십시오", prompt)
+        self.assertIn("현재 Green 및 회귀 검증", prompt)
+        self.assertIn("reused_evidence", prompt)
+        self.assertIn("current_verification_evidence", prompt)
+
+    def test_existing_implementation_without_evidence_requires_human_review(self) -> None:
+        prompt, _allowed, _forbidden = parse_invocation(
+            self.payload(
+                {
+                    "plan_id": "rerun-01",
+                    "fingerprint": "legacy-fingerprint",
+                    "mode": "existing_without_evidence",
+                    "prior_tdd_evidence": None,
+                }
+            )
+        )
+
+        self.assertIn("HUMAN_REVIEW_REQUIRED", prompt)
+        self.assertIn("TDD `PASS`로 보고하지 마십시오", prompt)
+        self.assertIn("인위적인 Red 실패를 만들지 마십시오", prompt)
+        self.assertNotIn("Red 재현을 수행", prompt)
+
+    def test_rejects_prior_evidence_for_a_changed_revision(self) -> None:
+        with self.assertRaisesRegex(ValueError, "재사용할 수 없습니다"):
+            parse_invocation(
+                self.payload(
+                    {
+                        "plan_id": "rerun-01",
+                        "fingerprint": "changed-fingerprint",
+                        "mode": "new_or_changed",
+                        "prior_tdd_evidence": {"result": "PASS", "evidence": "old"},
+                    }
+                )
+            )
+
+    def test_decision_correction_prompt_requires_only_a_pass_or_failure_decision(self) -> None:
+        prompt, _allowed, _forbidden = parse_invocation(
+            self.payload(
+                {
+                    "plan_id": "rerun-01",
+                    "fingerprint": "same-fingerprint",
+                    "mode": "new_or_changed",
+                    "prior_tdd_evidence": None,
+                }
+            )[:-1]
+            + ', "decision_correction": {"prior_decision": "PASS_WITH_FOLLOW_UP", "objective_evidence": {"quality_score": 90}}}'
+        )
+
+        self.assertIn("성공 판정은 정확히 `PASS`만", prompt)
+        self.assertIn("제품 구현, 테스트, 검증을 다시 수행하거나 변경하지 마십시오", prompt)
+        self.assertIn("PASS_WITH_FOLLOW_UP", prompt)
 
 
 if __name__ == "__main__":
