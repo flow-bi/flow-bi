@@ -37,6 +37,16 @@ class TaskInvocation:
     common_prompt: str
     additional_request: str
     task: Task
+    execution_context: "TaskExecutionContext | None" = None
+    decision_correction: dict[str, object] | None = None
+
+
+@dataclass(frozen=True)
+class TaskExecutionContext:
+    plan_id: str
+    fingerprint: str
+    mode: str
+    prior_tdd_evidence: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)

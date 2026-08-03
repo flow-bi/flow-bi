@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from functools import partial
 import sys
 
 from .parse import parse_invocation
@@ -11,6 +10,7 @@ from .plan import complete_plan, load_active_plan, repository_root
 from .worker_gateway import invoke_task
 
 from worker_runner.browser_verifier import BrowserVerifier
+from worker_runner.backend_verifier import BackendVerifier
 
 
 # 실패 알리기
@@ -53,11 +53,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
 
     # 브라우저 프로세스는 부모에서 실행하고 Worker에는 제한된 호출 정보만 전달한다.
-    with BrowserVerifier(root) as browser_verifier:
-        worker_call = partial(
-            invoke_task,
-            environment_overrides=browser_verifier.environment,
-        )
+    with BrowserVerifier(root) as browser_verifier, BackendVerifier(root) as backend_verifier:
+        def worker_call(invocation):
+            return invoke_task(
+                invocation,
+                environment_overrides={
+                    **browser_verifier.environment,
+                    **backend_verifier.environment_for_task(
+                        invocation.task.allowed_paths,
+                        invocation.task.forbidden_paths,
+                    ),
+                },
+            )
         report = execute_workers(tasks, request, call_worker=worker_call)
 
     # worker가 실패하면 실패를 출력하고 종료코드 1반환 plan은 이동하지 않는다.

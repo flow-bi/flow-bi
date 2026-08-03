@@ -1,0 +1,110 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+from pathlib import Path
+import tempfile
+from typing import Any
+
+from .models import Task
+
+
+RECORD_VERSION = 1
+
+
+class EvidenceRecordError(ValueError):
+    """Raised when a stored execution record cannot prove a prior success."""
+
+
+def _json_bytes(value: object) -> bytes:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
+def revision_fingerprint(root: Path, plan_id: str, task: Task, common_prompt: str) -> str:
+    """Hash only the task contract that the recorded TDD evidence proves."""
+    del root, common_prompt
+    return hashlib.sha256(_json_bytes({
+        "plan_id": plan_id,
+        "task_number": task.number,
+        "title": task.title,
+        "prerequisite_numbers": task.prerequisite_numbers,
+        "task_prompt": task.task_prompt,
+        "implementation_items": task.implementation_items,
+        "verification_items": task.verification_items,
+        "allowed_paths": task.allowed_paths,
+        "forbidden_paths": task.forbidden_paths,
+        "minimum_quality_score": task.minimum_quality_score,
+    })).hexdigest()
+
+
+def _valid_evidence(value: object) -> bool:
+    return isinstance(value, dict) and value.get("result") == "PASS" and isinstance(value.get("evidence"), str) and bool(value["evidence"].strip())
+
+
+def _valid_record(value: object, fingerprint: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise EvidenceRecordError("실행 기록 형식이 올바르지 않습니다.")
+    required = {"version", "plan_id", "task_number", "fingerprint", "mandatory_gates", "tdd_evidence", "verification", "quality_score"}
+    if set(value) != required or value.get("version") != RECORD_VERSION or value.get("fingerprint") != fingerprint:
+        raise EvidenceRecordError("실행 기록이 불완전하거나 현재 리비전과 일치하지 않습니다.")
+    gates = value["mandatory_gates"]
+    if not isinstance(gates, dict) or not all(_valid_evidence(gates.get(name)) for name in ("permission_security", "scope", "requirements", "tdd", "automated_verification", "contract_sync", "critical_findings")):
+        raise EvidenceRecordError("실행 기록의 Mandatory Gate 증거가 불완전합니다.")
+    if not _valid_evidence(value["tdd_evidence"]):
+        raise EvidenceRecordError("실행 기록의 TDD 증거가 불완전합니다.")
+    verification = value["verification"]
+    if not isinstance(verification, list) or not verification or not all(isinstance(item, dict) and item.get("result") == "PASS" and isinstance(item.get("evidence"), str) and item["evidence"].strip() for item in verification):
+        raise EvidenceRecordError("실행 기록의 검증 증거가 불완전합니다.")
+    if type(value["quality_score"]) is not int:
+        raise EvidenceRecordError("실행 기록의 quality_score 형식이 올바르지 않습니다.")
+    return value
+
+
+class ExecutionRecordStore:
+    def __init__(self, root: Path) -> None:
+        self.root = root
+
+    def path_for(self, plan_id: str, task_number: int) -> Path:
+        safe_plan_id = hashlib.sha256(plan_id.encode("utf-8")).hexdigest()
+        return self.root / safe_plan_id / f"task-{task_number}.json"
+
+    def load(self, plan_id: str, task_number: int, fingerprint: str) -> dict[str, Any] | None:
+        path = self.path_for(plan_id, task_number)
+        if not path.exists():
+            return None
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(value, dict) and value.get("fingerprint") != fingerprint:
+                return None
+            return _valid_record(value, fingerprint)
+        except (OSError, json.JSONDecodeError, EvidenceRecordError) as error:
+            raise EvidenceRecordError(f"실행 기록을 신뢰할 수 없습니다: {error}") from error
+
+    def save(self, plan_id: str, task: Task, fingerprint: str, output: dict[str, object]) -> None:
+        record = {
+            "version": RECORD_VERSION,
+            "plan_id": plan_id,
+            "task_number": task.number,
+            "fingerprint": fingerprint,
+            "mandatory_gates": output["mandatory_gates"],
+            "tdd_evidence": output["mandatory_gates"]["tdd"],
+            "verification": output["verification"],
+            "quality_score": output["quality_score"],
+        }
+        _valid_record(record, fingerprint)
+        path = self.path_for(plan_id, task.number)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+        try:
+            with os.fdopen(descriptor, "wb") as temporary:
+                temporary.write(_json_bytes(record))
+                temporary.flush()
+                os.fsync(temporary.fileno())
+            os.replace(temporary_name, path)
+        except OSError:
+            try:
+                os.unlink(temporary_name)
+            except FileNotFoundError:
+                pass
+            raise
