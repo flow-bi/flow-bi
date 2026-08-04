@@ -58,13 +58,14 @@ def _task_section(result: TaskResult) -> str:
     score = str(result.quality_score) if result.quality_score is not None else "N/A"
     return "\n".join((
         f"### Task {result.task_number}. {result.title}",
-        f"상태: {_task_status(result)}",
-        "수행 내용:",
+        f"- 상태: {_task_status(result)}",
+        "#### 수행 내용",
         summary,
-        "검증 결과:",
+        "#### 검증 결과",
         *_verification_lines(result),
-        f"Quality Score: {score}",
-        "남은 문제:",
+        "#### Quality Score",
+        f"- {score}",
+        "#### 남은 문제",
         *_issue_lines(result),
     ))
 
@@ -108,23 +109,26 @@ def build_execution_report(
 
     sections = "\n\n".join(_task_section(item) for item in ordered)
     body = "\n".join((
-        f"Plan: {plan_id}",
-        f"실행 결과: {status}",
-        f"실행 시간: {timestamp.isoformat(timespec='seconds')}",
+        "# Harness 실행 보고서",
+        "",
+        "## 실행 메타데이터",
+        f"- Plan ID: {plan_id}",
+        f"- 실행 결과: {status}",
+        f"- 실행 시간: {timestamp.isoformat(timespec='seconds')}",
+        "",
+        "## 최종 피드백",
+        f"- 전체 결과: {status}",
+        "### 완료된 작업",
+        *(f"- {item}" for item in completed or ["없음"]),
+        "### 실패 또는 차단된 작업",
+        *(f"- {item}" for item in incomplete or ["없음"]),
+        "### 주요 문제",
+        *(f"- {item}" for item in issues or ["없음"]),
+        "### 다음 작업",
+        *(f"- {item}" for item in next_actions),
         "",
         "## Worker 결과",
         sections or "Worker 결과 없음",
-        "",
-        "## 부모 최종 피드백",
-        f"전체 결과: {status}",
-        "완료된 작업:",
-        *(f"- {item}" for item in completed or ["없음"]),
-        "실패 또는 차단된 작업:",
-        *(f"- {item}" for item in incomplete or ["없음"]),
-        "주요 문제:",
-        *(f"- {item}" for item in issues or ["없음"]),
-        "다음 작업:",
-        *(f"- {item}" for item in next_actions),
     ))
     safe_timestamp = timestamp.strftime("%Y-%m-%d %H:%M:%S KST")
     return RenderedReport(
