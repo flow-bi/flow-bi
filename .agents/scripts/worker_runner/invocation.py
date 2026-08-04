@@ -84,6 +84,7 @@ def _result_contract(
 ) -> str:
     contract = {
         "task_id": f"Task {number}",
+        "work_summary": "수행한 변경을 간결하게 요약",
         "mandatory_gates": {
             "permission_security": {"result": "PASS | FAIL", "evidence": "근거"},
             "scope": {"result": "PASS | FAIL", "evidence": "근거"},
@@ -115,10 +116,12 @@ def _result_contract(
             }
             for item in verification_items
         ],
+        "remaining_issues": ["남은 문제 또는 후속 작업; 없으면 빈 배열"],
         "decision": (
             "PASS | PASS_WITH_FOLLOW_UP | RETRY | "
             "HUMAN_REVIEW_REQUIRED | FAILED | BLOCKED"
         ),
+        "final_status": "PASS | FAILED | BLOCKED",
         "quality_score": 0,
     }
     return (
