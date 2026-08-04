@@ -2,18 +2,22 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
+from dataclasses import replace
 import heapq
 import math
 import subprocess
+from pathlib import Path
 
 from .models import (
     ExecutionReport,
     HarnessRequest,
     ParsedPlan,
     Task,
+    TaskExecutionContext,
     TaskInvocation,
     TaskResult,
 )
+from .evidence import EvidenceRecordError, ExecutionRecordStore, revision_fingerprint
 from .worker_gateway import invoke_task
 
 MAX_PARALLEL_TASKS = 4
@@ -28,6 +32,12 @@ MANDATORY_GATES = (
     "contract_sync",
     "critical_findings",
 )
+EXPLICIT_FAILURE_DECISIONS = frozenset((
+    "RETRY",
+    "HUMAN_REVIEW_REQUIRED",
+    "FAILED",
+    "BLOCKED",
+))
 
 # Woker 결과에서 종료 코드 추출
 def _return_code(result: object) -> int:
@@ -40,8 +50,8 @@ def _return_code(result: object) -> int:
 def _non_empty_text(value: object) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
-# Worker가 제출한 JSON 결과 검증
-def _completion_error(task: Task, worker_result: object) -> str:
+# Worker가 제출한 JSON 결과 중 판정을 제외한 객관적 완료 조건을 검증한다.
+def _objective_completion_error(task: Task, worker_result: object) -> str:
     output = getattr(worker_result, "output", None)
     output_error = getattr(worker_result, "output_error", "")
 
@@ -96,17 +106,55 @@ def _completion_error(task: Task, worker_result: object) -> str:
         if not _non_empty_text(verification_result.get("evidence")):
             return f"검증 증거가 누락되었습니다: {item_name}"
 
-    if output.get("decision") != "PASS":
-        return "Worker 판정이 PASS가 아닙니다."
-
+    quality_score = output.get("quality_score")
+    if type(quality_score) is not int:
+        return "quality_score가 누락되었거나 정수가 아닙니다."
+    if task.minimum_quality_score is not None and quality_score < task.minimum_quality_score:
+        return f"quality_score가 최소 기준 {task.minimum_quality_score}점 미만입니다."
 
     return ""
+
+
+# Worker가 제출한 JSON 결과 검증
+def _completion_error(task: Task, worker_result: object) -> str:
+    objective_error = _objective_completion_error(task, worker_result)
+    if objective_error:
+        return objective_error
+
+    decision = worker_result.output.get("decision")
+    if decision != "PASS":
+        return f"Worker 판정이 PASS가 아닙니다: {decision!r}."
+    return ""
+
+
+def _needs_decision_correction(task: Task, worker_result: object) -> bool:
+    if _objective_completion_error(task, worker_result):
+        return False
+    output = getattr(worker_result, "output", None)
+    decision = output.get("decision") if isinstance(output, dict) else None
+    return decision != "PASS" and decision not in EXPLICIT_FAILURE_DECISIONS
+
+
+def _decision_correction(invocation: TaskInvocation, worker_result: object) -> TaskInvocation:
+    output = getattr(worker_result, "output")
+    return replace(
+        invocation,
+        decision_correction={
+            "prior_decision": output.get("decision"),
+            "objective_evidence": {
+                "mandatory_gates": output.get("mandatory_gates"),
+                "verification": output.get("verification"),
+                "quality_score": output.get("quality_score"),
+            },
+        },
+    )
 
 
 def _execute_task(
     task: Task,
     invocation: TaskInvocation,
     call_worker: WorkerInvoker,
+    record_store: ExecutionRecordStore,
 ) -> TaskResult:
     status = "succeeded"
     return_code: int | None = None
@@ -120,8 +168,35 @@ def _execute_task(
             status = "failed"
         else:
             message = _completion_error(task, worker_result)
+            if message and _needs_decision_correction(task, worker_result):
+                corrected_result = call_worker(_decision_correction(invocation, worker_result))
+                corrected_return_code = _return_code(corrected_result)
+                if corrected_return_code != 0:
+                    status = "failed"
+                    return_code = corrected_return_code
+                    message = "판정 교정 요청 Worker 호출이 실패했습니다."
+                else:
+                    corrected_message = _completion_error(task, corrected_result)
+                    if corrected_message:
+                        status = "failed"
+                        message = f"판정 교정 후에도 완료 계약을 충족하지 않습니다: {corrected_message}"
+                    else:
+                        message = ""
+                        worker_result = corrected_result
             if message:
                 status = "failed"
+            else:
+                output = getattr(worker_result, "output")
+                try:
+                    record_store.save(
+                        invocation.execution_context.plan_id,
+                        task,
+                        invocation.execution_context.fingerprint,
+                        output,
+                    )
+                except (OSError, EvidenceRecordError) as error:
+                    status = "failed"
+                    message = f"실행 기록 저장 실패: {error}"
     except subprocess.TimeoutExpired as error:
         status = "failed"
         return_code = 124
@@ -186,6 +261,8 @@ def execute_workers(
     max_parallel_tasks: int = MAX_PARALLEL_TASKS,
     *,
     call_worker: WorkerInvoker | None = None,
+    project_root: Path | None = None,
+    record_store: ExecutionRecordStore | None = None,
 ) -> ExecutionReport:
     
     if invoker is not None and call_worker is not None:
@@ -193,6 +270,10 @@ def execute_workers(
     worker_call = call_worker if call_worker is not None else invoker
     if worker_call is None:
         worker_call = invoke_task
+    root = (project_root or Path.cwd()).resolve()
+    store = record_store or ExecutionRecordStore(
+        root / ".agents" / "skills" / "harness-exec" / "scripts" / "harness_runner" / ".execution-records"
+    )
 
     tasks_by_number = {task.number: task for task in plan.tasks}
     statuses = {task.number: "pending" for task in plan.tasks}
@@ -212,16 +293,32 @@ def execute_workers(
                 task_number = heapq.heappop(ready)
                 task = tasks_by_number[task_number]
                 statuses[task_number] = "running"
+                fingerprint = revision_fingerprint(root, request.plan_id, task, plan.common_prompt)
+                try:
+                    prior_record = store.load(request.plan_id, task.number, fingerprint)
+                except EvidenceRecordError as error:
+                    result = TaskResult(task.number, task.title, "failed", message=f"HUMAN_REVIEW_REQUIRED: {error}")
+                    results[task_number] = result
+                    statuses[task_number] = result.status
+                    _block_failed_descendants(tasks_by_number, statuses, results)
+                    continue
                 invocation = TaskInvocation(
                     common_prompt=plan.common_prompt,
                     additional_request=request.additional_request,
                     task=task,
+                    execution_context=TaskExecutionContext(
+                        plan_id=request.plan_id,
+                        fingerprint=fingerprint,
+                        mode="rerun" if prior_record else "new_or_changed",
+                        prior_tdd_evidence=prior_record["tdd_evidence"] if prior_record else None,
+                    ),
                 )
                 future = executor.submit(
                     _execute_task,
                     task,
                     invocation,
                     worker_call,
+                    store,
                 )
                 running[future] = task_number
 

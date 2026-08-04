@@ -15,6 +15,7 @@ from .codex import (
     PROJECT_ROOT,
     build_codex_command,
     build_subprocess_environment,
+    collect_worker_readable_paths,
 )
 
 
@@ -106,13 +107,12 @@ def execute_worker(
     )
     
     # codex exec 명령 생성
-    java_home = environment.get("JAVA_HOME")
     command = build_codex_command(
         allowed_paths,
         forbidden_paths,
         output_path,
         executable,
-        readable_paths=(java_home,) if java_home else (),
+        readable_paths=collect_worker_readable_paths(environment),
     )
 
     try:

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -12,96 +11,227 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
-from harness_runner.models import PlanValidationError, Task
-from harness_runner.orchestrator import execute_grouped
-from harness_runner.plan_parser import parse_plan_structure
-from harness_runner.plan_validator import validate_tasks
-from harness_runner.worker_gateway import invoke_worker
+from harness_runner.evidence import ExecutionRecordStore, revision_fingerprint
+from harness_runner.execution import execute_workers
+from harness_runner.models import HarnessRequest, ParsedPlan, Task
 
 
-def plan_text(*, worker: str = "be-worker", design_docs: str = "없음") -> str:
-    return (
-        "## Task: module-one\n"
-        f"- worker: {worker}\n"
-        "- 작업 유형: API\n"
-        f"- 관련 설계 문서: {design_docs}\n\n"
-        "작업 내용\n"
+def task(number: int, *, prerequisites: tuple[int, ...] = ()) -> Task:
+    return Task(
+        number=number,
+        title=f"Task {number}",
+        prerequisite_numbers=prerequisites,
+        allowed_paths=("implementation", "tests"),
+        forbidden_paths=(),
+        task_prompt="requirements",
+        implementation_items=("implement",),
+        verification_items=("regression",),
+        minimum_quality_score=90,
     )
 
 
-class ParserModuleTests(unittest.TestCase):
-    def test_parses_structure_without_filesystem_access(self) -> None:
-        with mock.patch.object(Path, "resolve", side_effect=AssertionError("filesystem access")):
-            parsed = parse_plan_structure(plan_text(design_docs="docs/not-created.md"))
+def worker_result(*, quality_score: object = 90, decision: str = "PASS") -> object:
+    class Result:
+        returncode = 0
+        output_error = ""
+        output = {
+            "mandatory_gates": {
+                name: {"result": "PASS", "evidence": "evidence"}
+                for name in (
+                    "permission_security", "scope", "requirements", "tdd",
+                    "automated_verification", "contract_sync", "critical_findings",
+                )
+            },
+            "verification": [{"item": "regression", "result": "PASS", "evidence": "current"}],
+            "decision": decision,
+            "quality_score": quality_score,
+        }
 
-        self.assertEqual(parsed[0].task_id, "module-one")
-        self.assertEqual(parsed[0].attributes["design_docs"], ("docs/not-created.md",))
+    return Result()
 
 
-class ValidatorModuleTests(unittest.TestCase):
+class RevisionEvidenceTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
+        (self.root / "implementation").mkdir()
+        (self.root / "tests").mkdir()
+        (self.root / "implementation" / "feature.py").write_text("value = 1\n", encoding="utf-8")
+        (self.root / "tests" / "test_feature.py").write_text("assert True\n", encoding="utf-8")
+        self.plan = ParsedPlan("requirements", (task(1), task(2, prerequisites=(1,))))
+        self.request = HarnessRequest("rerun-plan")
+        self.store = ExecutionRecordStore(self.root / "records")
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
-    def validate(self, text: str) -> list[Task]:
-        return validate_tasks(parse_plan_structure(text), self.root)
+    def test_same_fingerprint_reuses_complete_evidence_but_runs_current_regression(self) -> None:
+        calls: list[object] = []
+        first = execute_workers(self.plan, self.request, lambda invocation: calls.append(invocation) or worker_result(), project_root=self.root, record_store=self.store)
+        second = execute_workers(self.plan, self.request, lambda invocation: calls.append(invocation) or worker_result(), project_root=self.root, record_store=self.store)
 
-    def test_rejects_duplicate_id(self) -> None:
-        duplicated = plan_text() + plan_text().replace("API", "UI")
-        with self.assertRaisesRegex(PlanValidationError, "중복"):
-            self.validate(duplicated)
+        self.assertTrue(first.succeeded)
+        self.assertTrue(second.succeeded)
+        self.assertEqual(calls[2].execution_context.mode, "rerun")
+        self.assertTrue(calls[2].execution_context.prior_tdd_evidence)
+        self.assertEqual(len(calls), 4)
 
-    def test_rejects_invalid_worker(self) -> None:
-        with self.assertRaisesRegex(PlanValidationError, "be-worker"):
-            self.validate(plan_text(worker="qa-worker"))
+    def test_implementation_change_reuses_tdd_evidence_and_runs_current_regression(self) -> None:
+        execute_workers(self.plan, self.request, lambda _: worker_result(), project_root=self.root, record_store=self.store)
+        (self.root / "implementation" / "feature.py").write_text("value = 2\n", encoding="utf-8")
+        contexts: list[object] = []
+        execute_workers(self.plan, self.request, lambda invocation: contexts.append(invocation.execution_context) or worker_result(), project_root=self.root, record_store=self.store)
 
-    def test_rejects_absolute_escaped_and_missing_design_docs(self) -> None:
-        cases = (
-            (str((self.root / "absolute.md").resolve()), "상대 경로"),
-            ("../escaped.md", "저장소 밖"),
-            ("docs/missing.md", "파일이 없"),
+        self.assertEqual(contexts[0].mode, "rerun")
+        self.assertTrue(contexts[0].prior_tdd_evidence)
+
+    def test_other_task_or_common_prompt_change_does_not_invalidate_task_evidence(self) -> None:
+        original = revision_fingerprint(
+            self.root, self.request.plan_id, task(1), "original common prompt"
         )
-        for value, message in cases:
-            with self.subTest(value=value), self.assertRaisesRegex(PlanValidationError, message):
-                self.validate(plan_text(design_docs=value))
+        changed = revision_fingerprint(
+            self.root, self.request.plan_id, task(1), "changed by another task"
+        )
 
+        self.assertEqual(original, changed)
 
-class OrchestratorModuleTests(unittest.TestCase):
-    def test_backend_runs_first_and_failure_stops_frontend(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory).resolve()
-            plan = root / "docs" / "plan" / "active" / "feature-01.md"
-            tasks = [
-                Task("front", "fe-worker", "UI", (), "front body"),
-                Task("back", "be-worker", "API", (), "back body"),
-            ]
-            calls: list[str] = []
+    def test_task_contract_change_does_not_reuse_evidence(self) -> None:
+        execute_workers(self.plan, self.request, lambda _: worker_result(), project_root=self.root, record_store=self.store)
+        changed_task = Task(
+            number=1,
+            title="Task 1",
+            prerequisite_numbers=(),
+            allowed_paths=("implementation", "tests"),
+            forbidden_paths=(),
+            task_prompt="changed requirements",
+            implementation_items=("implement",),
+            verification_items=("regression",),
+            minimum_quality_score=90,
+        )
+        contexts: list[object] = []
+        execute_workers(
+            ParsedPlan("requirements", (changed_task,)),
+            self.request,
+            lambda invocation: contexts.append(invocation.execution_context) or worker_result(),
+            project_root=self.root,
+            record_store=self.store,
+        )
 
-            def fail(worker: str, _prompt: str) -> None:
-                calls.append(worker)
-                raise RuntimeError("stop")
+        self.assertEqual(contexts[0].mode, "new_or_changed")
+        self.assertFalse(contexts[0].prior_tdd_evidence)
 
-            with self.assertRaisesRegex(RuntimeError, "stop"):
-                execute_grouped(tasks, plan, root, invoker=fail)
+    def test_corrupt_record_is_not_reused_and_blocks_dependent_task(self) -> None:
+        fingerprint = revision_fingerprint(self.root, self.request.plan_id, task(1), self.plan.common_prompt)
+        record_path = self.store.path_for(self.request.plan_id, 1)
+        record_path.parent.mkdir(parents=True)
+        record_path.write_text('{"fingerprint": "' + fingerprint + '"}', encoding="utf-8")
 
-        self.assertEqual(calls, ["be-worker"])
+        report = execute_workers(self.plan, self.request, lambda _: worker_result(), project_root=self.root, record_store=self.store)
 
+        self.assertEqual(report.results[0].status, "failed")
+        self.assertIn("HUMAN_REVIEW_REQUIRED", report.results[0].message)
+        self.assertEqual(report.results[1].status, "blocked")
 
-class GatewayModuleTests(unittest.TestCase):
-    def test_builds_worker_subprocess_command_without_executing_codex(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory).resolve()
-            with mock.patch.object(subprocess, "run") as run:
-                invoke_worker("fe-worker", "$fe-worker build UI", root)
+    def test_record_write_is_atomic_and_does_not_touch_active_plan(self) -> None:
+        active_plan = self.root / "docs" / "plans" / "active" / "rerun-plan.md"
+        active_plan.parent.mkdir(parents=True)
+        active_plan.write_text("unchanged", encoding="utf-8")
 
-        command = run.call_args.args[0]
-        self.assertEqual(command[0], sys.executable)
-        self.assertEqual(Path(command[1]), root / ".agents" / "scripts" / "run-worker.py")
-        self.assertEqual(command[2], "$fe-worker build UI")
-        self.assertEqual(run.call_args.kwargs, {"cwd": root, "check": True})
+        report = execute_workers(self.plan, self.request, lambda _: worker_result(), project_root=self.root, record_store=self.store)
+
+        self.assertTrue(report.succeeded)
+        self.assertEqual(active_plan.read_text(encoding="utf-8"), "unchanged")
+        self.assertTrue(self.store.path_for(self.request.plan_id, 1).exists())
+        self.assertFalse(list(self.store.root.glob("*.tmp")))
+
+    def test_record_write_failure_is_an_explicit_task_failure(self) -> None:
+        with mock.patch.object(self.store, "save", side_effect=OSError("disk full")):
+            report = execute_workers(
+                ParsedPlan("requirements", (task(1),)),
+                self.request,
+                lambda _: worker_result(),
+                project_root=self.root,
+                record_store=self.store,
+            )
+
+        self.assertEqual(report.results[0].status, "failed")
+        self.assertIn("실행 기록 저장 실패", report.results[0].message)
+
+    def test_nonstandard_success_decision_is_corrected_once_and_unblocks_dependents(self) -> None:
+        calls: list[object] = []
+
+        def invoke(invocation: object) -> object:
+            calls.append(invocation)
+            return worker_result(
+                decision="PASS_WITH_FOLLOW_UP" if len(calls) == 1 else "PASS"
+            )
+
+        report = execute_workers(self.plan, self.request, invoke, project_root=self.root, record_store=self.store)
+
+        self.assertTrue(report.succeeded)
+        self.assertEqual(len(calls), 3)
+        correction = calls[1]
+        self.assertIsNotNone(correction.decision_correction)
+        self.assertEqual(correction.decision_correction["prior_decision"], "PASS_WITH_FOLLOW_UP")
+        self.assertEqual(calls[2].task.number, 2)
+
+    def test_repeated_nonstandard_success_decision_fails_and_blocks_dependents(self) -> None:
+        calls: list[object] = []
+
+        report = execute_workers(
+            self.plan,
+            self.request,
+            lambda invocation: calls.append(invocation) or worker_result(decision="PASS_WITH_FOLLOW_UP"),
+            project_root=self.root,
+            record_store=self.store,
+        )
+
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(report.results[0].status, "failed")
+        self.assertIn("판정 교정 후에도", report.results[0].message)
+        self.assertEqual(report.results[1].status, "blocked")
+
+    def test_correction_cannot_hide_a_quality_failure(self) -> None:
+        calls: list[object] = []
+
+        def invoke(invocation: object) -> object:
+            calls.append(invocation)
+            if len(calls) == 1:
+                return worker_result(decision="PASS_WITH_FOLLOW_UP")
+            return worker_result(quality_score=89, decision="PASS")
+
+        report = execute_workers(self.plan, self.request, invoke, project_root=self.root, record_store=self.store)
+
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(report.results[0].status, "failed")
+        self.assertIn("quality_score가 최소 기준", report.results[0].message)
+        self.assertEqual(report.results[1].status, "blocked")
+
+    def test_objective_failure_and_worker_failure_do_not_request_decision_correction(self) -> None:
+        failed_gate = worker_result(decision="PASS_WITH_FOLLOW_UP")
+        failed_gate.output["mandatory_gates"]["scope"]["result"] = "FAIL"
+        failed_verification = worker_result(decision="PASS_WITH_FOLLOW_UP")
+        failed_verification.output["verification"][0]["result"] = "FAIL"
+        failed_quality = worker_result(quality_score=89, decision="PASS_WITH_FOLLOW_UP")
+        worker_error = type("Result", (), {"returncode": 1, "output": None, "output_error": ""})()
+
+        for result in (
+            failed_gate,
+            failed_verification,
+            failed_quality,
+            worker_error,
+            worker_result(decision="FAILED"),
+        ):
+            calls: list[object] = []
+            report = execute_workers(
+                ParsedPlan("requirements", (task(1),)),
+                self.request,
+                lambda invocation, response=result: calls.append(invocation) or response,
+                project_root=self.root,
+                record_store=ExecutionRecordStore(self.root / f"records-{len(calls)}-{id(result)}"),
+            )
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(report.results[0].status, "failed")
 
 
 if __name__ == "__main__":

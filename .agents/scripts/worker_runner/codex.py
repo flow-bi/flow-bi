@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import os
 import shutil
+import sys
 
 from .config import read_config_overrides
 
@@ -53,6 +54,110 @@ def build_codex_command(
     command.append("-")
     return command
 
+
+def _npm_package_root(path: Path) -> Path | None:
+    parts = tuple(part.lower() for part in path.parts)
+
+    for index in range(len(parts) - 1):
+        if parts[index : index + 2] == ("node_modules", "npm"):
+            return Path(*path.parts[: index + 2])
+
+    return None
+
+
+def _homebrew_package_root(path: Path) -> Path | None:
+    parts = tuple(part.lower() for part in path.parts)
+
+    for index, part in enumerate(parts):
+        if part == "cellar" and len(parts) > index + 2:
+            return Path(*path.parts[: index + 3])
+
+    return None
+
+
+def _homebrew_opt_package_root(path: Path) -> Path | None:
+    parts = tuple(part.lower() for part in path.parts)
+
+    for index, part in enumerate(parts):
+        if part == "opt" and len(parts) > index + 1:
+            return Path(*path.parts[: index + 2])
+
+    return None
+
+
+def collect_worker_readable_paths(
+    environment: dict[str, str],
+    *,
+    home_dir: Path | None = None,
+    platform_name: str | None = None,
+    python_executable: str | Path = sys.executable,
+) -> tuple[str, ...]:
+    """Worker가 사용하는 외부 Toolchain 경로를 OS에 맞게 수집한다."""
+
+    paths: list[Path] = []
+    actual_home = home_dir or Path.home()
+    actual_platform = platform_name or sys.platform
+
+    def add(candidate: str | Path | None, *, require_directory: bool = False) -> None:
+        if not candidate:
+            return
+
+        path = Path(candidate).expanduser()
+        if require_directory and not path.is_dir():
+            return
+
+        if path not in paths:
+            paths.append(path)
+
+    add(environment.get("JAVA_HOME"))
+
+    python_path = Path(python_executable)
+    resolved_python_path = python_path.resolve()
+    add(python_path)
+    add(python_path.parent)
+    add(resolved_python_path)
+    add(resolved_python_path.parent)
+    add(_homebrew_opt_package_root(python_path))
+    add(_homebrew_package_root(resolved_python_path))
+
+    search_path = environment.get("PATH")
+    for tool_name in ("node", "npm", "git"):
+        executable = shutil.which(tool_name, path=search_path)
+        if executable is None:
+            continue
+
+        executable_path = Path(executable)
+        resolved_path = executable_path.resolve()
+        add(executable_path.parent)
+        add(resolved_path.parent)
+        add(executable_path)
+        add(resolved_path)
+        add(_homebrew_opt_package_root(executable_path))
+        add(_homebrew_package_root(resolved_path))
+
+        if tool_name == "npm":
+            for npm_path in (executable_path, resolved_path):
+                add(_npm_package_root(npm_path))
+                add(
+                    npm_path.parent / "node_modules" / "npm",
+                    require_directory=True,
+                )
+
+        if tool_name == "git" and actual_platform == "win32":
+            for git_path in (executable_path, resolved_path):
+                if git_path.parent.name.lower() in {"bin", "cmd"}:
+                    add(git_path.parent.parent, require_directory=True)
+
+    if actual_platform == "darwin":
+        add("/Library/Developer/CommandLineTools")
+        add("/System/Library/OpenSSL")
+
+    add(actual_home / ".gitconfig", require_directory=False)
+    add(actual_home / ".config" / "git" / "config", require_directory=False)
+
+    return tuple(str(path) for path in paths)
+
+
 # Worker 실행에 필요한 환경변수 구성
 def _read_project_java_home(env_path: Path) -> Path | None:
     if not env_path.is_file():
@@ -68,7 +173,8 @@ def _read_project_java_home(env_path: Path) -> Path | None:
             continue
 
         java_home = Path(value.strip().strip("\"'"))
-        java_executable = java_home / "bin" / "java.exe"
+        java_executable_name = "java.exe" if os.name == "nt" else "java"
+        java_executable = java_home / "bin" / java_executable_name
         if not java_home.is_absolute() or not java_executable.is_file():
             raise RuntimeError(
                 f"backend/.env.local JAVA_HOME is invalid: {java_home}"
@@ -99,6 +205,7 @@ def build_subprocess_environment(
     environment["GRADLE_USER_HOME"] = str(gradle_user_home)
     environment["TEMP"] = str(worker_temp)
     environment["TMP"] = str(worker_temp)
+    environment["TMPDIR"] = str(worker_temp)
     environment["JAVA_TOOL_OPTIONS"] = " ".join(
         part
         for part in (
@@ -121,6 +228,7 @@ def build_subprocess_environment(
         )
 
     environment["FLOW_BI_RUN_ID"] = run_id
+    environment["FLOW_BI_PYTHON_EXECUTABLE"] = sys.executable
     environment.pop("FLOW_BI_WORKER", None)
     environment.pop("CODEX_PERMISSION_PROFILE", None)
 

@@ -143,18 +143,40 @@ Refresh Token의 Cookie 또는 Body 전달 방식은 인증 Design Doc에서 결
 | Method | Path | 목적 |
 | --- | --- | --- |
 | `GET` | `/api/schedules?from=&to=` | 기간별 일정 조회 |
+| `GET` | `/api/schedules/attendee-candidates?query=` | 일정 참석자 후보 검색 |
 | `POST` | `/api/schedules` | 일정 생성 |
 | `GET` | `/api/schedules/{scheduleId}` | 일정 상세 조회 |
 | `PUT` | `/api/schedules/{scheduleId}` | 일정 수정 |
-| `DELETE` | `/api/schedules/{scheduleId}` | 일정 삭제 또는 취소 요청 |
+| `DELETE` | `/api/schedules/{scheduleId}` | 일반 일정 취소(Soft Delete) |
 
 일정 생성·수정 요청은 유형을 정확히 하나만 가져야 한다. `TEAM` 일정은 하나 이상의 팀 ID, `PROJECT` 일정은 하나 이상의 프로젝트 ID를 가질 수 있고 모든 유형은 여러 참석자 ID를 가질 수 있다. 유형과 맞지 않는 팀·프로젝트 대상 조합은 `400 Bad Request`로 거부한다.
+
+일정 참석자 후보 검색은 인증된 사용자가 일정 등록·수정 화면에서 접근 가능한 활성 사내 사용자를 찾는 용도로만 사용한다.
+
+- `query`는 연속 공백을 단일 공백으로 정규화한 1~50자 문자열이어야 하며 이름 또는 사번의 부분 일치 검색어로 사용한다.
+- 결과는 최대 20건이며 서버가 정한 안정적인 순서로 반환한다.
+- 응답 항목은 `userId`, `displayName`만 포함하고 이메일, 전화번호, 조직 내 민감정보는 반환하지 않는다.
+- 현재 사용자가 일정 참석자로 지정할 수 없는 비활성·퇴사·접근 불가 사용자는 결과에서 제외한다.
+- 인증 주체가 없으면 `401 Unauthorized`, 잘못된 검색어는 `400 Bad Request`를 반환한다.
+- 검색 결과가 없으면 빈 배열을 반환하며, 사용자 존재 여부를 오류 응답으로 구분해 노출하지 않는다.
+
+참석자 ID 목록에 같은 사용자가 반복되면 서버는 최초 등장 순서를 유지해 하나의 참석자로 정규화한다. 중복 ID 자체는 요청 실패 사유가 아니며 참석 인원 계산에도 한 번만 반영한다. 접근할 수 없거나 비활성인 사용자 ID는 중복 여부와 관계없이 `400 Bad Request`로 거부한다.
 
 조회 결과는 다음 공개 규칙을 적용한다.
 
 - `PERSONAL`: 작성자와 참석자
 - `TEAM`: 연결된 팀 소속 사용자와 참석자
 - `PROJECT`: 연결된 프로젝트 참여자와 참석자
+
+일반 일정 삭제는 다음 계약을 적용한다.
+
+- 일반 일정 등록자만 삭제를 요청할 수 있다.
+- 삭제는 물리 삭제가 아니라 `CANCELED` 상태 전환이며 취소 시각과 취소 주체를 기록한다.
+- 취소된 일정은 기간별 목록과 일반 상세 조회에서 제외한다.
+- 등록자가 이미 취소한 동일 일정에 삭제를 반복 요청하면 `204 No Content`를 반환한다.
+- 회의실 예약 연결 일정은 캘린더에서 직접 취소하지 않고 `409 Conflict`와 `ROOM_RESERVATION_MANAGED_SCHEDULE`을 반환한다.
+- 인증되지 않은 요청은 `401 Unauthorized`, 존재하지 않거나 요청자에게 노출할 수 없는 일정은 동일하게 `404 Not Found`를 반환한다.
+- 성공 응답은 `204 No Content`이며 응답 Body를 포함하지 않는다.
 
 ### 8.5 Rooms and Reservations
 
@@ -208,6 +230,6 @@ AI 모델과 Action Routing이 미확정이므로 Endpoint를 아직 확정하�
 - 공통 성공 Envelope 사용 여부
 - Cursor와 Page Pagination 선택
 - Refresh Token 전달 방식
-- 삭제·비활성화·취소 정책과 관련 상태값 및 응답 DTO
+- 직원·팀의 삭제·비활성화 정책과 관련 상태값 및 응답 DTO
 - 상세 DTO와 Error Code 목록
 - OpenAPI 및 API 문서 자동화 도구

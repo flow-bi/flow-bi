@@ -277,7 +277,7 @@ schedules 1 --- N rooms_reservations
 - 회의실 중복 예약의 DB 수준 제약
 - Refresh Token 원문 저장 또는 Hash 저장 정책
 - Status 허용값과 상태 전이
-- 삭제·비활성화·취소 정책 확정 후 필요한 상태 컬럼과 제약
+- 직원·팀 등 일정 외 도메인의 삭제·비활성화 정책 확정 후 필요한 상태 컬럼과 제약
 - `Field` 예비 컬럼과 회의실 장비 모델
 - `capacity`, `level`, `content`, `location` 타입과 길이
 - Index, Foreign Key 삭제 정책과 감사 필드 제약
@@ -293,6 +293,11 @@ schedules 1 --- N rooms_reservations
 - 개인 일정은 작성자와 참석자에게 공개한다.
 - 팀 일정은 연결된 팀 소속 사용자와 참석자에게 공개한다.
 - 프로젝트 일정은 연결된 프로젝트 참여자와 참석자에게 공개한다.
+- 일반 일정 삭제는 물리 삭제하지 않고 `CANCELED` 상태로 보존한다.
+- 취소된 일반 일정의 상세, 공유 대상과 참석자 관계는 이력 확인을 위해 유지한다.
+- 일반 일정 취소 시 취소 시각과 취소 주체를 기록하고 기본 일정 조회에서 제외한다.
+
+일정 취소 정책을 실제 Schema에 반영할 때는 `schedules.status`, `schedules.cancelled_at`, `schedules.cancelled_by` 컬럼과 상태값 제약 및 조회 Index를 Schema Review에서 확정한다. Initial Baseline 표와 ERD는 승인된 Migration 계획이 마련되기 전까지 변경하지 않는다.
 
 ## 8. 변경 절차
 
