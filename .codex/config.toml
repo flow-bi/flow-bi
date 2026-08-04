@@ -16,7 +16,7 @@ default_permissions = ":danger-full-access"
 
 [mcp_servers.notion]
 url = "https://mcp.notion.com/mcp"
-required = false
+required = true
 
 enabled_tools = [
   "notion-fetch",
