@@ -196,11 +196,23 @@ def build_subprocess_environment(
     ).copy()
 
     environment["CODEX_HOME"] = str(resolve_codex_home())
+
     gradle_user_home = project_root / "backend" / ".gradle-user-home"
     worker_temp = gradle_user_home / "tmp"
     worker_home = gradle_user_home / "worker-home"
+
     worker_temp.mkdir(parents=True, exist_ok=True)
     worker_home.mkdir(parents=True, exist_ok=True)
+
+    npm_cache = worker_temp / "npm-cache"
+    npm_user_config = worker_home / ".npmrc"
+
+    npm_cache.mkdir(parents=True, exist_ok=True)
+    npm_user_config.touch(exist_ok=True)
+
+    environment["NPM_CONFIG_CACHE"] = str(npm_cache)
+    environment["NPM_CONFIG_USERCONFIG"] = str(npm_user_config)
+    environment["NPM_CONFIG_UPDATE_NOTIFIER"] = "false"
 
     environment["GRADLE_USER_HOME"] = str(gradle_user_home)
     environment["TEMP"] = str(worker_temp)

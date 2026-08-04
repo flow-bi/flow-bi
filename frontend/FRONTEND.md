@@ -8,17 +8,18 @@
 
 ## 2. 기술 스택
 
-| 구분                 | 기술               |
-| -------------------- | ------------------ |
-| UI                   | React + TypeScript |
-| Build                | Vite               |
-| 서버 상태            | TanStack Query     |
-| 클라이언트 전역 상태 | Zustand            |
-| Form                 | React Hook Form    |
-| Schema 검증          | Zod                |
-| Styling              | Tailwind CSS       |
-| Package Manager      | npm                |
-| 브라우저/E2E         | Cypress            |
+| 구분                 | 기술                           |
+| -------------------- | ------------------------------ |
+| UI                   | React + TypeScript             |
+| Build                | Vite                           |
+| 서버 상태            | TanStack Query                 |
+| 클라이언트 전역 상태 | Zustand                        |
+| Form                 | React Hook Form                |
+| Schema 검증          | Zod                            |
+| Styling              | Tailwind CSS                   |
+| Package Manager      | npm                            |
+| Unit/Component       | Vitest + React Testing Library |
+| 브라우저/E2E         | Cypress                        |
 
 미확정 기술은 기능 구현의 필요만으로 임의 선택하지 않는다. Design Doc 또는 Active Plan에서 근거와 검증 방법을 정하고 승인을 받은 뒤 도입한다.
 
@@ -48,7 +49,7 @@ frontend/
 │   ├── entities/     # 안정된 핵심 도메인 표현
 │   ├── shared/       # 범용 UI, 유틸리티, API 기반 코드
 │   └── assets/       # 정적 자산
-└── tests/            # 공통 테스트 설정이 필요한 경우
+│   └── test/         # 공통 테스트 Setup 및 향후 Provider Wrapper
 ```
 
 - 기능 코드는 features/{feature-name}/ 안에서 응집한다.
@@ -83,8 +84,10 @@ frontend/
 
 ## 7. 테스트와 성능
 
-- 순수 함수/Schema, 컴포넌트 동작, API 경계를 통제한 화면 통합과 핵심 사용자 흐름을 검증한다.
+- 테스트 피라미드는 책임을 분리한다. 순수 함수·Schema·DTO 변환은 Vitest로, 컴포넌트의 사용자가 관찰 가능한 동작은 React Testing Library로, 핵심 브라우저 흐름은 Cypress로 검증한다.
 - 테스트는 구현 세부보다 사용자가 관찰 가능한 동작을 중심으로 한다.
+- 기능 테스트는 대상 구현 파일 옆에 `*.test.ts` 또는 `*.test.tsx`로 배치한다. 공통 Setup과 실제 필요가 생긴 Provider Wrapper만 `src/test`에 둔다.
+- 실제 Provider가 필요한 기능 테스트가 생기기 전에는 범용 `render` Helper를 미리 만들지 않는다.
 - 대량 데이터 화면은 필요한 범위만 조회하고, 필요 시 페이지네이션·가상화·검색 제한을 검토한다.
 - 성능 최적화와 지연 로딩은 측정 결과와 사용자 영향을 근거로 적용한다.
 

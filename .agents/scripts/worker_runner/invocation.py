@@ -65,6 +65,18 @@ BACKEND_FORMATTING_GUIDANCE = (
     "포맷하고 성공한 결과만 반영합니다."
 )
 
+FRONTEND_VERIFICATION_GUIDANCE = (
+    "Frontend npm 검증은 Worker에서 직접 `npm`으로 실행하지 말고 부모가 전달한 "
+    "`FLOW_BI_PYTHON_EXECUTABLE`로 "
+    "`.agents/scripts/worker_runner/frontend_verifier.py <npm 인자...>`를 실행하십시오. "
+    "macOS/Linux shell에서는 "
+    "`\"$FLOW_BI_PYTHON_EXECUTABLE\" .agents/scripts/worker_runner/frontend_verifier.py run test:unit`, "
+    "Windows PowerShell에서는 "
+    "`& $env:FLOW_BI_PYTHON_EXECUTABLE .agents/scripts/worker_runner/frontend_verifier.py run test:unit`를 "
+    "사용하십시오. 부모 서비스는 `npm ls`, `npm run test:unit`, `npm run typecheck`, "
+    "`npm run check`만 허용하며 출력과 종료 코드를 반환합니다."
+)
+
 
 def _result_contract(
     number: int,
@@ -259,6 +271,7 @@ def parse_invocation(raw_invocation: str) -> InvocationResult:
         BROWSER_VERIFICATION_GUIDANCE,
         BACKEND_VERIFICATION_GUIDANCE,
         BACKEND_FORMATTING_GUIDANCE,
+        FRONTEND_VERIFICATION_GUIDANCE,
         "실행 컨텍스트 (실행기가 검증함):\n"
         + json.dumps(execution_context, ensure_ascii=False, indent=2),
         _execution_guidance(execution_context),

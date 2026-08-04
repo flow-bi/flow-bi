@@ -94,6 +94,26 @@ class WorkerReadablePathTests(unittest.TestCase):
         self.assertIn(str(python_root.resolve()), paths)
         self.assertIn(str(python_opt_root), paths)
 
+    def test_collects_package_json_for_project_ancestors(self) -> None:
+      project_root = self.root / "workspace" / "repository"
+      project_root.mkdir(parents=True)
+
+      paths = set(
+          collect_worker_readable_paths(
+              {"PATH": ""},
+              home_dir=self.root / "home",
+              platform_name="linux",
+              project_root=project_root,
+          )
+      )
+
+      expected_paths = {
+          str(directory / "package.json")
+          for directory in (project_root, *project_root.parents)
+      }
+
+      self.assertTrue(expected_paths.issubset(paths))
+
     def test_collects_platform_specific_git_support_paths(self) -> None:
         home = self.root / "home"
         mac_cache = home / "Library" / "Caches" / "Cypress"
@@ -178,6 +198,7 @@ class WorkerReadablePathTests(unittest.TestCase):
             environment["FLOW_BI_PYTHON_EXECUTABLE"],
             sys.executable,
         )
+
 
     def test_execute_worker_forwards_collected_paths_to_codex_permissions(self) -> None:
         readable_paths = ("/toolchain/node", "/toolchain/npm")
