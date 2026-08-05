@@ -58,6 +58,13 @@ class WorkerFailure:
 
 
 @dataclass(frozen=True)
+class VerificationResult:
+    item: str
+    result: str
+    evidence: str
+
+
+@dataclass(frozen=True)
 class TaskResult:
     task_number: int
     title: str
@@ -65,6 +72,11 @@ class TaskResult:
     return_code: int | None = None
     timed_out: bool = False
     message: str = ""
+    work_summary: str = ""
+    verification: tuple[VerificationResult, ...] = ()
+    quality_score: int | None = None
+    remaining_issues: tuple[str, ...] = ()
+    final_status: str = ""
 
 
 @dataclass(frozen=True)

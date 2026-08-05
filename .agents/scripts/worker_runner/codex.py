@@ -241,6 +241,7 @@ def build_subprocess_environment(
 
     environment["FLOW_BI_RUN_ID"] = run_id
     environment["FLOW_BI_PYTHON_EXECUTABLE"] = sys.executable
+    environment.pop("FLOW_BI_NOTION_PARENT", None)
     environment.pop("FLOW_BI_WORKER", None)
     environment.pop("CODEX_PERMISSION_PROFILE", None)
 

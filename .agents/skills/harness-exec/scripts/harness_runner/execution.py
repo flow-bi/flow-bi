@@ -16,6 +16,7 @@ from .models import (
     TaskExecutionContext,
     TaskInvocation,
     TaskResult,
+    VerificationResult,
 )
 from .evidence import EvidenceRecordError, ExecutionRecordStore, revision_fingerprint
 from .worker_gateway import invoke_task
@@ -50,6 +51,22 @@ def _return_code(result: object) -> int:
 def _non_empty_text(value: object) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
+
+def _report_contract_error(worker_result: object) -> str:
+    output = getattr(worker_result, "output", None)
+    if not isinstance(output, dict):
+        return ""
+    if not _non_empty_text(output.get("work_summary")):
+        return "work_summary가 누락되었거나 비어 있습니다."
+    remaining_issues = output.get("remaining_issues")
+    if not isinstance(remaining_issues, list) or any(
+        not _non_empty_text(issue) for issue in remaining_issues
+    ):
+        return "remaining_issues가 문자열 배열이 아닙니다."
+    if output.get("final_status") not in {"PASS", "FAILED", "BLOCKED"}:
+        return "final_status가 PASS, FAILED 또는 BLOCKED가 아닙니다."
+    return ""
+
 # Worker가 제출한 JSON 결과 중 판정을 제외한 객관적 완료 조건을 검증한다.
 def _objective_completion_error(task: Task, worker_result: object) -> str:
     output = getattr(worker_result, "output", None)
@@ -58,6 +75,10 @@ def _objective_completion_error(task: Task, worker_result: object) -> str:
     if not isinstance(output, dict):
         detail = output_error if _non_empty_text(output_error) else "JSON 객체 없음"
         return f"Worker 결과 JSON이 유효하지 않습니다: {detail}"
+
+    report_error = _report_contract_error(worker_result)
+    if report_error:
+        return report_error
 
     gates = output.get("mandatory_gates")
     if not isinstance(gates, dict):
@@ -124,6 +145,8 @@ def _completion_error(task: Task, worker_result: object) -> str:
     decision = worker_result.output.get("decision")
     if decision != "PASS":
         return f"Worker 판정이 PASS가 아닙니다: {decision!r}."
+    if worker_result.output.get("final_status") != "PASS":
+        return "Worker final_status가 PASS가 아닙니다."
     return ""
 
 
@@ -142,8 +165,11 @@ def _decision_correction(invocation: TaskInvocation, worker_result: object) -> T
         decision_correction={
             "prior_decision": output.get("decision"),
             "objective_evidence": {
+                "work_summary": output.get("work_summary"),
                 "mandatory_gates": output.get("mandatory_gates"),
                 "verification": output.get("verification"),
+                "remaining_issues": output.get("remaining_issues"),
+                "final_status": output.get("final_status"),
                 "quality_score": output.get("quality_score"),
             },
         },
@@ -160,12 +186,16 @@ def _execute_task(
     return_code: int | None = None
     timed_out = False
     message = ""
+    worker_output: dict[str, object] | None = None
 
     try:
         worker_result = call_worker(invocation)
+        raw_output = getattr(worker_result, "output", None)
+        worker_output = raw_output if isinstance(raw_output, dict) else None
         return_code = _return_code(worker_result)
         if return_code != 0:
             status = "failed"
+            message = f"Worker 종료 코드 {return_code}"
         else:
             message = _completion_error(task, worker_result)
             if message and _needs_decision_correction(task, worker_result):
@@ -183,6 +213,8 @@ def _execute_task(
                     else:
                         message = ""
                         worker_result = corrected_result
+                        corrected_output = getattr(corrected_result, "output", None)
+                        worker_output = corrected_output if isinstance(corrected_output, dict) else None
             if message:
                 status = "failed"
             else:
@@ -210,6 +242,24 @@ def _execute_task(
         status = "failed"
         message = str(error)
 
+    verification: list[VerificationResult] = []
+    if worker_output is not None and isinstance(worker_output.get("verification"), list):
+        for item in worker_output["verification"]:
+            if not isinstance(item, dict):
+                continue
+            name = item.get("item")
+            result = item.get("result")
+            evidence = item.get("evidence")
+            if all(isinstance(value, str) for value in (name, result, evidence)):
+                verification.append(VerificationResult(name, result, evidence))
+
+    raw_issues = worker_output.get("remaining_issues") if worker_output else None
+    remaining_issues = tuple(
+        issue for issue in raw_issues if isinstance(issue, str) and issue.strip()
+    ) if isinstance(raw_issues, list) else ()
+    if status != "succeeded" and message and message not in remaining_issues:
+        remaining_issues = (*remaining_issues, message)
+
     return TaskResult(
         task_number=task.number,
         title=task.title,
@@ -217,6 +267,23 @@ def _execute_task(
         return_code=return_code,
         timed_out=timed_out,
         message=message,
+        work_summary=(
+            str(worker_output.get("work_summary", ""))
+            if worker_output is not None
+            else ""
+        ),
+        verification=tuple(verification),
+        quality_score=(
+            worker_output.get("quality_score")
+            if worker_output is not None and type(worker_output.get("quality_score")) is int
+            else None
+        ),
+        remaining_issues=remaining_issues,
+        final_status=(
+            str(worker_output.get("final_status", ""))
+            if worker_output is not None
+            else ""
+        ),
     )
 
 
