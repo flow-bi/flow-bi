@@ -16,6 +16,8 @@
 - 개인 일정, 팀 일정, 프로젝트 일정 중 하나를 선택할 수 있어야 한다. (FR-016)
 - 사용자는 등록한 일정을 수정할 수 있어야 한다. (FR-017)
 - 사용자는 등록한 일반 일정을 삭제할 수 있어야 한다. 삭제는 물리 삭제가 아니라 취소 상태 전환으로 처리한다. (FR-018)
+- 캘린더의 한 달 범위 조회와 화면 표시가 합의된 측정 환경에서 3초 이내에 완료되어야 한다. (NFR-003)
+- 캘린더 핵심 흐름은 PC와 Mobile에서 수행할 수 있어야 한다. (NFR-006)
 - 첫 화면은 월간 캘린더이다.
 - 월간/주간/일간 캘린더를 선택할 수 있다.
 - 날짜 클릭 시 해당 날짜의 일간 일정이 우측 배너에 표시된다.
@@ -121,10 +123,11 @@
 
 ## Reference Mapping
 
-- `docs/references/requirements.md`: FR-011~FR-018
+- `docs/references/requirements.md`: FR-011~FR-018, NFR-003, NFR-006
 - `docs/references/ui-ux-spec.md`: 1-4 캘린더
 - `docs/references/project-detail.md`: 일정 관리, 복합 일정 구조 설계
 - `docs/references/database.md`: `schedules`, `schedules_details`, `schedule_targets`, `projects`, `projects_members`, `rooms_reservations`
+- `docs/product-specs/system-quality.md`: PC·Mobile 적용 범위와 검증 기준
 
 ## 미확정 사항
 
