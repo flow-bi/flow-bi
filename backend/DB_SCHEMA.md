@@ -263,7 +263,18 @@ rooms 1 --- N rooms_reservations
 schedules 1 --- N rooms_reservations
 ```
 
-## 7. 검토 대기 항목
+## 7. 승인된 Calendar Migration Schema
+
+ADR-0001과 ADR-0002 승인에 따라 `db/migration/V1__create_calendar_schema.sql`은 기존 기준선의 `users`, `teams`, `projects` 식별자를 참조해 Calendar 테이블을 생성한다. 각 참조 테이블의 상세 원장은 해당 도메인이 소유하며 Calendar가 사용자·조직 데이터를 생성하거나 관리하지 않는다.
+
+- `schedules`: `status (ACTIVE|CANCELED)`, `cancelled_at`, `cancelled_by`, `is_all_day`, `color_label (RED|ORANGE|YELLOW|GREEN|BLUE|PURPLE)`, `creator_attends`를 추가하고 유형·공개 범위, 시간 구간, 취소 감사 조합을 CHECK로 보장한다.
+- `schedules_details.schedule_id`는 UNIQUE인 1:1 관계다.
+- `schedule_participants(schedule_id, user_id)`는 UNIQUE로 중복 참석자를 막고, 참석자와 `schedule_targets.USER`를 분리한다.
+- `schedule_targets`는 `USER`, `TEAM`, `PROJECT`별 해당 FK 하나만 설정되는 CHECK와 각 외부 원장 FK를 가진다.
+- 기간 조회는 `idx_schedules_active_period(status, start_at, end_at)`, 작성자 조회는 `idx_schedules_creator`, 공개 대상 조회는 참석자·사용자·팀·프로젝트별 Index를 사용한다.
+- Migration은 추가 생성만 수행하며 일정 및 관계 데이터를 물리 삭제하거나 기존 Migration을 변경하지 않는다.
+
+## 8. 검토 대기 항목
 
 다음 항목은 기준선에 반영하지 않았으며 전체 문서 작성 후 Schema Review에서 검토한다.
 
@@ -283,7 +294,7 @@ schedules 1 --- N rooms_reservations
 - Index, Foreign Key 삭제 정책과 감사 필드 제약
 - 종일 일정, 색상 Label, 알림 설정과 업무 상태 관련 테이블
 
-### 7.1 확정 정책
+### 8.1 확정 정책
 
 다음 정책은 팀 결정으로 확정됐지만 Initial Baseline ERD에는 아직 반영하지 않는다.
 
@@ -299,7 +310,7 @@ schedules 1 --- N rooms_reservations
 
 일정 취소 정책을 실제 Schema에 반영할 때는 `schedules.status`, `schedules.cancelled_at`, `schedules.cancelled_by` 컬럼과 상태값 제약 및 조회 Index를 Schema Review에서 확정한다. Initial Baseline 표와 ERD는 승인된 Migration 계획이 마련되기 전까지 변경하지 않는다.
 
-## 8. 변경 절차
+## 9. 변경 절차
 
 1. 전체 문서 간 요구사항과 모델 충돌을 수집한다.
 2. Schema Review에서 변경안을 작성한다.
