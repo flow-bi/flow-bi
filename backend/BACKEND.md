@@ -18,7 +18,7 @@
 | Current Test Database | H2 In-memory, MySQL Compatibility Mode |
 | Cache | Redis |
 | Persistence | Spring Data JPA |
-| Authentication | JWT |
+| Authentication | Spring Security + Spring Session Redis |
 | Authorization | RBAC |
 | Formatting | Spotless 7.0.4 + Eclipse Formatter |
 | Test | JUnit via Spring Boot Starter Test |
@@ -97,16 +97,19 @@ backend/src/
 - 요청 입력은 서버 경계에서 다시 검증한다.
 - 인증이 필요한 API는 사용자 신원과 권한을 검사한다.
 - 비밀번호는 복호화 가능한 형태로 저장하지 않는다.
-- Access Token과 Refresh Token은 별도로 관리한다.
+- 브라우저에는 `HttpOnly`, `Secure`, `SameSite`가 적용된 Session Cookie만 전달하고, 세션 상태는 Redis에서 관리한다.
+- 인증 이후 Principal 이름은 사번이 아니라 불변 내부 `userId` 문자열을 사용한다.
+- 사용자별 세션 조회는 Spring Session의 Principal 인덱스를 사용하고 세션 무효화는 인증 Design Doc의 세대 기반 계약을 따른다.
 - 내부 예외 메시지와 스택 트레이스는 API에 노출하지 않는다.
 
 세부 기준은 backend/API.md와 SECURITY.md를 따른다.
 
 ## 8. Redis와 외부 시스템
 
-- Redis는 캐시, 짧은 수명의 상태, 분산 제어에만 사용한다.
+- Redis는 캐시, 짧은 수명의 상태, 분산 제어와 공용 Session Store에 사용한다.
 - 영속 데이터의 유일한 기준 저장소로 사용하지 않는다.
 - Redis 장애가 영속 데이터 손실로 이어지지 않아야 하며 Key, TTL과 무효화 정책을 명시한다.
+- Spring Session 내부 Key와 직렬화 형식은 Repository가 소유하며 애플리케이션 코드가 직접 조회·수정·삭제하지 않는다.
 - 외부 시스템 접근은 Service가 조정하고 Controller에 기술 세부사항을 노출하지 않는다.
 - 외부 서비스의 구체적인 도입 방식은 Design Doc 또는 ADR에서 결정한다.
 
@@ -124,7 +127,7 @@ backend/src/
 - Migration 도구(Flyway/Liquibase)
 - PostgreSQL 기반 통합 테스트 환경과 Testcontainers 도입 여부
 - OpenAPI 문서화 방식
-- JWT 전달·저장·회전 정책
-- Redis 초기 적용 범위
+- 세션 유휴·절대 만료 시간과 Cookie `SameSite` 값
+- Redis 운영 가용성, 백업·복구와 Keyspace Event 구성
 - 알림 채널과 Scheduler
 - AI 모델, Vector Store, 문서 검색 방식

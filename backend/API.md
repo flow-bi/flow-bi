@@ -11,7 +11,7 @@
 ## 2. 기본 원칙
 
 - JSON 기반 HTTP API를 사용한다.
-- 보호 API는 JWT 인증을 요구한다.
+- 보호 API는 Redis에 저장된 서버 세션 인증을 요구한다.
 - 서버는 모든 입력과 객체 수준 권한을 검증한다.
 - Entity를 응답으로 직접 노출하지 않는다.
 - 날짜·시간은 ISO 8601과 명확한 Offset을 사용한다.
@@ -20,15 +20,15 @@
 
 API Base Path와 Versioning 방식은 아직 미확정이다. 예시는 `/api`를 사용한다.
 
-## 3. 인증 Header
+## 3. 인증 Cookie
 
-Bearer Token 방식을 채택할 경우 다음 형식을 사용한다.
+로그인 성공 시 서버는 사용자 정보를 포함하지 않는 불투명한 세션 식별자를 Cookie로 전달한다.
 
 ```http
-Authorization: Bearer {access-token}
+Set-Cookie: SESSION={opaque-session-id}; HttpOnly; Secure; SameSite={policy}
 ```
 
-Refresh Token의 Cookie 또는 Body 전달 방식은 인증 Design Doc에서 결정한다.
+브라우저는 이후 동일 출처 요청에 Session Cookie를 자동으로 전달한다. JavaScript가 세션 식별자를 읽거나 별도 저장소에 복사하지 않는다. Cookie 이름, `SameSite`의 구체 값과 CSRF Token 전달 방식은 구현 계약에서 확정하되 `SECURITY.md`의 기준을 완화하지 않는다.
 
 ## 4. 공통 성공 응답
 
@@ -85,7 +85,7 @@ Refresh Token의 Cookie 또는 Body 전달 방식은 인증 Design Doc에서 결
 | `201 Created` | 리소스 생성 성공 |
 | `204 No Content` | 응답 Body가 없는 성공 |
 | `400 Bad Request` | 형식·입력 검증 실패 |
-| `401 Unauthorized` | 인증되지 않음 또는 Token 무효 |
+| `401 Unauthorized` | 인증되지 않음 또는 Session 무효·만료 |
 | `403 Forbidden` | 인증되었으나 권한 부족 |
 | `404 Not Found` | 리소스가 없거나 노출할 수 없음 |
 | `409 Conflict` | 상태·시간·중복 충돌 |
@@ -108,7 +108,6 @@ Refresh Token의 Cookie 또는 Body 전달 방식은 인증 Design Doc에서 결
 | Method | Path | 목적 |
 | --- | --- | --- |
 | `POST` | `/api/auth/login` | 사번·비밀번호 로그인 |
-| `POST` | `/api/auth/refresh` | Access Token 갱신 |
 | `POST` | `/api/auth/logout` | 현재 Session 로그아웃 |
 | `POST` | `/api/auth/logout-all` | 전체 Session 로그아웃 |
 | `PUT` | `/api/auth/password` | 비밀번호 변경 |
@@ -229,7 +228,7 @@ AI 모델과 Action Routing이 미확정이므로 Endpoint를 아직 확정하�
 - `/api/v1` 등 Versioning
 - 공통 성공 Envelope 사용 여부
 - Cursor와 Page Pagination 선택
-- Refresh Token 전달 방식
+- Session Cookie 이름, `SameSite` 값과 CSRF Token 전달 방식
 - 직원·팀의 삭제·비활성화 정책과 관련 상태값 및 응답 DTO
 - 상세 DTO와 Error Code 목록
 - OpenAPI 및 API 문서 자동화 도구
