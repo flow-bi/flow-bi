@@ -21,7 +21,7 @@ description: Validate and execute an active repository plan.
 python .agents/skills/harness-exec/scripts/harness_exec.py '<USER_REQUEST>'
 ```
 
-위 명령을 실행하는 shell 도구의 `timeout_ms`는 반드시 30분(`1800000`)으로
+위 명령을 실행하는 shell 도구의 `timeout_ms`는 반드시 1시간 30분(`5400000`)으로
 설정한다. 더 짧은 값을 임의로 지정하거나 기본 timeout에 맡기지 않는다.
 
 오류 또는 실패를 숨기지 말고 사용자에게 보고한다.
