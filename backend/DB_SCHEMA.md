@@ -38,7 +38,7 @@
 | --- | --- | --- | --- |
 | `credential_id` | `BIGINT` | PK | 인증정보 ID |
 | `user_id` | `BIGINT` | FK, NOT NULL, UNIQUE | 사용자 ID |
-| `password_hash` | `VARCHAR(255)` | NULL | 비밀번호 Hash |
+| `password_hash` | `VARCHAR(255)` | NOT NULL | 비밀번호 Hash |
 | `must_change_password` | `BOOLEAN` | NOT NULL, DEFAULT TRUE | 임시 비밀번호 변경 필요 여부 |
 | `created_at` | `DATETIME` | DEFAULT NOW | 생성일시 |
 | `updated_at` | `DATETIME` | DEFAULT NOW | 수정일시 |
@@ -292,6 +292,12 @@ schedules 1 --- N rooms_reservations
 - `user_credentials.must_change_password`는 임시 비밀번호 변경 필요 상태의 영속 기준이다.
 - 실제 Migration에서는 기존 계정의 `must_change_password` 초기값과 배포 전환 절차를 데이터 상태에 맞게 별도로 검증한다.
 - Spring Session 데이터와 사용자별 세션 인덱스는 Redis가 관리하며 PostgreSQL ERD 관계에 포함하지 않는다.
+
+## 7.3 Authentication migration and fixture boundary
+
+- `backend/src/main/resources/db/migration/V1__create_authentication_tables.sql` creates the minimal `positions`, `teams`, `users`, and `user_credentials` tables required by the authentication baseline.
+- `users.employee_number` is unique; `user_credentials.user_id` is unique and required; both user reference keys are required foreign keys. `must_change_password` defaults to `TRUE`, and `password_hash` is required with a maximum length of 255.
+- Synthetic authentication fixtures are not migrations. They are created only at runtime when the `local` or `test` profile and the explicit `auth.test-fixtures.enabled` flag are both active, with all values injected from runtime configuration. Production profiles refuse startup if the flag is enabled.
 
 ## 8. 변경 절차
 
