@@ -90,23 +90,22 @@ Issue 생성 후 생성된 Issue 번호를 기준으로 브랜치를 만든다.
 브랜치명 형식:
 
 ```text
-{scope}/{type}/{issue-number}
+{scope}/{type}/#{issue-number}
 ```
 
 예시:
 
 ```text
-fe/feat/16
-be/bug/17
-all/refactor/18
-docs/docs/19
-harness/chore/20
+fe/feat/#16
+be/bug/#17
+all/refactor/#18
+docs/docs/#19
+harness/chore/#20
 ```
 
 규칙:
 
 - 브랜치는 현재 브랜치에서 생성한다.
-- 브랜치명에는 `#`을 넣지 않는다.
 - Issue 번호는 GitHub에서 실제 생성된 번호를 사용한다.
 - Issue 생성 전에 Issue 번호를 추측하지 않는다.
 - 같은 이름의 브랜치가 있으면 새로 만들지 않는다.
@@ -115,7 +114,7 @@ harness/chore/20
 브랜치 생성 명령:
 
 ```bash
-git switch -c <scope>/<type>/<issue-number>
+git switch -c <scope>/<type>/#<issue-number>
 ```
 
 ## GitHub Issue 생성
@@ -145,7 +144,6 @@ Issue 생성 후 반환된 Issue 번호로 브랜치를 만든다.
 - 사용자 승인 없이 GitHub Issue를 생성하지 않는다.
 - 사용자 승인 없이 브랜치를 생성하지 않는다.
 - Issue 번호를 추측하지 않는다.
-- 브랜치명에 `#`을 넣지 않는다.
 - 기존 브랜치를 덮어쓰지 않는다.
 - Issue Template을 무시하지 않는다.
 - 관련 Plan이나 문서를 임의로 지어내지 않는다.

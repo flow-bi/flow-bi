@@ -2,11 +2,11 @@
 
 ## 1. 문서 상태
 
-> **상태: Initial Baseline Draft**
+> **상태: Reviewed Baseline Draft**
 >
-> 이 문서는 현재 ERD의 테이블, 컬럼과 관계를 개선하지 않고 기록한 초기 기준선이다. 전체 프로젝트 문서 작성 후 아키텍처·보안·API·품질 기준과 함께 검토한다. 검토 전에는 구조 개선을 목적으로 임의 변경하지 않는다.
+> 이 문서는 초기 ERD를 기준으로 하되 승인된 인증 결정인 Redis 기반 서버 세션과 최초 로그인 비밀번호 변경 상태를 반영한다. 나머지 미검토 구조는 초기 기준선으로 유지한다.
 
-ERD에 존재하는 명칭, 타입, 오탈자와 예비 필드는 원본 추적을 위해 그대로 기록한다. 실제 PostgreSQL Migration을 작성하기 전 별도 Schema Review와 승인이 필요하다.
+인증 영역을 제외한 ERD의 명칭, 타입, 오탈자와 예비 필드는 원본 추적을 위해 그대로 기록한다. 실제 PostgreSQL Migration을 작성하기 전 별도 Schema Review와 승인이 필요하다.
 
 ## 2. 조직 및 사용자 관리
 
@@ -28,7 +28,7 @@ ERD에 존재하는 명칭, 타입, 오탈자와 예비 필드는 원본 추적�
 | `created_at` | `DATETIME` | DEFAULT NOW | 생성일시 |
 | `updated_at` | `DATETIME` | DEFAULT NOW | 수정일시 |
 
-관계: Position N:1, Team N:1, User Credentials 1:1, User Tokens 1:N.
+관계: Position N:1, Team N:1, User Credentials 1:1. 로그인 세션은 PostgreSQL이 아니라 Redis의 Spring Session 저장소에서 관리한다.
 
 ### 2.2 `user_credentials`
 
@@ -39,24 +39,13 @@ ERD에 존재하는 명칭, 타입, 오탈자와 예비 필드는 원본 추적�
 | `credential_id` | `BIGINT` | PK | 인증정보 ID |
 | `user_id` | `BIGINT` | FK, NOT NULL, UNIQUE | 사용자 ID |
 | `password_hash` | `VARCHAR(255)` | NULL | 비밀번호 Hash |
+| `must_change_password` | `BOOLEAN` | NOT NULL, DEFAULT TRUE | 임시 비밀번호 변경 필요 여부 |
 | `created_at` | `DATETIME` | DEFAULT NOW | 생성일시 |
 | `updated_at` | `DATETIME` | DEFAULT NOW | 수정일시 |
 
-### 2.3 `user_tokens`
+관리자가 임시 비밀번호를 발급하거나 초기화할 때 `must_change_password`를 `TRUE`로 설정하고, 사용자가 새 비밀번호로 변경을 완료하면 `FALSE`로 변경한다.
 
-다중 Device의 Refresh Token을 관리한다.
-
-| 컬럼 | 타입 | 제약 | 설명 |
-| --- | --- | --- | --- |
-| `token_id` | `BIGINT` | PK | Token ID |
-| `user_id` | `BIGINT` | FK, NOT NULL | 사용자 ID |
-| `refresh_token` | `VARCHAR(512)` | NOT NULL | Refresh Token |
-| `device_info` | `VARCHAR(255)` | NULL | 접속 Device 정보 |
-| `expires_at` | `DATETIME` | NOT NULL | 만료일시 |
-| `created_at` | `DATETIME` | DEFAULT NOW | 생성일시 |
-| `updated_at` | `DATETIME` | DEFAULT NOW | 수정일시 |
-
-### 2.4 `teams`
+### 2.3 `teams`
 
 조직 계층의 팀을 관리한다.
 
@@ -68,7 +57,7 @@ ERD에 존재하는 명칭, 타입, 오탈자와 예비 필드는 원본 추적�
 | `created_at` | `DATETIME` | DEFAULT NOW | 생성일시 |
 | `updated_at` | `DATETIME` | DEFAULT NOW | 수정일시 |
 
-### 2.5 `teams_closure`
+### 2.4 `teams_closure`
 
 팀 계층을 Closure Table Pattern으로 관리한다.
 
@@ -80,7 +69,7 @@ ERD에 존재하는 명칭, 타입, 오탈자와 예비 필드는 원본 추적�
 | `created_at` | `DATETIME` | DEFAULT NOW | 생성일시 |
 | `updated_at` | `DATETIME` | DEFAULT NOW | 수정일시 |
 
-### 2.6 `positions`
+### 2.5 `positions`
 
 임직원의 인사 직급을 관리한다.
 
@@ -251,7 +240,6 @@ Project와 User의 N:M Mapping이다.
 ```text
 positions 1 --- N users N --- 1 teams
 users 1 --- 1 user_credentials
-users 1 --- N user_tokens
 teams N --- N teams (teams_closure)
 users N --- N roles (user_roles)
 roles N --- N permissions (role_permissions)
@@ -275,7 +263,6 @@ schedules 1 --- N rooms_reservations
 - `schedule_targets`의 다형 관계와 CHECK/FK 무결성
 - 일정과 회의실 예약의 관계 및 중복 저장된 제목·시간
 - 회의실 중복 예약의 DB 수준 제약
-- Refresh Token 원문 저장 또는 Hash 저장 정책
 - Status 허용값과 상태 전이
 - 직원·팀 등 일정 외 도메인의 삭제·비활성화 정책 확정 후 필요한 상태 컬럼과 제약
 - `Field` 예비 컬럼과 회의실 장비 모델
@@ -298,6 +285,13 @@ schedules 1 --- N rooms_reservations
 - 일반 일정 취소 시 취소 시각과 취소 주체를 기록하고 기본 일정 조회에서 제외한다.
 
 일정 취소 정책을 실제 Schema에 반영할 때는 `schedules.status`, `schedules.cancelled_at`, `schedules.cancelled_by` 컬럼과 상태값 제약 및 조회 Index를 Schema Review에서 확정한다. Initial Baseline 표와 ERD는 승인된 Migration 계획이 마련되기 전까지 변경하지 않는다.
+
+### 7.2 인증 Schema 확정 정책
+
+- 브라우저 인증은 Redis 기반 Spring Session을 사용하므로 PostgreSQL에 `user_tokens`를 두지 않는다.
+- `user_credentials.must_change_password`는 임시 비밀번호 변경 필요 상태의 영속 기준이다.
+- 실제 Migration에서는 기존 계정의 `must_change_password` 초기값과 배포 전환 절차를 데이터 상태에 맞게 별도로 검증한다.
+- Spring Session 데이터와 사용자별 세션 인덱스는 Redis가 관리하며 PostgreSQL ERD 관계에 포함하지 않는다.
 
 ## 8. 변경 절차
 
