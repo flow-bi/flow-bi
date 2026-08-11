@@ -47,7 +47,7 @@ Agent는 미확정 영역에 기술을 임의 도입해서는 안 된다. 도입
      +-- AI Assistant (future)
      |
      +-- PostgreSQL
-     +-- Redis
+     +-- Redis (shared Session Store)
      +-- External AI / Document Search (future)
 ```
 
@@ -55,7 +55,7 @@ Agent는 미확정 영역에 기술을 임의 도입해서는 안 된다. 도입
 
 ## 5. 도메인 경계
 
-- Identity & Access: 로그인, 토큰, 권한 검증, 세션 관리
+- Identity & Access: 로그인, 서버 세션, 권한 검증, 사용자별 세션 무효화
 - Organization: 직원, 팀, 직급, 조직 계층, 재직 상태
 - Schedule: 개인·팀·프로젝트 일정, 참석자, 공유 범위, 일정 수명주기
 - Project: 프로젝트 정보, 참여자, 일정 대상 판별
@@ -79,7 +79,12 @@ Agent는 미확정 영역에 기술을 임의 도입해서는 안 된다. 도입
 - 요청 입력은 서버 경계에서 다시 검증한다.
 - 인증이 필요한 API는 사용자 신원과 권한을 검사한다.
 - 비밀번호는 복호화 가능한 형태로 저장하지 않는다.
-- Access Token과 Refresh Token은 별도로 관리한다.
+- 브라우저 인증은 Spring Security와 HttpSession을 사용하고, Spring Session이 Redis를 공용 Session Store로 사용한다.
+- 브라우저에는 사용자 정보를 포함하지 않는 불투명한 세션 식별자만 보안 Cookie로 전달한다.
+- 여러 백엔드 인스턴스는 Redis의 동일한 세션 상태를 공유하며 애플리케이션 로컬 메모리에 인증 상태를 종속시키지 않는다.
+- 로그인에는 사번을 사용하되 인증 이후 사용자 식별과 세션 Principal은 변경되지 않는 내부 `userId`를 기준으로 한다.
+- 사용자 비밀번호 변경 시 현재 세션을 제외한 다른 세션을, 관리자 비밀번호 초기화 또는 역할·주요 권한 변경 시 대상 사용자의 모든 세션을 무효화한다.
+- 브라우저 로그인 흐름에는 Access Token과 Refresh Token을 사용하지 않는다. 외부 API, 모바일 또는 서비스 간 인증이 필요해지면 별도 인증 전략과 ADR을 수립한다.
 - 개인정보와 인증정보는 최소한으로 조회·노출한다.
 
 세부 기준은 backend/API.md, SECURITY.md를 따른다.

@@ -11,7 +11,7 @@
 ## 2. 기본 원칙
 
 - JSON 기반 HTTP API를 사용한다.
-- 보호 API는 JWT 인증을 요구한다.
+- 보호 API는 Redis에 저장된 서버 세션 인증을 요구한다.
 - 서버는 모든 입력과 객체 수준 권한을 검증한다.
 - Entity를 응답으로 직접 노출하지 않는다.
 - 날짜·시간은 ISO 8601과 명확한 Offset을 사용한다.
@@ -20,15 +20,23 @@
 
 API Base Path와 Versioning 방식은 아직 미확정이다. 예시는 `/api`를 사용한다.
 
-## 3. 인증 Header
+## 3. 인증 Cookie
 
-Bearer Token 방식을 채택할 경우 다음 형식을 사용한다.
+로그인 성공 시 서버는 사용자 정보를 포함하지 않는 불투명한 세션 식별자를 Cookie로 전달한다.
 
 ```http
-Authorization: Bearer {access-token}
+Set-Cookie: SESSION={opaque-session-id}; Path=/; HttpOnly; Secure; SameSite=Lax
 ```
 
-Refresh Token의 Cookie 또는 Body 전달 방식은 인증 Design Doc에서 결정한다.
+브라우저는 이후 동일 출처 요청에 Session Cookie를 자동으로 전달한다. JavaScript가 세션 식별자를 읽거나 별도 저장소에 복사하지 않는다. 운영 환경에서는 `Secure=true`이며, `local` Profile만 HTTPS 없이 개발할 수 있도록 `Secure=false`를 명시한다. 세션 유휴 만료는 1시간이고, 생성 시각 기준 절대 만료는 10시간이다.
+
+### 3.1 CSRF와 인증 실패
+
+- `GET /api/auth/csrf`는 인증 없이 CSRF Cookie를 발급한다. 응답 Body에는 CSRF Token 값을 포함하지 않는다.
+- 상태 변경 요청(`POST`, `PUT`, `PATCH`, `DELETE`)은 `XSRF-TOKEN` Cookie 값과 같은 `X-XSRF-TOKEN` Header를 요구한다. 누락되거나 일치하지 않으면 `403`과 `CSRF_VALIDATION_FAILED`를 반환한다.
+- 로그인 Endpoint와 CSRF bootstrap 외 `/api/**` 요청은 인증이 필요하다. 세션이 없거나 만료되면 `401`과 `UNAUTHENTICATED`를 반환한다.
+- Redis Session Store에 연결할 수 없으면 인증을 허용하지 않고 `503`과 `AUTH_SESSION_UNAVAILABLE`를 반환한다. 오류 응답에는 Session ID, CSRF Token, Redis Key, 비밀번호를 포함하지 않는다.
+- Credential을 포함하는 교차 출처 요청은 설정된 명시적 Origin에만 허용한다. 허용 Origin이 없으면 CORS 요청을 허용하지 않는다.
 
 ## 4. 공통 성공 응답
 
@@ -85,7 +93,7 @@ Refresh Token의 Cookie 또는 Body 전달 방식은 인증 Design Doc에서 결
 | `201 Created` | 리소스 생성 성공 |
 | `204 No Content` | 응답 Body가 없는 성공 |
 | `400 Bad Request` | 형식·입력 검증 실패 |
-| `401 Unauthorized` | 인증되지 않음 또는 Token 무효 |
+| `401 Unauthorized` | 인증되지 않음 또는 Session 무효·만료 |
 | `403 Forbidden` | 인증되었으나 권한 부족 |
 | `404 Not Found` | 리소스가 없거나 노출할 수 없음 |
 | `409 Conflict` | 상태·시간·중복 충돌 |
@@ -103,12 +111,74 @@ Refresh Token의 Cookie 또는 Body 전달 방식은 인증 Design Doc에서 결
 
 ## 8. 기능별 Endpoint 후보
 
+### 8.0 Login contract
+
+`POST /api/auth/login` requires the CSRF cookie from `GET /api/auth/csrf` and the matching
+`X-XSRF-TOKEN` request header. Its JSON body is `{ "employeeNumber": "...", "password": "..." }`;
+the employee number is 1-50 alphanumeric or hyphen characters and the password is 10-128 characters.
+
+On success it returns `200 OK` with `{ "mustChangePassword": boolean }`, rotates the opaque
+`SESSION` identifier, and stores only the internal user ID, minimal role, password-change state,
+and session generation in the authenticated context. It never returns the password, hash, session
+identifier, or CSRF value.
+
+Unknown employee numbers, inactive users, and incorrect passwords all return the identical
+`401 INVALID_CREDENTIALS` response: `Invalid employee number or password.` Failed attempts are
+counted atomically by employee number plus request source. Five failures in 15 minutes return
+`429 LOGIN_RATE_LIMITED` for 15 minutes; a successful login clears that employee/source failure
+state. Redis or session-generation dependency failure returns `503 AUTH_DEPENDENCY_UNAVAILABLE`
+and does not authenticate the request. Authentication audit events contain only a masked employee
+identifier, result, timestamp, and trace ID.
+
+### 8.0.1 Initial password change contract
+
+`PUT /api/auth/password` requires an authenticated session whose `mustChangePassword` state is
+`true`, the CSRF cookie, and the matching `X-XSRF-TOKEN` header. Its JSON body is
+`{ "newPassword": "...", "confirmation": "..." }`. The two values must match; the new password
+must be 10-128 characters and include a letter, a number, and a special character. Reusing the
+temporary password is forbidden.
+
+While password change is required, every authenticated `/api/**` endpoint is denied with
+`403 PASSWORD_CHANGE_REQUIRED` except `GET /api/auth/session`, `PUT /api/auth/password`, and
+`POST /api/auth/logout`.
+On success, the response is `200 OK` with `{ "mustChangePassword": false }`. The current session
+is retained with its updated generation and every other session is logically invalidated before
+best-effort physical deletion. The request and response never contain a password or password hash.
+
+Invalid requests return `400` with one of `PASSWORD_CONFIRMATION_MISMATCH`,
+`PASSWORD_POLICY_VIOLATION`, `PASSWORD_REUSE_FORBIDDEN`, or `PASSWORD_CHANGE_NOT_REQUIRED`.
+Database or Redis/session failures return `503 PASSWORD_CHANGE_UNAVAILABLE` and retain the
+fail-closed session-generation state.
+
+### 8.0.2 Current session status contract
+
+`GET /api/auth/session` requires a current authenticated server session and returns `200 OK` with
+`{ "authenticated": true, "mustChangePassword": boolean }`. It is available to users who must
+change their password so the client can route them from the server-provided state. The response has
+`Cache-Control: no-store` and never contains an employee number, password, password hash, session
+identifier, CSRF token, or profile data.
+
+Missing, expired, or session-generation-mismatched sessions return `401 UNAUTHENTICATED`.
+Redis or session-store failures return `503 AUTH_SESSION_UNAVAILABLE`; both error responses are
+fail-closed, have `Cache-Control: no-store`, and omit session and credential data.
+
+### 8.0.3 Logout contract
+
+`POST /api/auth/logout` requires the `XSRF-TOKEN` cookie and matching `X-XSRF-TOKEN` header.
+It invalidates only the current HTTP session and returns `204 No Content` with an expired
+`SESSION` cookie using `Path=/`, `HttpOnly`, the configured `Secure` value, and `SameSite=Lax`.
+
+An anonymous, expired, or repeated logout request with valid CSRF protection also returns
+`204 No Content`; the response does not reveal account or prior-session state. A missing or
+invalid CSRF token returns `403 CSRF_VALIDATION_FAILED`. Reuse of the expired session for a
+protected API returns `401 UNAUTHENTICATED`. Logout audit records contain only the outcome and
+never contain a session identifier, CSRF token, or authentication credential.
+
 ### 8.1 Authentication
 
 | Method | Path | 목적 |
 | --- | --- | --- |
 | `POST` | `/api/auth/login` | 사번·비밀번호 로그인 |
-| `POST` | `/api/auth/refresh` | Access Token 갱신 |
 | `POST` | `/api/auth/logout` | 현재 Session 로그아웃 |
 | `POST` | `/api/auth/logout-all` | 전체 Session 로그아웃 |
 | `PUT` | `/api/auth/password` | 비밀번호 변경 |
@@ -332,7 +402,7 @@ AI 모델과 Action Routing이 미확정이므로 Endpoint를 아직 확정하�
 - `/api/v1` 등 Versioning
 - 공통 성공 Envelope 사용 여부
 - Cursor와 Page Pagination 선택
-- Refresh Token 전달 방식
+- Session Cookie 이름, `SameSite` 값과 CSRF Token 전달 방식
 - 직원·팀의 삭제·비활성화 정책과 관련 상태값 및 응답 DTO
 - 상세 DTO와 Error Code 목록
 - OpenAPI 및 API 문서 자동화 도구
