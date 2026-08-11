@@ -98,8 +98,9 @@ function AppShell({ sidebar, children }: AppShellProps) {
   }
 
   return (
-    <div className="app-shell">
-      // todo: 인증인가 이후, 회사명과 사용자명을 props로 전달받도록 수정
+    // todo: 인증인가 이후, 회사명과 사용자명을 props로 전달받도록 수정
+
+    <div className="app-shell">  
       <Header
         companyName="Flow BI"
         onOpenSidebar={() => setIsMobileSidebarOpen(true)}
