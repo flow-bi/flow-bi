@@ -9,7 +9,7 @@ describe('App', () => {
     render(<App />)
 
     expect(screen.getByRole('banner')).toHaveTextContent('Flow BI')
-    expect(screen.getByRole('banner')).toHaveTextContent('윤서')
+    expect(screen.getByRole('banner')).toHaveTextContent('김유선')
     expect(screen.queryByRole('searchbox')).not.toBeInTheDocument()
   })
 
