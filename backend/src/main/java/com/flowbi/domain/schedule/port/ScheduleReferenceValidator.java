@@ -4,8 +4,8 @@ import com.flowbi.domain.schedule.ScheduleCreateCommand;
 import com.flowbi.domain.schedule.ScheduleUpdateCommand;
 
 /**
- * Boundary owned by Calendar; an organization/project adapter is supplied after
- * Task 7.
+ * Calendar-owned boundary implemented by the organization/project persistence
+ * adapter at the application edge.
  */
 public interface ScheduleReferenceValidator {
 

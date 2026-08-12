@@ -19,6 +19,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -59,8 +60,12 @@ class ScheduleQueryPostgresPerformanceTest {
 
   @BeforeEach
   void prepareFixture() {
-    jdbcTemplate.update("INSERT INTO users (user_id) VALUES (1)");
-    jdbcTemplate.update("INSERT INTO teams (team_id) VALUES (10)");
+    jdbcTemplate.update("INSERT INTO teams (team_id, team_name) VALUES (10, 'Fixture Team')");
+    jdbcTemplate.update("INSERT INTO positions (position_id, position_name) VALUES (1, 'Fixture')");
+    jdbcTemplate.update("""
+        INSERT INTO users (user_id, position_id, team_id, employee_number, name)
+        VALUES (1, 1, 10, 'performance-fixture', 'Performance Fixture')
+        """);
     jdbcTemplate.batchUpdate("""
         INSERT INTO schedules (title, schedule_type, visibility, start_at, end_at, creator_id,
         is_all_day, color_label, creator_attends)
@@ -139,6 +144,7 @@ class ScheduleQueryPostgresPerformanceTest {
   static class CalendarPortConfiguration {
 
     @Bean
+    @Primary
     ScheduleAudienceLookup scheduleAudienceLookup() {
       return new ScheduleAudienceLookup() {
         @Override
@@ -154,17 +160,20 @@ class ScheduleQueryPostgresPerformanceTest {
     }
 
     @Bean
+    @Primary
     ScheduleReferenceValidator scheduleReferenceValidator() {
       return command -> {
       };
     }
 
     @Bean
+    @Primary
     ScheduleRoomReservationLookup scheduleRoomReservationLookup() {
       return scheduleId -> false;
     }
 
     @Bean
+    @Primary
     ScheduleAuditWriter scheduleAuditWriter() {
       return event -> {
       };

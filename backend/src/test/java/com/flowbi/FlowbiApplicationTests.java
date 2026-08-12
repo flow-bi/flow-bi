@@ -10,6 +10,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 
 @SpringBootTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
 @Import(FlowbiApplicationTests.CalendarBoundaryConfiguration.class)
@@ -23,12 +24,14 @@ class FlowbiApplicationTests {
   static class CalendarBoundaryConfiguration {
 
     @Bean
+    @Primary
     ScheduleReferenceValidator scheduleReferenceValidator() {
       return command -> {
       };
     }
 
     @Bean
+    @Primary
     ScheduleAudienceLookup scheduleAudienceLookup() {
       return new ScheduleAudienceLookup() {
         @Override
@@ -44,11 +47,13 @@ class FlowbiApplicationTests {
     }
 
     @Bean
+    @Primary
     ScheduleRoomReservationLookup scheduleRoomReservationLookup() {
       return scheduleId -> false;
     }
 
     @Bean
+    @Primary
     ScheduleAuditWriter scheduleAuditWriter() {
       return event -> {
       };

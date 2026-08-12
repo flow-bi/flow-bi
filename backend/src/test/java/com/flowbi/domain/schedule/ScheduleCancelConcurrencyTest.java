@@ -22,6 +22,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 @SpringBootTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
@@ -45,8 +46,7 @@ class ScheduleCancelConcurrencyTest {
 
   @Test
   void serializesConcurrentUpdateAndCancelWithoutPartialAggregateChanges() throws Exception {
-    jdbcTemplate.update("INSERT INTO users (user_id) VALUES (701), (702), (703)");
-    jdbcTemplate.update("INSERT INTO teams (team_id) VALUES (710)");
+    insertUsers(710L,701L,702L,703L);
     Schedule created = createService.create(command("Initial",List.of(702L)));
     CyclicBarrier barrier = new CyclicBarrier(2);
     String updateResult;
@@ -98,8 +98,7 @@ class ScheduleCancelConcurrencyTest {
 
   @Test
   void rollsBackTheEntireUpdateWhenANewParticipantViolatesTheDatabaseConstraint() {
-    jdbcTemplate.update("INSERT INTO users (user_id) VALUES (801), (802)");
-    jdbcTemplate.update("INSERT INTO teams (team_id) VALUES (810)");
+    insertUsers(810L,801L,802L);
     Schedule created = createService.create(ScheduleCreateCommand.of(801L,"Rollback",
         ScheduleType.TEAM,ScheduleVisibility.TEAM,OffsetDateTime.parse("2026-08-10T09:00:00+09:00"),
         OffsetDateTime.parse("2026-08-10T10:00:00+09:00"),false,ScheduleColorLabel.BLUE,
@@ -123,6 +122,19 @@ class ScheduleCancelConcurrencyTest {
 
   private Object value(String sql,long scheduleId) {
     return jdbcTemplate.queryForObject(sql,Object.class,scheduleId);
+  }
+
+  private void insertUsers(long teamId,long... userIds) {
+    jdbcTemplate.update("INSERT INTO positions (position_id, position_name) VALUES (?, ?)",teamId,
+        "Fixture " + teamId);
+    jdbcTemplate.update("INSERT INTO teams (team_id, team_name) VALUES (?, ?)",teamId,
+        "Fixture " + teamId);
+    for (long userId : userIds) {
+      jdbcTemplate.update("""
+          INSERT INTO users (user_id, position_id, team_id, employee_number, name)
+          VALUES (?, ?, ?, ?, ?)
+          """,userId,teamId,teamId,"fixture-" + userId,"Fixture " + userId);
+    }
   }
 
   private Callable<String> afterBarrier(CyclicBarrier barrier,Callable<String> action) {
@@ -150,12 +162,14 @@ class ScheduleCancelConcurrencyTest {
   static class CalendarBoundaryConfiguration {
 
     @Bean
+    @Primary
     ScheduleReferenceValidator scheduleReferenceValidator() {
       return command -> {
       };
     }
 
     @Bean
+    @Primary
     ScheduleAudienceLookup scheduleAudienceLookup() {
       return new ScheduleAudienceLookup() {
         @Override
@@ -171,11 +185,13 @@ class ScheduleCancelConcurrencyTest {
     }
 
     @Bean
+    @Primary
     ScheduleRoomReservationLookup scheduleRoomReservationLookup() {
       return scheduleId -> false;
     }
 
     @Bean
+    @Primary
     ScheduleAuditWriter scheduleAuditWriter() {
       ConcurrentLinkedQueue<ScheduleAuditEvent> events = new ConcurrentLinkedQueue<>();
       return events::add;

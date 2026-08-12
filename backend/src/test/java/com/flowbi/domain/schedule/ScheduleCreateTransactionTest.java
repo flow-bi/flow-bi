@@ -16,6 +16,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 @SpringBootTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
@@ -30,8 +31,14 @@ class ScheduleCreateTransactionTest {
 
   @Test
   void persistsTheScheduleDetailTargetsAndParticipantsAsOneAggregate() {
-    jdbcTemplate.update("INSERT INTO users (user_id) VALUES (1), (2), (3)");
-    jdbcTemplate.update("INSERT INTO teams (team_id) VALUES (10)");
+    jdbcTemplate
+        .update("INSERT INTO positions (position_id, position_name) VALUES (100, 'Fixture')");
+    jdbcTemplate.update("INSERT INTO teams (team_id, team_name) VALUES (10, 'Fixture')");
+    jdbcTemplate
+        .update("INSERT INTO users (user_id, position_id, team_id, employee_number, name) VALUES "
+            + "(1, 100, 10, 'schedule-1', 'Schedule One'), "
+            + "(2, 100, 10, 'schedule-2', 'Schedule Two'), "
+            + "(3, 100, 10, 'schedule-3', 'Schedule Three')");
 
     Schedule schedule = scheduleCreateService.create(ScheduleCreateCommand.of(1L,"Planning",
         ScheduleType.TEAM,ScheduleVisibility.TEAM,OffsetDateTime.parse("2026-08-10T09:00:00+09:00"),
@@ -47,8 +54,11 @@ class ScheduleCreateTransactionTest {
 
   @Test
   void rollsBackTheEntireAggregateWhenAParticipantReferenceCannotBePersisted() {
-    jdbcTemplate.update("INSERT INTO users (user_id) VALUES (20)");
-    jdbcTemplate.update("INSERT INTO teams (team_id) VALUES (30)");
+    jdbcTemplate
+        .update("INSERT INTO positions (position_id, position_name) VALUES (200, 'Fixture')");
+    jdbcTemplate.update("INSERT INTO teams (team_id, team_name) VALUES (30, 'Fixture')");
+    jdbcTemplate.update("INSERT INTO users (user_id, position_id, team_id, employee_number, name) "
+        + "VALUES (20, 200, 30, 'schedule-20', 'Schedule Twenty')");
 
     assertThatThrownBy(() -> scheduleCreateService.create(ScheduleCreateCommand.of(20L,"Failing",
         ScheduleType.TEAM,ScheduleVisibility.TEAM,OffsetDateTime.parse("2026-08-11T09:00:00+09:00"),
@@ -77,12 +87,14 @@ class ScheduleCreateTransactionTest {
   static class ReferenceValidationConfiguration {
 
     @Bean
+    @Primary
     ScheduleReferenceValidator scheduleReferenceValidator() {
       return command -> {
       };
     }
 
     @Bean
+    @Primary
     ScheduleAudienceLookup scheduleAudienceLookup() {
       return new ScheduleAudienceLookup() {
         @Override
@@ -98,11 +110,13 @@ class ScheduleCreateTransactionTest {
     }
 
     @Bean
+    @Primary
     ScheduleRoomReservationLookup scheduleRoomReservationLookup() {
       return scheduleId -> false;
     }
 
     @Bean
+    @Primary
     ScheduleAuditWriter scheduleAuditWriter() {
       return event -> {
       };
