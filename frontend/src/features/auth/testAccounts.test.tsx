@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { TestAccountNotice } from './testAccounts'
@@ -17,7 +18,7 @@ afterEach(() => {
 })
 
 describe('TestAccountNotice', () => {
-  it('does not render when the explicit flag or either credential is missing', () => {
+  it('hides credentials but keeps the employee account action when runtime accounts are missing', () => {
     window.__FLOW_BI_TEST_ACCOUNTS__ = {
       display: false,
       normal: normalAccount,
@@ -26,6 +27,7 @@ describe('TestAccountNotice', () => {
     const { rerender } = render(<TestAccountNotice />)
 
     expect(screen.queryByLabelText('개발 테스트 계정')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '직원 계정 생성' })).toBeInTheDocument()
 
     window.__FLOW_BI_TEST_ACCOUNTS__ = {
       display: true,
@@ -35,6 +37,16 @@ describe('TestAccountNotice', () => {
     rerender(<TestAccountNotice />)
 
     expect(screen.queryByLabelText('개발 테스트 계정')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '직원 계정 생성' })).toBeInTheDocument()
+  })
+
+  it('opens the employee account modal without runtime-injected test accounts', async () => {
+    const user = userEvent.setup()
+    render(<TestAccountNotice />)
+
+    await user.click(screen.getByRole('button', { name: '직원 계정 생성' }))
+
+    expect(screen.getByRole('dialog', { name: '직원 계정 생성' })).toBeInTheDocument()
   })
 
   it('renders only explicitly enabled runtime-injected synthetic credentials', async () => {
