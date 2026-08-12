@@ -1,9 +1,16 @@
 describe('global application layout', () => {
+  beforeEach(() => {
+    cy.intercept('GET', '/api/auth/session', {
+      body: { authenticated: true, mustChangePassword: false },
+      statusCode: 200,
+    })
+  })
+
   it('lays out the header, sidebar, and main content on desktop', () => {
     cy.viewport(1280, 800)
     cy.visit('/')
 
-    cy.get('header').should('contain.text', 'Flow BI').and('contain.text', '김유선')
+    cy.get('header').should('contain.text', 'Flow BI').and('contain.text', '김지선')
     cy.get('.app-body').should('have.css', 'display', 'grid')
     cy.get('nav[aria-label="주요 탐색"]').should('be.visible')
     cy.get('main[aria-label="콘텐츠"]').should('be.visible')
