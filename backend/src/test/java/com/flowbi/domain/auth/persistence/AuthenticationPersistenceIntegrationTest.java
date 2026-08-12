@@ -11,6 +11,10 @@ import com.flowbi.domain.team.entity.Team;
 import com.flowbi.domain.team.repository.TeamRepository;
 import com.flowbi.domain.user.entity.User;
 import com.flowbi.domain.user.repository.UserRepository;
+import com.flowbi.domain.user.service.EmployeeAccountRegistration;
+import com.flowbi.domain.user.service.EmployeeAccountRegistrationException;
+import com.flowbi.domain.user.service.EmployeeAccountRegistrationRequest;
+import com.flowbi.domain.user.service.EmployeeAccountRegistrationService;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -66,6 +70,43 @@ class AuthenticationPersistenceIntegrationTest {
 
   @Autowired
   private DataSource dataSource;
+
+  @Autowired
+  private EmployeeAccountRegistrationService registrations;
+
+  @Autowired
+  private org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
+
+  @Test
+  void registersAnActiveEmployeeAndCredentialAgainstPostgreSqlWithoutPartialInvalidAccounts() {
+    Position position = position();
+    Team team = team();
+
+    EmployeeAccountRegistration registration = registrations
+        .register(new EmployeeAccountRegistrationRequest("employee-registration", "Kim",
+            team.getTeamId(), position.getPositionId(), "Password123!", "Password123!"));
+    UserCredential credential = userCredentialRepository
+        .findByUserUserId(registration.user().getUserId()).orElseThrow();
+
+    assertThat(registration.user().getStatus()).isEqualTo("ACTIVE");
+    assertThat(registration.user().getTeam().getTeamId()).isEqualTo(team.getTeamId());
+    assertThat(registration.user().getPosition().getPositionId())
+        .isEqualTo(position.getPositionId());
+    assertThat(credential.isMustChangePassword()).isTrue();
+    assertThat(passwordEncoder.matches("Password123!",credential.getPasswordHash())).isTrue();
+    long usersBeforeInvalidRequest = userRepository.count();
+
+    assertThatThrownBy(
+        () -> registrations.register(new EmployeeAccountRegistrationRequest("employee-invalid",
+            "Kim", Long.MAX_VALUE, position.getPositionId(), "Password123!", "Password123!")))
+        .isInstanceOf(EmployeeAccountRegistrationException.class);
+    assertThatThrownBy(
+        () -> registrations.register(new EmployeeAccountRegistrationRequest("employee-registration",
+            "Kim", team.getTeamId(), position.getPositionId(), "Password123!", "Password123!")))
+        .isInstanceOf(EmployeeAccountRegistrationException.class);
+    assertThat(userRepository.count()).isEqualTo(usersBeforeInvalidRequest);
+    assertThat(userCredentialRepository.count()).isEqualTo(1);
+  }
 
   @Test
   void keepsEmployeeNumberAndCredentialUserRelationshipUnique() {
