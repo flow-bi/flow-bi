@@ -18,11 +18,13 @@ type LoginPageProps = {
 export function LoginPage({ login: submitLogin = login, onAuthenticated }: LoginPageProps) {
   const [requestError, setRequestError] = useState<string>()
   const errorSummaryRef = useRef<HTMLDivElement>(null)
+  const headingRef = useRef<HTMLHeadingElement>(null)
   const {
     formState: { errors, isSubmitting },
     handleSubmit,
     register,
     setFocus,
+    setValue,
   } = useForm<LoginFormValues>({ resolver: zodResolver(loginSchema) })
 
   const validationError = errors.employeeNumber?.message ?? errors.password?.message
@@ -37,6 +39,10 @@ export function LoginPage({ login: submitLogin = login, onAuthenticated }: Login
       errorSummaryRef.current?.focus()
     }
   }, [errors.employeeNumber, errors.password, requestError, setFocus])
+
+  useEffect(() => {
+    headingRef.current?.focus()
+  }, [])
 
   async function onSubmit(values: LoginFormValues) {
     if (isSubmitting) {
@@ -55,7 +61,9 @@ export function LoginPage({ login: submitLogin = login, onAuthenticated }: Login
   return (
     <main className="login-page">
       <section aria-labelledby="login-heading" className="login-card">
-        <h1 id="login-heading">로그인</h1>
+        <h1 id="login-heading" ref={headingRef} tabIndex={-1}>
+          로그인
+        </h1>
         <p>사번과 비밀번호를 입력해 주세요.</p>
         <form
           noValidate
@@ -104,7 +112,12 @@ export function LoginPage({ login: submitLogin = login, onAuthenticated }: Login
       </section>
       {DevelopmentTestAccountNotice === undefined ? null : (
         <Suspense fallback={null}>
-          <DevelopmentTestAccountNotice />
+          <DevelopmentTestAccountNotice
+            onEmployeeAccountCreated={(employeeNumber) => {
+              setValue('employeeNumber', employeeNumber, { shouldDirty: true })
+              setValue('password', '')
+            }}
+          />
         </Suspense>
       )}
     </main>
