@@ -16,6 +16,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @Testcontainers(disabledWithoutDocker = true)
 class ScheduleMigrationPostgresTest {
 
+  private static final String CALENDAR_BASELINE_VERSION = "20260812000002.00";
+
   @Container
   static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
 
@@ -26,8 +28,7 @@ class ScheduleMigrationPostgresTest {
 
     try (Connection connection = DriverManager.getConnection(jdbcUrl,POSTGRES.getUsername(),
         POSTGRES.getPassword())) {
-      connection.createStatement().execute("INSERT INTO users (user_id) VALUES (1), (2)");
-      connection.createStatement().execute("INSERT INTO teams (team_id) VALUES (10)");
+      insertAuthenticationReferences(connection);
       connection.createStatement().execute("INSERT INTO projects (project_id) VALUES (20)");
       connection.createStatement().execute(
           "INSERT INTO schedules (title, schedule_type, visibility, start_at, end_at, creator_id, is_all_day, color_label, creator_attends) "
@@ -50,11 +51,11 @@ class ScheduleMigrationPostgresTest {
   @Test
   void preservesAnInitialBaselineScheduleWhileApplyingTheCalendarConstraints() throws SQLException {
     String jdbcUrl = jdbcUrlFor("calendar_preservation");
-    migrate(jdbcUrl).target("1").load().migrate();
+    migrate(jdbcUrl).target(CALENDAR_BASELINE_VERSION).load().migrate();
 
     try (Connection connection = DriverManager.getConnection(jdbcUrl,POSTGRES.getUsername(),
         POSTGRES.getPassword())) {
-      connection.createStatement().execute("INSERT INTO users (user_id) VALUES (1)");
+      insertAuthenticationReferences(connection);
       connection.createStatement().execute(
           "INSERT INTO schedules (title, schedule_type, visibility, start_at, end_at, creator_id) "
               + "VALUES ('baseline', 'PERSONAL', 'PRIVATE', '2026-08-10T00:00:00Z', "
@@ -82,6 +83,17 @@ class ScheduleMigrationPostgresTest {
 
   private static FluentConfiguration migrate(String jdbcUrl) {
     return Flyway.configure().dataSource(jdbcUrl,POSTGRES.getUsername(),POSTGRES.getPassword());
+  }
+
+  private static void insertAuthenticationReferences(Connection connection) throws SQLException {
+    connection.createStatement()
+        .execute("INSERT INTO positions (position_id, position_name) VALUES (1, 'Fixture')");
+    connection.createStatement()
+        .execute("INSERT INTO teams (team_id, team_name) VALUES (10, 'Fixture')");
+    connection.createStatement()
+        .execute("INSERT INTO users (user_id, position_id, team_id, employee_number, name) VALUES "
+            + "(1, 1, 10, 'fixture-1', 'Fixture One'), "
+            + "(2, 1, 10, 'fixture-2', 'Fixture Two')");
   }
 
   private static String jdbcUrlFor(String schema) throws SQLException {

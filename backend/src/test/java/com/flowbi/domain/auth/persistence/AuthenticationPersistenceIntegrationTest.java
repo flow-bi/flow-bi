@@ -36,6 +36,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @Testcontainers
 class AuthenticationPersistenceIntegrationTest {
 
+  private static final String FAILED_MIGRATION_NAME = "V99991231235959_00__test_fail_atomically.sql";
+
   @Container
   static PostgreSQLContainer<?> postgresql = new PostgreSQLContainer<>("postgres:16-alpine");
 
@@ -111,7 +113,7 @@ class AuthenticationPersistenceIntegrationTest {
 
     Path failedMigrationDirectory = Files.createTempDirectory("failed-migration-");
     try {
-      Files.writeString(failedMigrationDirectory.resolve("V2__fail_atomically.sql"),
+      Files.writeString(failedMigrationDirectory.resolve(FAILED_MIGRATION_NAME),
           "CREATE TABLE failed_migration_probe (id BIGINT);\nINVALID SQL;");
 
       Flyway failingFlyway = Flyway.configure()
@@ -121,7 +123,7 @@ class AuthenticationPersistenceIntegrationTest {
       assertThatThrownBy(failingFlyway::migrate).isInstanceOf(RuntimeException.class);
       assertThat(tableExists("failed_migration_probe")).isFalse();
     } finally {
-      Files.deleteIfExists(failedMigrationDirectory.resolve("V2__fail_atomically.sql"));
+      Files.deleteIfExists(failedMigrationDirectory.resolve(FAILED_MIGRATION_NAME));
       Files.deleteIfExists(failedMigrationDirectory);
     }
   }

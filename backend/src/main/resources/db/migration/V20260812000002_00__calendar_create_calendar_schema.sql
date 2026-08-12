@@ -1,13 +1,5 @@
--- Initial Calendar baseline. User, team and project ownership remains with their respective domains;
--- this migration only establishes the foreign-key targets required by Calendar.
-CREATE TABLE IF NOT EXISTS users (
-    user_id BIGINT PRIMARY KEY
-);
-
-CREATE TABLE IF NOT EXISTS teams (
-    team_id BIGINT PRIMARY KEY
-);
-
+-- Initial Calendar baseline. User and team ownership remains with Authentication;
+-- project ownership will move to its domain when that persistence contract is introduced.
 CREATE TABLE IF NOT EXISTS projects (
     project_id BIGINT PRIMARY KEY
 );
