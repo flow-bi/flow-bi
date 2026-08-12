@@ -1,8 +1,17 @@
-import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { type ReactNode, type RefObject, useEffect, useRef, useState } from 'react'
 
-import { getSession, logout, type LoginResult, type SessionResult } from './features/auth/api'
-import { LoginPage } from './features/auth/LoginPage'
-import { PasswordChangePage } from './features/auth/PasswordChangePage'
+import {
+  MeetingRoomPage,
+  productionMeetingRoomGateway,
+  type MeetingRoomGateway,
+} from './features/meeting-room'
+
+declare global {
+  interface Window {
+    __FLOW_BI_MEETING_ROOM_GATEWAY__?: MeetingRoomGateway
+  }
+}
 
 type HeaderProps = {
   companyName: string
@@ -130,6 +139,11 @@ function currentPath(): string {
 }
 
 function App() {
+  const [queryClient] = useState(
+    () => new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+  )
+  const meetingRoomGateway = window.__FLOW_BI_MEETING_ROOM_GATEWAY__ ?? productionMeetingRoomGateway
+
   const [authentication, setAuthentication] = useState<AuthenticationState>({ kind: 'loading' })
   const mainHeadingRef = useRef<HTMLHeadingElement>(null)
 
@@ -234,7 +248,13 @@ function App() {
   }
 
   return (
-    <AppShell sidebar={<p className="sidebar-placeholder">메뉴를 준비 중입니다.</p>}>
+    <AppShell
+      sidebar={
+        <a aria-current="page" className="sidebar-link" href="#meeting-room">
+          회의실
+        </a>
+      }
+    >
       <h1 ref={mainHeadingRef} tabIndex={-1}>
         콘텐츠
       </h1>
@@ -242,6 +262,9 @@ function App() {
       <button className="bordered-button" onClick={() => void onLogout()} type="button">
         로그아웃
       </button>
+      <QueryClientProvider client={queryClient}>
+        <MeetingRoomPage gateway={meetingRoomGateway} />
+      </QueryClientProvider>
     </AppShell>
   )
 }
