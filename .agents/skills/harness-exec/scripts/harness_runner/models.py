@@ -30,6 +30,7 @@ class ParsedPlan:
 class HarnessRequest:
     plan_id: str
     additional_request: str = ""
+    start_task_number: int | None = None
 
 
 @dataclass(frozen=True)

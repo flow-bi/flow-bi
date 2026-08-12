@@ -343,15 +343,78 @@ def execute_workers(
     )
 
     tasks_by_number = {task.number: task for task in plan.tasks}
+    if (
+        request.start_task_number is not None
+        and request.start_task_number not in tasks_by_number
+    ):
+        raise ValueError(
+            f"시작 Task가 Plan에 없습니다: Task {request.start_task_number}"
+        )
     statuses = {task.number: "pending" for task in plan.tasks}
     results: dict[int, TaskResult] = {}
+
+    prior_task_numbers = {
+        task.number
+        for task in plan.tasks
+        if request.start_task_number is not None
+        and task.number < request.start_task_number
+    }
+    for task_number in sorted(prior_task_numbers):
+        task = tasks_by_number[task_number]
+        fingerprint = revision_fingerprint(
+            root, request.plan_id, task, plan.common_prompt
+        )
+        try:
+            prior_record = store.load(request.plan_id, task.number, fingerprint)
+        except EvidenceRecordError as error:
+            prior_record = None
+            message = f"HUMAN_REVIEW_REQUIRED: {error}"
+        else:
+            message = ""
+
+        if prior_record is None:
+            statuses[task_number] = "failed"
+            results[task_number] = TaskResult(
+                task.number,
+                task.title,
+                "failed",
+                message=message or "신뢰할 수 있는 이전 PASS 실행 기록이 없습니다.",
+            )
+            continue
+
+        statuses[task_number] = "succeeded"
+        results[task_number] = TaskResult(
+            task.number,
+            task.title,
+            "succeeded",
+            work_summary=(
+                "검증된 이전 PASS 실행 기록을 재사용해 Worker와 검증을 "
+                "다시 실행하지 않았습니다."
+            ),
+            verification=tuple(
+                VerificationResult(
+                    str(item["item"]),
+                    str(item["result"]),
+                    str(item["evidence"]),
+                )
+                for item in prior_record["verification"]
+            ),
+            quality_score=prior_record["quality_score"],
+            final_status="PASS",
+        )
+
+    _block_failed_descendants(tasks_by_number, statuses, results)
     ready = [
         task.number
         for task in plan.tasks
-        if not task.prerequisite_numbers
+        if statuses[task.number] == "pending"
+        and all(
+            statuses.get(prerequisite) == "succeeded"
+            for prerequisite in task.prerequisite_numbers
+        )
     ]
     heapq.heapify(ready)
-    submitted = set(ready)
+    submitted = set(ready) | prior_task_numbers
     running: dict[Future[TaskResult], int] = {}
 
     with ThreadPoolExecutor(max_workers=max_parallel_tasks) as executor:

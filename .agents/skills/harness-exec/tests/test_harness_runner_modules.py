@@ -14,6 +14,7 @@ if str(SCRIPTS) not in sys.path:
 from harness_runner.evidence import ExecutionRecordStore, revision_fingerprint
 from harness_runner.execution import execute_workers
 from harness_runner.models import HarnessRequest, ParsedPlan, Task
+from harness_runner.parse import parse_invocation
 
 
 def task(number: int, *, prerequisites: tuple[int, ...] = ()) -> Task:
@@ -35,6 +36,7 @@ def worker_result(*, quality_score: object = 90, decision: str = "PASS") -> obje
         returncode = 0
         output_error = ""
         output = {
+            "work_summary": "completed",
             "mandatory_gates": {
                 name: {"result": "PASS", "evidence": "evidence"}
                 for name in (
@@ -44,6 +46,8 @@ def worker_result(*, quality_score: object = 90, decision: str = "PASS") -> obje
             },
             "verification": [{"item": "regression", "result": "PASS", "evidence": "current"}],
             "decision": decision,
+            "remaining_issues": [],
+            "final_status": "PASS",
             "quality_score": quality_score,
         }
 
@@ -76,6 +80,41 @@ class RevisionEvidenceTests(unittest.TestCase):
         self.assertTrue(calls[2].execution_context.prior_tdd_evidence)
         self.assertEqual(len(calls), 4)
 
+    def test_from_task_reuses_prior_pass_records_without_invoking_earlier_workers(self) -> None:
+        execute_workers(
+            self.plan,
+            self.request,
+            lambda _: worker_result(),
+            project_root=self.root,
+            record_store=self.store,
+        )
+        calls: list[int] = []
+
+        report = execute_workers(
+            self.plan,
+            HarnessRequest("rerun-plan", start_task_number=2),
+            lambda invocation: calls.append(invocation.task.number) or worker_result(),
+            project_root=self.root,
+            record_store=self.store,
+        )
+
+        self.assertTrue(report.succeeded)
+        self.assertEqual(calls, [2])
+        self.assertEqual(report.results[0].status, "succeeded")
+        self.assertIn("이전 PASS 실행 기록", report.results[0].work_summary)
+
+    def test_from_task_requires_trusted_prior_pass_records(self) -> None:
+        report = execute_workers(
+            self.plan,
+            HarnessRequest("rerun-plan", start_task_number=2),
+            lambda _: worker_result(),
+            project_root=self.root,
+            record_store=self.store,
+        )
+
+        self.assertEqual(report.results[0].status, "failed")
+        self.assertIn("PASS 실행 기록", report.results[0].message)
+        self.assertEqual(report.results[1].status, "blocked")
     def test_implementation_change_reuses_tdd_evidence_and_runs_current_regression(self) -> None:
         execute_workers(self.plan, self.request, lambda _: worker_result(), project_root=self.root, record_store=self.store)
         (self.root / "implementation" / "feature.py").write_text("value = 2\n", encoding="utf-8")
@@ -232,6 +271,17 @@ class RevisionEvidenceTests(unittest.TestCase):
             )
             self.assertEqual(len(calls), 1)
             self.assertEqual(report.results[0].status, "failed")
+
+
+class InvocationParsingTests(unittest.TestCase):
+    def test_parses_from_task_option_without_forwarding_it_to_worker(self) -> None:
+        request = parse_invocation(
+            "$harness-exec calendar-01 --from-task 7 인증 만료 흐름을 검증해줘"
+        )
+
+        self.assertEqual(request.plan_id, "calendar-01")
+        self.assertEqual(request.start_task_number, 7)
+        self.assertEqual(request.additional_request, "인증 만료 흐름을 검증해줘")
 
 
 if __name__ == "__main__":
