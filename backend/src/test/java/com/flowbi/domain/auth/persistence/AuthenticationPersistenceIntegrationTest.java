@@ -3,14 +3,14 @@ package com.flowbi.domain.auth.persistence;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.flowbi.domain.auth.persistence.entity.AuthUser;
-import com.flowbi.domain.auth.persistence.entity.Position;
-import com.flowbi.domain.auth.persistence.entity.Team;
 import com.flowbi.domain.auth.persistence.entity.UserCredential;
-import com.flowbi.domain.auth.persistence.repository.AuthUserRepository;
-import com.flowbi.domain.auth.persistence.repository.PositionRepository;
-import com.flowbi.domain.auth.persistence.repository.TeamRepository;
 import com.flowbi.domain.auth.persistence.repository.UserCredentialRepository;
+import com.flowbi.domain.position.entity.Position;
+import com.flowbi.domain.position.repository.PositionRepository;
+import com.flowbi.domain.team.entity.Team;
+import com.flowbi.domain.team.repository.TeamRepository;
+import com.flowbi.domain.user.entity.User;
+import com.flowbi.domain.user.repository.UserRepository;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -50,7 +50,7 @@ class AuthenticationPersistenceIntegrationTest {
   }
 
   @Autowired
-  private AuthUserRepository authUserRepository;
+  private UserRepository userRepository;
 
   @Autowired
   private UserCredentialRepository userCredentialRepository;
@@ -69,18 +69,34 @@ class AuthenticationPersistenceIntegrationTest {
 
   @Test
   void keepsEmployeeNumberAndCredentialUserRelationshipUnique() {
-    AuthUser user = authUserRepository.save(AuthUser.create("synthetic-user-a",position(),team()));
+    User user = userRepository.save(User.create("synthetic-user-a",position(),team()));
     userCredentialRepository
         .save(UserCredential.create(user,"$2a$10$hash-value-that-is-never-a-real-password",true));
 
-    assertThatThrownBy(() -> authUserRepository
-        .saveAndFlush(AuthUser.create("synthetic-user-a",position(),team())))
+    assertThatThrownBy(
+        () -> userRepository.saveAndFlush(User.create("synthetic-user-a",position(),team())))
         .isInstanceOf(DataIntegrityViolationException.class);
   }
 
   @Test
+  void createsTheFlywayBaselineTablesAndMapsUserOrganizationRelationships() throws Exception {
+    assertThat(tableExists("positions")).isTrue();
+    assertThat(tableExists("teams")).isTrue();
+    assertThat(tableExists("users")).isTrue();
+    assertThat(tableExists("user_credentials")).isTrue();
+
+    Position position = position();
+    Team team = team();
+    User user = userRepository.save(User.create("synthetic-user-d",position,team));
+    User foundUser = userRepository.findByEmployeeNumber("synthetic-user-d").orElseThrow();
+
+    assertThat(foundUser.getPosition()).isNotNull();
+    assertThat(foundUser.getTeam()).isNotNull();
+  }
+
+  @Test
   void keepsOneCredentialPerUser() {
-    AuthUser user = authUserRepository.save(AuthUser.create("synthetic-user-c",position(),team()));
+    User user = userRepository.save(User.create("synthetic-user-c",position(),team()));
     userCredentialRepository
         .save(UserCredential.create(user,"$2a$10$hash-value-that-is-never-a-real-password",true));
 
@@ -91,11 +107,11 @@ class AuthenticationPersistenceIntegrationTest {
 
   @Test
   void persistsCredentialWithoutExposingHashThroughUserLookup() {
-    AuthUser user = authUserRepository.save(AuthUser.create("synthetic-user-b",position(),team()));
+    User user = userRepository.save(User.create("synthetic-user-b",position(),team()));
     UserCredential credential = userCredentialRepository
         .save(UserCredential.create(user,"$2a$10$hash-value-that-is-never-a-real-password",true));
 
-    AuthUser foundUser = authUserRepository.findByEmployeeNumber("synthetic-user-b").orElseThrow();
+    User foundUser = userRepository.findByEmployeeNumber("synthetic-user-b").orElseThrow();
     UserCredential foundCredential = userCredentialRepository
         .findByUserUserId(foundUser.getUserId()).orElseThrow();
 

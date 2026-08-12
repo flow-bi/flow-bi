@@ -1,13 +1,13 @@
 package com.flowbi.domain.auth.fixture;
 
-import com.flowbi.domain.auth.persistence.entity.AuthUser;
-import com.flowbi.domain.auth.persistence.entity.Position;
-import com.flowbi.domain.auth.persistence.entity.Team;
 import com.flowbi.domain.auth.persistence.entity.UserCredential;
-import com.flowbi.domain.auth.persistence.repository.AuthUserRepository;
-import com.flowbi.domain.auth.persistence.repository.PositionRepository;
-import com.flowbi.domain.auth.persistence.repository.TeamRepository;
 import com.flowbi.domain.auth.persistence.repository.UserCredentialRepository;
+import com.flowbi.domain.position.entity.Position;
+import com.flowbi.domain.position.service.PositionService;
+import com.flowbi.domain.team.entity.Team;
+import com.flowbi.domain.team.service.TeamService;
+import com.flowbi.domain.user.entity.User;
+import com.flowbi.domain.user.service.UserService;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.core.env.Environment;
@@ -24,21 +24,20 @@ public class SyntheticAuthFixtureInitializer implements ApplicationRunner {
   private static final String FIXTURE_TEAM = "Synthetic Fixture Team";
   private final TestFixtureProperties properties;
   private final Environment environment;
-  private final AuthUserRepository authUserRepository;
-  private final PositionRepository positionRepository;
-  private final TeamRepository teamRepository;
+  private final UserService users;
+  private final PositionService positions;
+  private final TeamService teams;
   private final UserCredentialRepository userCredentialRepository;
   private final PasswordEncoder passwordEncoder;
 
   public SyntheticAuthFixtureInitializer(TestFixtureProperties properties, Environment environment,
-      AuthUserRepository authUserRepository, PositionRepository positionRepository,
-      TeamRepository teamRepository, UserCredentialRepository userCredentialRepository,
-      PasswordEncoder passwordEncoder) {
+      UserService users, PositionService positions, TeamService teams,
+      UserCredentialRepository userCredentialRepository, PasswordEncoder passwordEncoder) {
     this.properties = properties;
     this.environment = environment;
-    this.authUserRepository = authUserRepository;
-    this.positionRepository = positionRepository;
-    this.teamRepository = teamRepository;
+    this.users = users;
+    this.positions = positions;
+    this.teams = teams;
     this.userCredentialRepository = userCredentialRepository;
     this.passwordEncoder = passwordEncoder;
   }
@@ -49,10 +48,8 @@ public class SyntheticAuthFixtureInitializer implements ApplicationRunner {
     if (!properties.isEnabled())
       return;
     validateConfiguration();
-    Position position = positionRepository.findByPositionName(FIXTURE_POSITION)
-        .orElseGet(() -> positionRepository.save(Position.create(FIXTURE_POSITION)));
-    Team team = teamRepository.findByTeamName(FIXTURE_TEAM)
-        .orElseGet(() -> teamRepository.save(Team.create(FIXTURE_TEAM)));
+    Position position = positions.findOrCreate(FIXTURE_POSITION);
+    Team team = teams.findOrCreate(FIXTURE_TEAM);
     createIfMissing(properties.getNormal(),false,position,team);
     createIfMissing(properties.getPasswordChangeRequired(),true,position,team);
   }
@@ -82,8 +79,7 @@ public class SyntheticAuthFixtureInitializer implements ApplicationRunner {
 
   private void createIfMissing(TestFixtureProperties.Account account,boolean mustChangePassword,
       Position position,Team team) {
-    AuthUser user = authUserRepository.findByEmployeeNumber(account.getEmployeeNumber()).orElseGet(
-        () -> authUserRepository.save(AuthUser.create(account.getEmployeeNumber(),position,team)));
+    User user = users.findOrCreateFixtureUser(account.getEmployeeNumber(),position,team);
     if (userCredentialRepository.findByUserUserId(user.getUserId()).isPresent())
       return;
     userCredentialRepository.save(UserCredential.create(user,

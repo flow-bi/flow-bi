@@ -1,4 +1,4 @@
-package com.flowbi.domain.auth.persistence.entity;
+package com.flowbi.domain.position.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

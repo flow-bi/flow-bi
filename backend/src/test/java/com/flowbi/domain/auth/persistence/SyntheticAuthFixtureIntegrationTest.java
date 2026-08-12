@@ -3,10 +3,10 @@ package com.flowbi.domain.auth.persistence;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.flowbi.domain.auth.fixture.SyntheticAuthFixtureInitializer;
-import com.flowbi.domain.auth.persistence.entity.AuthUser;
 import com.flowbi.domain.auth.persistence.entity.UserCredential;
-import com.flowbi.domain.auth.persistence.repository.AuthUserRepository;
 import com.flowbi.domain.auth.persistence.repository.UserCredentialRepository;
+import com.flowbi.domain.user.entity.User;
+import com.flowbi.domain.user.repository.UserRepository;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -50,7 +50,7 @@ class SyntheticAuthFixtureIntegrationTest {
   }
 
   @Autowired
-  private AuthUserRepository authUserRepository;
+  private UserRepository userRepository;
 
   @Autowired
   private UserCredentialRepository userCredentialRepository;
@@ -65,16 +65,15 @@ class SyntheticAuthFixtureIntegrationTest {
   void createsHashedFixturesIdempotentlyAndRepairsAnIncompleteFixture() throws Exception {
     assertFixture(NORMAL_EMPLOYEE_NUMBER,NORMAL_PASSWORD,false);
     assertFixture(CHANGE_EMPLOYEE_NUMBER,CHANGE_PASSWORD,true);
-    assertThat(authUserRepository.count()).isEqualTo(2);
+    assertThat(userRepository.count()).isEqualTo(2);
     assertThat(userCredentialRepository.count()).isEqualTo(2);
 
     initializer.run(new DefaultApplicationArguments(new String[0]));
 
-    assertThat(authUserRepository.count()).isEqualTo(2);
+    assertThat(userRepository.count()).isEqualTo(2);
     assertThat(userCredentialRepository.count()).isEqualTo(2);
 
-    AuthUser normalUser = authUserRepository.findByEmployeeNumber(NORMAL_EMPLOYEE_NUMBER)
-        .orElseThrow();
+    User normalUser = userRepository.findByEmployeeNumber(NORMAL_EMPLOYEE_NUMBER).orElseThrow();
     UserCredential normalCredential = userCredentialRepository
         .findByUserUserId(normalUser.getUserId()).orElseThrow();
     userCredentialRepository.delete(normalCredential);
@@ -83,13 +82,13 @@ class SyntheticAuthFixtureIntegrationTest {
     initializer.run(new DefaultApplicationArguments(new String[0]));
 
     assertFixture(NORMAL_EMPLOYEE_NUMBER,NORMAL_PASSWORD,false);
-    assertThat(authUserRepository.count()).isEqualTo(2);
+    assertThat(userRepository.count()).isEqualTo(2);
     assertThat(userCredentialRepository.count()).isEqualTo(2);
   }
 
   private void assertFixture(String employeeNumber,String plainPassword,
       boolean mustChangePassword) {
-    AuthUser user = authUserRepository.findByEmployeeNumber(employeeNumber).orElseThrow();
+    User user = userRepository.findByEmployeeNumber(employeeNumber).orElseThrow();
     UserCredential credential = userCredentialRepository.findByUserUserId(user.getUserId())
         .orElseThrow();
 

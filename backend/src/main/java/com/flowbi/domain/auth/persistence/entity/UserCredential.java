@@ -1,5 +1,7 @@
 package com.flowbi.domain.auth.persistence.entity;
 
+import com.flowbi.domain.user.entity.User;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -21,7 +23,7 @@ public class UserCredential {
 
   @OneToOne(fetch = FetchType.LAZY, optional = false)
   @JoinColumn(name = "user_id", nullable = false, unique = true)
-  private AuthUser user;
+  private User user;
 
   @Column(name = "password_hash", nullable = false, length = 255)
   private String passwordHash;
@@ -32,14 +34,13 @@ public class UserCredential {
   protected UserCredential() {
   }
 
-  private UserCredential(AuthUser user, String passwordHash, boolean mustChangePassword) {
+  private UserCredential(User user, String passwordHash, boolean mustChangePassword) {
     this.user = user;
     this.passwordHash = passwordHash;
     this.mustChangePassword = mustChangePassword;
   }
 
-  public static UserCredential create(AuthUser user,String passwordHash,
-      boolean mustChangePassword) {
+  public static UserCredential create(User user,String passwordHash,boolean mustChangePassword) {
     return new UserCredential(user, passwordHash, mustChangePassword);
   }
 

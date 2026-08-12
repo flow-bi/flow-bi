@@ -6,11 +6,11 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.flowbi.domain.auth.persistence.entity.AuthUser;
 import com.flowbi.domain.auth.persistence.entity.UserCredential;
-import com.flowbi.domain.auth.persistence.repository.AuthUserRepository;
 import com.flowbi.domain.auth.persistence.repository.UserCredentialRepository;
 import com.flowbi.domain.auth.session.SessionGenerationService;
+import com.flowbi.domain.user.service.UserAuthentication;
+import com.flowbi.domain.user.service.UserService;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -19,7 +19,7 @@ class LoginAuthenticationServiceTest {
 
   @Test
   void returnsTheSameGenericFailureForUnknownEmployeeNumberAndWrongPassword() {
-    AuthUserRepository users = mock(AuthUserRepository.class);
+    UserService users = mock(UserService.class);
     UserCredentialRepository credentials = mock(UserCredentialRepository.class);
     PasswordEncoder encoder = mock(PasswordEncoder.class);
     LoginRateLimiter limiter = mock(LoginRateLimiter.class);
@@ -27,7 +27,7 @@ class LoginAuthenticationServiceTest {
     SessionGenerationService generations = mock(SessionGenerationService.class);
     LoginAuthenticationService service = new LoginAuthenticationService(users, credentials, encoder,
         limiter, audit, generations);
-    when(users.findByEmployeeNumber("unknown")).thenReturn(Optional.empty());
+    when(users.findAuthenticationByEmployeeNumber("unknown")).thenReturn(Optional.empty());
 
     LoginResult unknown = service.authenticate("unknown","Password1!","127.0.0.1",false);
 
@@ -37,17 +37,15 @@ class LoginAuthenticationServiceTest {
 
   @Test
   void resetsFailureStateOnlyAfterSuccessfulPasswordValidation() {
-    AuthUserRepository users = mock(AuthUserRepository.class);
+    UserService users = mock(UserService.class);
     UserCredentialRepository credentials = mock(UserCredentialRepository.class);
     PasswordEncoder encoder = mock(PasswordEncoder.class);
     LoginRateLimiter limiter = mock(LoginRateLimiter.class);
     LoginAuditLogger audit = mock(LoginAuditLogger.class);
     SessionGenerationService generations = mock(SessionGenerationService.class);
-    AuthUser user = mock(AuthUser.class);
+    UserAuthentication user = new UserAuthentication(100L, "ACTIVE");
     UserCredential credential = mock(UserCredential.class);
-    when(users.findByEmployeeNumber("E100")).thenReturn(Optional.of(user));
-    when(user.getUserId()).thenReturn(100L);
-    when(user.getStatus()).thenReturn("ACTIVE");
+    when(users.findAuthenticationByEmployeeNumber("E100")).thenReturn(Optional.of(user));
     when(credentials.findByUserUserId(100L)).thenReturn(Optional.of(credential));
     when(credential.getPasswordHash()).thenReturn("hash");
     when(encoder.matches("Password1!","hash")).thenReturn(true);
@@ -64,7 +62,7 @@ class LoginAuthenticationServiceTest {
 
   @Test
   void failsClosedWhenRateLimitStorageIsUnavailable() {
-    AuthUserRepository users = mock(AuthUserRepository.class);
+    UserService users = mock(UserService.class);
     LoginRateLimiter limiter = mock(LoginRateLimiter.class);
     LoginAuditLogger audit = mock(LoginAuditLogger.class);
     when(limiter.isLimited("E100","127.0.0.1"))

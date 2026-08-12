@@ -1,6 +1,6 @@
-package com.flowbi.domain.auth.persistence.repository;
+package com.flowbi.domain.position.repository;
 
-import com.flowbi.domain.auth.persistence.entity.Position;
+import com.flowbi.domain.position.entity.Position;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 

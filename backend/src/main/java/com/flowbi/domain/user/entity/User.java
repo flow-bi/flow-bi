@@ -1,5 +1,7 @@
-package com.flowbi.domain.auth.persistence.entity;
+package com.flowbi.domain.user.entity;
 
+import com.flowbi.domain.position.entity.Position;
+import com.flowbi.domain.team.entity.Team;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -12,7 +14,7 @@ import jakarta.persistence.Table;
 
 @Entity
 @Table(name = "users")
-public class AuthUser {
+public class User {
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -36,10 +38,10 @@ public class AuthUser {
   @Column(length = 30)
   private String status;
 
-  protected AuthUser() {
+  protected User() {
   }
 
-  private AuthUser(String employeeNumber, Position position, Team team) {
+  private User(String employeeNumber, Position position, Team team) {
     this.employeeNumber = employeeNumber;
     this.position = position;
     this.team = team;
@@ -47,8 +49,8 @@ public class AuthUser {
     this.status = "ACTIVE";
   }
 
-  public static AuthUser create(String employeeNumber,Position position,Team team) {
-    return new AuthUser(employeeNumber, position, team);
+  public static User create(String employeeNumber,Position position,Team team) {
+    return new User(employeeNumber, position, team);
   }
 
   public Long getUserId() {
@@ -61,5 +63,13 @@ public class AuthUser {
 
   public String getStatus() {
     return status;
+  }
+
+  public Position getPosition() {
+    return position;
+  }
+
+  public Team getTeam() {
+    return team;
   }
 }

@@ -1,6 +1,6 @@
-package com.flowbi.domain.auth.persistence.repository;
+package com.flowbi.domain.team.repository;
 
-import com.flowbi.domain.auth.persistence.entity.Team;
+import com.flowbi.domain.team.entity.Team;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 
