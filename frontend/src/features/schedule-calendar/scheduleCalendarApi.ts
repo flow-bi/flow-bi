@@ -1,3 +1,5 @@
+import { authenticatedFetch } from '../authenticatedFetch'
+
 export type ScheduleType = 'PERSONAL' | 'TEAM' | 'PROJECT'
 export type ScheduleColorLabel = 'RED' | 'ORANGE' | 'YELLOW' | 'GREEN' | 'BLUE' | 'PURPLE'
 
@@ -52,7 +54,7 @@ export class ScheduleCalendarApiError extends Error {
 }
 
 async function requestJson<T>(path: string, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(path, { signal })
+  const response = await authenticatedFetch(path, { signal })
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as { message?: string } | null
     throw new ScheduleCalendarApiError(
@@ -64,7 +66,7 @@ async function requestJson<T>(path: string, signal?: AbortSignal): Promise<T> {
 }
 
 async function requestMutation<T>(path: string, init: RequestInit): Promise<T> {
-  const response = await fetch(path, {
+  const response = await authenticatedFetch(path, {
     ...init,
     headers: { 'Content-Type': 'application/json', ...init.headers },
   })
@@ -105,7 +107,7 @@ export function updateSchedule(
 }
 
 export async function cancelSchedule(id: number): Promise<void> {
-  const response = await fetch(`/api/schedules/${id}`, { method: 'DELETE' })
+  const response = await authenticatedFetch(`/api/schedules/${id}`, { method: 'DELETE' })
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as { message?: string } | null
     throw new ScheduleCalendarApiError(

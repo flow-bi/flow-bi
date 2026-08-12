@@ -23,6 +23,9 @@ const detail = {
 }
 
 function interceptCalendar() {
+  cy.intercept('GET', '/api/auth/session', { authenticated: true, mustChangePassword: false }).as(
+    'session',
+  )
   cy.intercept('GET', '/api/schedules?*', [summary]).as('schedules')
   cy.intercept('GET', '/api/schedules/11', detail).as('detail')
 }

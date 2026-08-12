@@ -1,3 +1,5 @@
+import { authenticatedFetch } from '../authenticatedFetch'
+
 export type ScheduleType = 'PERSONAL' | 'TEAM' | 'PROJECT'
 export type ScheduleVisibility = 'PRIVATE' | 'TEAM' | 'PROJECT'
 export type ScheduleColorLabel = 'RED' | 'ORANGE' | 'YELLOW' | 'GREEN' | 'BLUE' | 'PURPLE'
@@ -8,7 +10,6 @@ export interface AttendeeCandidate {
 }
 
 export interface CreateScheduleRequest {
-  creatorId: number
   title: string
   type: ScheduleType
   visibility: ScheduleVisibility
@@ -38,7 +39,7 @@ export class ScheduleApiError extends Error {
 }
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
+  const response = await authenticatedFetch(path, {
     ...init,
     headers: { 'Content-Type': 'application/json', ...init?.headers },
   })

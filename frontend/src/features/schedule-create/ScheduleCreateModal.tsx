@@ -20,7 +20,6 @@ import {
 } from './scheduleForm'
 
 export interface ScheduleCreateModalProps {
-  creatorId: number
   onClose: () => void
   createSchedule?: (request: CreateScheduleRequest) => Promise<void>
   searchAttendees?: (query: string) => Promise<AttendeeCandidate[]>
@@ -31,7 +30,6 @@ function typeLabel(type: ScheduleType): string {
 }
 
 export function ScheduleCreateModal({
-  creatorId,
   onClose,
   createSchedule = createScheduleRequest,
   searchAttendees = searchAttendeesRequest,
@@ -108,6 +106,7 @@ export function ScheduleCreateModal({
   }, [form, scheduleType])
 
   function close() {
+    queryClient.removeQueries({ queryKey: ['schedule', 'attendee-candidates'] })
     lastFocusedElement.current?.focus()
     onClose()
   }
@@ -155,10 +154,7 @@ export function ScheduleCreateModal({
   }
 
   function submit(values: ScheduleFormValues) {
-    mutation.mutate({
-      creatorId,
-      ...toScheduleRequest(values),
-    })
+    mutation.mutate(toScheduleRequest(values))
   }
 
   const totalAttendees = selectedAttendees.length + (creatorAttends ? 1 : 0)

@@ -18,7 +18,6 @@ function renderModal(onClose = vi.fn()) {
         </button>
         {isOpen && (
           <ScheduleCreateModal
-            creatorId={1}
             onClose={() => {
               onClose()
               setIsOpen(false)
@@ -30,7 +29,7 @@ function renderModal(onClose = vi.fn()) {
     )
   }
   const view = render(<ModalHarness />)
-  return { ...view, onClose }
+  return { ...view, onClose, queryClient }
 }
 
 describe('ScheduleCreateModal', () => {
@@ -56,11 +55,7 @@ describe('ScheduleCreateModal', () => {
       <QueryClientProvider
         client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
       >
-        <ScheduleCreateModal
-          creatorId={1}
-          onClose={vi.fn()}
-          searchAttendees={() => Promise.resolve([])}
-        />
+        <ScheduleCreateModal onClose={vi.fn()} searchAttendees={() => Promise.resolve([])} />
       </QueryClientProvider>,
     )
 
@@ -81,7 +76,6 @@ describe('ScheduleCreateModal', () => {
         client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
       >
         <ScheduleCreateModal
-          creatorId={1}
           createSchedule={createSchedule}
           onClose={vi.fn()}
           searchAttendees={() => Promise.resolve([{ userId: 2, displayName: '민지' }])}
@@ -119,7 +113,6 @@ describe('ScheduleCreateModal', () => {
       >
         <ScheduleCreateModal
           createSchedule={createSchedule}
-          creatorId={1}
           onClose={onClose}
           searchAttendees={() => Promise.resolve([])}
         />
@@ -153,7 +146,6 @@ describe('ScheduleCreateModal', () => {
         client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
       >
         <ScheduleCreateModal
-          creatorId={1}
           onClose={vi.fn()}
           searchAttendees={() => Promise.reject(new ScheduleApiError('forbidden', 403))}
         />
@@ -164,5 +156,19 @@ describe('ScheduleCreateModal', () => {
 
     expect(await screen.findByText('참석자 검색 권한이 없습니다.')).toBeVisible()
     expect(screen.queryByText('일치하는 참석자가 없습니다.')).not.toBeInTheDocument()
+  })
+
+  it('removes attendee candidates from the query cache when the modal closes', async () => {
+    const user = userEvent.setup()
+    const { queryClient } = renderModal()
+
+    await user.click(screen.getByRole('button', { name: '일정 추가' }))
+    await user.type(screen.getByLabelText('참석자 검색'), '민지')
+    await screen.findByText('일치하는 참석자가 없습니다.')
+    expect(queryClient.getQueryData(['schedule', 'attendee-candidates', '민지'])).toEqual([])
+
+    await user.keyboard('{Escape}')
+
+    expect(queryClient.getQueryData(['schedule', 'attendee-candidates', '민지'])).toBeUndefined()
   })
 })
