@@ -37,6 +37,7 @@ export function PasswordChangePage({
   const [requestError, setRequestError] = useState<string>()
   const [completed, setCompleted] = useState(false)
   const errorRef = useRef<HTMLDivElement>(null)
+  const headingRef = useRef<HTMLHeadingElement>(null)
   const {
     formState: { errors, isSubmitting },
     handleSubmit,
@@ -55,6 +56,10 @@ export function PasswordChangePage({
       errorRef.current?.focus()
     }
   }, [errors.confirmation, errors.newPassword, requestError, setFocus])
+
+  useEffect(() => {
+    headingRef.current?.focus()
+  }, [])
 
   async function onSubmit(values: PasswordChangeFormValues) {
     if (isSubmitting) {
@@ -79,7 +84,9 @@ export function PasswordChangePage({
   return (
     <main className="auth-destination">
       <section aria-labelledby="password-change-heading" className="login-card">
-        <h1 id="password-change-heading">비밀번호 변경</h1>
+        <h1 id="password-change-heading" ref={headingRef} tabIndex={-1}>
+          비밀번호 변경
+        </h1>
         <p>계속하려면 새 비밀번호를 설정해 주세요.</p>
         {completed ? <p aria-live="polite">비밀번호가 변경되었습니다.</p> : null}
         <form noValidate onSubmit={(event) => void handleSubmit(onSubmit)(event)}>
