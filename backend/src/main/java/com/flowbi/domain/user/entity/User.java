@@ -41,16 +41,20 @@ public class User {
   protected User() {
   }
 
-  private User(String employeeNumber, Position position, Team team) {
+  private User(String employeeNumber, String name, Position position, Team team) {
     this.employeeNumber = employeeNumber;
     this.position = position;
     this.team = team;
-    this.name = "Synthetic Fixture";
+    this.name = name;
     this.status = "ACTIVE";
   }
 
   public static User create(String employeeNumber,Position position,Team team) {
-    return new User(employeeNumber, position, team);
+    return new User(employeeNumber, "Synthetic Fixture", position, team);
+  }
+
+  public static User create(String employeeNumber,String name,Position position,Team team) {
+    return new User(employeeNumber, name, position, team);
   }
 
   public Long getUserId() {
@@ -63,6 +67,10 @@ public class User {
 
   public String getStatus() {
     return status;
+  }
+
+  public String getName() {
+    return name;
   }
 
   public Position getPosition() {

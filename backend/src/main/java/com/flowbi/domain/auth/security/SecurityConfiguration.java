@@ -52,10 +52,12 @@ public class SecurityConfiguration {
         .sessionManagement(
             session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
                 .sessionFixation(fixation -> fixation.changeSessionId()))
-        .authorizeHttpRequests(
-            authorize -> authorize.requestMatchers(HttpMethod.POST,"/api/auth/login").permitAll()
-                .requestMatchers(HttpMethod.GET,"/api/auth/csrf").permitAll().anyRequest()
-                .authenticated())
+        .authorizeHttpRequests(authorize -> authorize
+            .requestMatchers(HttpMethod.POST,"/api/auth/login","/api/dev/auth/employee-accounts")
+            .permitAll()
+            .requestMatchers(HttpMethod.GET,"/api/auth/csrf",
+                "/api/dev/auth/employee-account-options")
+            .permitAll().anyRequest().authenticated())
         .exceptionHandling(exception -> exception
             .authenticationEntryPoint(new JsonAuthenticationEntryPoint(objectMapper))
             .accessDeniedHandler(new JsonAccessDeniedHandler(objectMapper)))

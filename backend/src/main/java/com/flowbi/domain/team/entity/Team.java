@@ -29,4 +29,12 @@ public class Team {
   public static Team create(String teamName) {
     return new Team(teamName);
   }
+
+  public Long getTeamId() {
+    return teamId;
+  }
+
+  public String getTeamName() {
+    return teamName;
+  }
 }

@@ -29,4 +29,12 @@ public class Position {
   public static Position create(String positionName) {
     return new Position(positionName);
   }
+
+  public Long getPositionId() {
+    return positionId;
+  }
+
+  public String getPositionName() {
+    return positionName;
+  }
 }
