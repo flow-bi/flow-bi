@@ -535,13 +535,14 @@ FR-017~FR-018의 등록자 기준 수정·Soft Delete 상태 전이와 회의실
 - [ ] 일정 생성·수정 시 참석자와 팀·프로젝트의 존재·활성·현재 Actor의 접근 가능성을 실제 사용자·조직·프로젝트 기능을 통해 검증한다.
 - [ ] 목록·상세·수정·취소에서 PERSONAL 작성자·참석자, TEAM 소속·참석자, PROJECT 참여자·참석자 공개 정책과 등록자 변경 권한을 실제 데이터로 적용한다.
 - [ ] Frontend Calendar API Client를 타 팀이 제공한 인증 Session과 실제 보호 Endpoint에 연결하고 401·403·404·409, 인증 만료와 권한 상태를 기존 UI 흐름에 반영한다.
+- [ ] Calendar 목록·상세·생성·수정·취소·참석자 검색 중 보호 API가 `401 UNAUTHENTICATED`를 반환하면 기존 로그인 화면으로 전환하고, `403`·`404`는 로그인 상태를 유지한 채 기존 Calendar 오류 흐름으로 처리하는 실패 Frontend Test를 먼저 작성한 뒤 공통 Session 만료 연결을 구현한다.
 - [ ] Green 이후 인증 구현 세부사항이 Calendar 도메인에 유출되지 않도록 Adapter와 Mapping 책임만 리팩터링한다.
 
 #### 검증 항목
 
 - [ ] `cd backend && ./gradlew test --tests '*Schedule*Security*' --tests '*Schedule*UserIntegration*'`로 실제 Security Test Fixture를 사용한 인증·객체 수준 인가·IDOR·사용자 상태·소속 변경 시나리오를 통과한다.
 - [ ] `cd backend && ./gradlew test --tests '*Schedule*Controller*' --tests '*Schedule*Attendee*'`로 보호 Endpoint와 참석자 검색의 Status·Error Code·최소 응답·개인정보 비노출을 확인한다.
-- [ ] `cd frontend && npm run test:unit -- --run src/features`와 `cd frontend && npm run typecheck`로 실제 인증 Session 계약 연결과 Task 2·4·6 사용자 흐름 간 충돌·회귀가 없음을 확인한다.
+- [ ] `cd frontend && npm run test:unit -- --run src/features`, `cd frontend && npm run test:unit -- --run src/test/App.test.tsx`와 `cd frontend && npm run typecheck`로 실제 인증 Session 계약, Calendar `401` 로그인 전환, `403`·`404` 상태 유지와 Task 2·4·6 사용자 흐름 간 충돌·회귀가 없음을 확인한다.
 - [ ] `cd backend && ./gradlew spotlessCheck`와 `cd frontend && npm run lint`로 양 영역의 정적 규칙을 확인한다.
 
 #### 완료 조건

@@ -234,11 +234,12 @@ never contain a session identifier, CSRF token, or authentication credential.
 
 참석자 ID 목록에 같은 사용자가 반복되면 `400 Bad Request`와 `DUPLICATE_SCHEDULE_PARTICIPANT`로 거부한다. 접근할 수 없거나 비활성인 사용자 ID는 중복 여부와 관계없이 `400 Bad Request`로 거부한다.
 
-`POST /api/schedules`의 Calendar 내부 생성 계약은 인증 연동 전에는 등록자 ID를 명시적으로 받는 경계 DTO로만 사용한다. 보호 Controller가 추가되는 Task 7에서 이 값은 검증된 Principal로만 채운다.
+`POST /api/schedules`의 등록자는 요청 Body에서 받지 않는다. 보호 Controller가 검증된 `LoginPrincipal`의
+내부 사용자 ID를 Calendar Core의 `creatorId`로 전달하며, 클라이언트가 임의의 등록자 ID를 지정할 수 없다.
+모든 Calendar Endpoint는 서버 Session Cookie를 사용하고 상태 변경 요청은 CSRF Token을 함께 검증한다.
 
 ```json
 {
-  "creatorId": 1,
   "title": "스프린트 계획",
   "type": "TEAM",
   "visibility": "TEAM",
@@ -256,7 +257,7 @@ never contain a session identifier, CSRF token, or authentication credential.
 }
 ```
 
-`startAt`과 `endAt`은 Offset을 포함하는 ISO 8601 시각이며 `[startAt, endAt)` 구간으로 해석한다. `endAt`은 반드시 `startAt` 뒤여야 한다. `PERSONAL`/`PRIVATE`는 팀·프로젝트 대상이 없어야 하고, `TEAM`/`TEAM`은 하나 이상의 팀 대상만, `PROJECT`/`PROJECT`는 하나 이상의 프로젝트 대상만 가져야 한다. 색상은 `RED`, `ORANGE`, `YELLOW`, `GREEN`, `BLUE`, `PURPLE` 중 하나다. 외부 사용자·팀·프로젝트의 존재·활성·접근성 실패는 Calendar의 `SCHEDULE_REFERENCE_INVALID` 계약으로 변환하며 실제 판정 Adapter는 Task 7에서 연결한다.
+`startAt`과 `endAt`은 Offset을 포함하는 ISO 8601 시각이며 `[startAt, endAt)` 구간으로 해석한다. `endAt`은 반드시 `startAt` 뒤여야 한다. `PERSONAL`/`PRIVATE`는 팀·프로젝트 대상이 없어야 하고, `TEAM`/`TEAM`은 하나 이상의 팀 대상만, `PROJECT`/`PROJECT`는 하나 이상의 프로젝트 대상만 가져야 한다. 색상은 `RED`, `ORANGE`, `YELLOW`, `GREEN`, `BLUE`, `PURPLE` 중 하나다. 사용자·팀·프로젝트의 존재·활성·접근성은 Calendar Adapter가 실제 원장 데이터를 기준으로 판정하며 실패는 `SCHEDULE_REFERENCE_INVALID` 계약으로 변환한다.
 
 조회 결과는 다음 공개 규칙을 적용한다.
 
@@ -264,9 +265,8 @@ never contain a session identifier, CSRF token, or authentication credential.
 - `TEAM`: 연결된 팀 소속 사용자, 참석자와 명시적 사용자 공유 대상
 - `PROJECT`: 연결된 프로젝트 참여자, 참석자와 명시적 사용자 공유 대상
 
-인증 Principal 및 조직·프로젝트 Adapter가 Task 7에서 연결되기 전, Calendar Core의 조회 경계 DTO는
-검증 가능한 Actor ID를 명시적으로 받는다. 이 DTO는 HTTP Request나 인증 우회 수단이 아니며, 보호
-Controller에서는 검증된 Principal만 Actor ID를 제공한다.
+Calendar Core의 조회 경계 DTO는 검증 가능한 Actor ID를 명시적으로 받는다. 이 DTO는 HTTP Request나
+인증 우회 수단이 아니며, 보호 Controller에서는 검증된 Principal만 Actor ID를 제공한다.
 
 `GET /api/schedules?from=&to=`는 다음 Calendar Core 계약을 사용한다.
 
@@ -309,8 +309,8 @@ Controller에서는 검증된 Principal만 Actor ID를 제공한다.
 상태를 다시 검증한다. 존재하지 않는 일정, `CANCELED` 일정 및 Actor에게 공개되지 않은 일정은 모두
 동일하게 `404 Not Found`와 `SCHEDULE_NOT_FOUND`를 반환하며, 존재 여부·내부 예외·개인정보를 구분해 노출하지 않는다.
 
-`PUT /api/schedules/{scheduleId}`는 일반 일정의 등록자만 호출할 수 있다. Task 7 전 Calendar Core는
-검증 가능한 `actorId`를 경계 입력으로 받고, 보호 Controller가 추가되면 검증된 Principal만 이 값을 제공한다.
+`PUT /api/schedules/{scheduleId}`는 일반 일정의 등록자만 호출할 수 있다. Calendar Core는 검증 가능한
+`actorId`를 경계 입력으로 받고, 보호 Controller는 검증된 Principal만 이 값을 제공한다.
 요청 본문은 생성 요청에서 `creatorId`를 제외한 아래 수정 가능 필드를 모두 포함한다. 부분 수정은 제공하지
 않으며, 유형·공개 범위·공유 대상·참석자와 시간 구간은 하나의 트랜잭션으로 함께 재검증한다.
 
