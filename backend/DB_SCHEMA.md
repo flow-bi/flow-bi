@@ -253,7 +253,7 @@ schedules 1 --- N rooms_reservations
 
 ## 7. 승인된 Calendar Migration Schema
 
-ADR-0001과 ADR-0002 승인에 따라 `db/migration/V1__create_calendar_schema.sql`은 기존 기준선의 `users`, `teams`, `projects` 식별자를 참조해 Calendar 테이블을 생성한다. 각 참조 테이블의 상세 원장은 해당 도메인이 소유하며 Calendar가 사용자·조직 데이터를 생성하거나 관리하지 않는다.
+ADR-0001, ADR-0002와 ADR-0003 승인에 따라 Migration은 UTC Timestamp 기반 전역 Version 순서로 적용한다. `V20260812000001_00__auth_create_authentication_tables.sql`이 `users`와 `teams`를 생성하고, `V20260812000002_00__calendar_create_calendar_schema.sql`이 해당 식별자와 Calendar의 임시 `projects` 기준선을 참조해 Calendar 테이블을 생성한다. `V20260812000003_00__calendar_add_creation_constraints.sql`은 Calendar 제약조건과 Index를 추가한다. `V20260812000004_00__project_add_membership_contract.sql`은 Task 7의 실제 프로젝트 참여 판정을 위해 기준선 `projects`에 활성 상태를 추가하고 `projects_members`의 참조·중복 제약과 사용자 조회 Index를 생성한다. 사용자·조직 원장은 Authentication이 소유하며 Calendar가 이를 생성하거나 관리하지 않는다. `projects`와 `projects_members` 기준선은 Project 도메인의 영속 계약이 도입될 때 소유권을 이전한다.
 
 - `schedules`: `status (ACTIVE|CANCELED)`, `cancelled_at`, `cancelled_by`, `is_all_day`, `color_label (RED|ORANGE|YELLOW|GREEN|BLUE|PURPLE)`, `creator_attends`를 추가하고 유형·공개 범위, 시간 구간, 취소 감사 조합을 CHECK로 보장한다.
 - `schedules_details.schedule_id`는 UNIQUE인 1:1 관계다.
@@ -306,7 +306,7 @@ ADR-0001과 ADR-0002 승인에 따라 `db/migration/V1__create_calendar_schema.s
 
 ## 7.3 Authentication migration and fixture boundary
 
-- `backend/src/main/resources/db/migration/V1__create_authentication_tables.sql` creates the minimal `positions`, `teams`, `users`, and `user_credentials` tables required by the authentication baseline.
+- `backend/src/main/resources/db/migration/V20260812000001_00__auth_create_authentication_tables.sql` creates the minimal `positions`, `teams`, `users`, and `user_credentials` tables required by the authentication baseline.
 - `users.employee_number` is unique; `user_credentials.user_id` is unique and required; both user reference keys are required foreign keys. `must_change_password` defaults to `TRUE`, and `password_hash` is required with a maximum length of 255.
 - Synthetic authentication fixtures are not migrations. They are created only at runtime when the `local` or `test` profile and the explicit `auth.test-fixtures.enabled` flag are both active, with all values injected from runtime configuration. Production profiles refuse startup if the flag is enabled.
 
@@ -319,4 +319,6 @@ ADR-0001과 ADR-0002 승인에 따라 `db/migration/V1__create_calendar_schema.s
 5. 승인된 Migration을 작성하고 검증한다.
 
 - 이미 적용된 Migration 파일은 수정하지 않고 새 Migration을 추가한다.
+- 새 Migration Version은 ADR-0003의 `VyyyyMMddHHmmss_NN__domain_description.sql` 규칙을 사용한다.
+- Flyway `outOfOrder`는 기본값 `false`를 유지한다.
 - 파괴적 변경은 데이터 보존·전환·복구 계획과 사람의 승인이 선행되어야 한다.
