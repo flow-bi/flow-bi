@@ -1,5 +1,6 @@
 .codex-logs/
 .agents/**/__pycache__/
 .agents/**/*.py[cod]
+.agents/skills/harness-exec/scripts/harness_runner/.execution-records/
 
 .env
