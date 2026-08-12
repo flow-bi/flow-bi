@@ -24,6 +24,10 @@ function addDays(date: Date, days: number): Date {
   return new Date(date.getTime() + days * DAY_MS)
 }
 
+function startOfWeek(date: Date): Date {
+  return addDays(date, -date.getDay())
+}
+
 export function getCalendarPeriod(view: CalendarView, date: string): CalendarPeriod {
   const selected = parseDate(date)
   if (view === 'month') {
@@ -34,8 +38,7 @@ export function getCalendarPeriod(view: CalendarView, date: string): CalendarPer
     }
   }
   if (view === 'week') {
-    const mondayOffset = (selected.getDay() + 6) % 7
-    const start = addDays(selected, -mondayOffset)
+    const start = startOfWeek(selected)
     return {
       from: `${formatDate(start)}T00:00:00+09:00`,
       to: `${formatDate(addDays(start, 7))}T00:00:00+09:00`,
@@ -61,12 +64,26 @@ export function formatCalendarHeading(view: CalendarView, date: string): string 
     return `${selected.getFullYear()}년 ${selected.getMonth() + 1}월`
   }
   if (view === 'week') {
-    return `${selected.getFullYear()}년 ${selected.getMonth() + 1}월 ${selected.getDate() - ((selected.getDay() + 6) % 7)}일 주`
+    const start = startOfWeek(selected)
+    return `${start.getFullYear()}년 ${start.getMonth() + 1}월 ${start.getDate()}일 주`
   }
   return `${selected.getFullYear()}년 ${selected.getMonth() + 1}월 ${selected.getDate()}일`
 }
 
 export function calendarDays(view: CalendarView, date: string): string[] {
+  if (view === 'month') {
+    const selected = parseDate(date)
+    const firstDay = new Date(selected.getFullYear(), selected.getMonth(), 1)
+    const lastDay = new Date(selected.getFullYear(), selected.getMonth() + 1, 0)
+    const start = startOfWeek(firstDay)
+    const end = addDays(lastDay, 7 - lastDay.getDay())
+    const days: string[] = []
+    for (let cursor = start; cursor < end; cursor = addDays(cursor, 1)) {
+      days.push(formatDate(cursor))
+    }
+    return days
+  }
+
   const period = getCalendarPeriod(view, date)
   const start = parseDate(period.from.slice(0, 10))
   const end = parseDate(period.to.slice(0, 10))
