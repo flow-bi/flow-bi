@@ -1,0 +1,76 @@
+package com.flowbi.domain.user.repository;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.flowbi.domain.position.entity.Position;
+import com.flowbi.domain.position.repository.PositionRepository;
+import com.flowbi.domain.team.entity.Team;
+import com.flowbi.domain.team.repository.TeamRepository;
+import com.flowbi.domain.user.entity.User;
+import org.hibernate.SessionFactory;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.transaction.annotation.Transactional;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+
+@SpringBootTest
+@ActiveProfiles("test")
+@Transactional
+@Testcontainers
+class UserRepositoryIntegrationTest {
+
+  @Container
+  static PostgreSQLContainer<?> postgresql = new PostgreSQLContainer<>("postgres:16-alpine");
+
+  @DynamicPropertySource
+  static void databaseProperties(DynamicPropertyRegistry registry) {
+    registry.add("spring.datasource.url",postgresql::getJdbcUrl);
+    registry.add("spring.datasource.username",postgresql::getUsername);
+    registry.add("spring.datasource.password",postgresql::getPassword);
+    registry.add("spring.datasource.driver-class-name",postgresql::getDriverClassName);
+    registry.add("spring.jpa.database-platform",() -> "org.hibernate.dialect.PostgreSQLDialect");
+    registry.add("spring.jpa.hibernate.ddl-auto",() -> "validate");
+    registry.add("spring.jpa.properties.hibernate.generate_statistics",() -> true);
+  }
+
+  @Autowired
+  private UserRepository users;
+
+  @Autowired
+  private TeamRepository teams;
+
+  @Autowired
+  private PositionRepository positions;
+
+  @Autowired
+  private jakarta.persistence.EntityManager entityManager;
+
+  @Test
+  void fetchesTheActiveDetailWithTeamAndPositionInOneQuery() {
+    Position position = positions.save(Position.create("Engineer"));
+    Team team = teams.save(Team.create("Platform"));
+    User user = users.save(User.create("employee-7",position,team));
+    entityManager.flush();
+    entityManager.clear();
+    SessionFactory sessionFactory = entityManager.getEntityManagerFactory()
+        .unwrap(SessionFactory.class);
+    sessionFactory.getStatistics().clear();
+
+    UserDetailProjection detail = users.findActiveDetailByUserId(user.getUserId()).orElseThrow();
+
+    assertThat(detail.userId()).isEqualTo(user.getUserId());
+    assertThat(detail.name()).isEqualTo("Synthetic Fixture");
+    assertThat(detail.status()).isEqualTo("ACTIVE");
+    assertThat(detail.teamId()).isNotNull();
+    assertThat(detail.teamName()).isEqualTo("Platform");
+    assertThat(detail.positionId()).isNotNull();
+    assertThat(detail.positionName()).isEqualTo("Engineer");
+    assertThat(sessionFactory.getStatistics().getPrepareStatementCount()).isEqualTo(1);
+  }
+}
