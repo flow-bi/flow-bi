@@ -33,6 +33,20 @@ function renderModal(onClose = vi.fn()) {
 }
 
 describe('ScheduleCreateModal', () => {
+  it('uses stable hooks for its responsive Tailwind modal surfaces', () => {
+    render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <ScheduleCreateModal onClose={vi.fn()} searchAttendees={() => Promise.resolve([])} />
+      </QueryClientProvider>,
+    )
+
+    expect(screen.getByTestId('schedule-create-backdrop')).toHaveClass('fixed', 'inset-0')
+    expect(screen.getByTestId('schedule-create-panel')).toHaveClass('w-full', 'max-w-2xl')
+    expect(screen.getByTestId('schedule-create-form-grid')).toHaveClass('grid', 'sm:grid-cols-3')
+  })
+
   it('opens with the title focused, validates required fields, and restores focus after Escape', async () => {
     const user = userEvent.setup()
     const { onClose } = renderModal()
@@ -47,6 +61,51 @@ describe('ScheduleCreateModal', () => {
     await user.keyboard('{Escape}')
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
     expect(screen.getByRole('button', { name: '일정 추가' })).toHaveFocus()
+  })
+
+  it('closes from an empty backdrop click, keeps modal-content clicks open, and restores trigger focus', async () => {
+    const user = userEvent.setup()
+    const { onClose } = renderModal()
+    const trigger = screen.getByRole('button', { name: '일정 추가' })
+
+    await user.click(trigger)
+    await user.click(screen.getByLabelText('제목'))
+    expect(screen.getByRole('dialog', { name: '일정 추가' })).toBeVisible()
+    expect(onClose).not.toHaveBeenCalled()
+
+    await user.click(screen.getByTestId('schedule-create-backdrop'))
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
+    expect(trigger).toHaveFocus()
+  })
+
+  it('confirms dirty backdrop dismissal and preserves draft while a save is pending', async () => {
+    const user = userEvent.setup()
+    const createSchedule = vi.fn(() => new Promise<void>(() => {}))
+    const onClose = vi.fn()
+    render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <ScheduleCreateModal
+          createSchedule={createSchedule}
+          onClose={onClose}
+          searchAttendees={() => Promise.resolve([])}
+        />
+      </QueryClientProvider>,
+    )
+
+    await user.type(screen.getByLabelText('제목'), '저장 중인 일정')
+    await user.click(screen.getByTestId('schedule-create-backdrop'))
+    expect(screen.getByRole('alertdialog', { name: '입력한 내용을 버릴까요?' })).toBeVisible()
+    await user.click(screen.getByRole('button', { name: '계속 입력' }))
+    await user.type(screen.getByLabelText('날짜'), '2026-08-10')
+    await user.click(screen.getByRole('button', { name: '일정 저장' }))
+    expect(createSchedule).toHaveBeenCalledTimes(1)
+
+    await user.click(screen.getByTestId('schedule-create-backdrop'))
+    expect(screen.getByRole('dialog', { name: '일정 추가' })).toBeVisible()
+    expect(screen.getByLabelText('제목')).toHaveValue('저장 중인 일정')
+    expect(onClose).not.toHaveBeenCalled()
   })
 
   it('connects the required date error to its input', async () => {

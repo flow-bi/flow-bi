@@ -27,6 +27,23 @@ import {
   type ScheduleFormValues,
 } from '../schedule-create/scheduleForm'
 
+const controlButtonClass =
+  'rounded-lg border border-border bg-surface px-3 py-2 font-semibold text-text-primary transition hover:border-primary hover:bg-secondary focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-2'
+const activeControlButtonClass =
+  'rounded-lg border border-primary bg-primary px-3 py-2 font-semibold text-white transition focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-2'
+const chipBaseClass =
+  'mt-1 block w-full overflow-hidden rounded-r-md border-l-4 bg-secondary px-2 py-1 text-left text-xs font-medium text-text-primary text-ellipsis whitespace-nowrap hover:bg-background focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-1 sm:text-sm'
+const chipColorClasses = {
+  RED: 'border-l-red-700',
+  ORANGE: 'border-l-orange-700',
+  YELLOW: 'border-l-yellow-600',
+  GREEN: 'border-l-green-700',
+  BLUE: 'border-l-blue-600',
+  PURPLE: 'border-l-violet-700',
+} as const
+const fieldClass =
+  'w-full rounded-md border border-border bg-surface px-3 py-2 text-text-primary focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:bg-background'
+
 export interface ScheduleCalendarProps {
   getSchedules?: (
     period: { from: string; to: string },
@@ -117,16 +134,27 @@ function DetailModal({
     document.addEventListener('keydown', escape)
     return () => document.removeEventListener('keydown', escape)
   }, [onClose])
+
+  const handleBackdropClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.target === event.currentTarget) {
+      onClose()
+    }
+  }
+
   return (
     <div
       aria-labelledby="schedule-detail-title"
       aria-modal="true"
-      className="schedule-detail-backdrop"
+      className="fixed inset-0 z-10 grid place-items-center bg-slate-950/55 p-4"
+      data-testid="schedule-detail-backdrop"
+      onClick={handleBackdropClick}
       role="dialog"
     >
-      <section className="schedule-detail-modal">
-        <h2 id="schedule-detail-title">{detail.title} 상세</h2>
-        <p>
+      <section className="w-full max-w-lg rounded-xl bg-surface p-6 shadow-2xl">
+        <h2 className="m-0 text-xl font-bold text-text-primary" id="schedule-detail-title">
+          {detail.title} 상세
+        </h2>
+        <p className="text-text-secondary">
           {typeLabel(detail.type)} 일정 · {detail.colorLabel} 라벨
         </p>
         <p>{detail.allDay ? '하루종일' : `${detail.startAt} ~ ${detail.endAt}`}</p>
@@ -134,22 +162,31 @@ function DetailModal({
         {detail.content && <p>{detail.content}</p>}
         {detail.meetingRoomManaged && (
           <>
-            <p className="schedule-detail-modal__managed">회의실 예약에서 관리하는 일정입니다.</p>
+            <p className="font-bold text-orange-800">회의실 예약에서 관리하는 일정입니다.</p>
             <p>회의실 예약 취소 흐름을 사용해 주세요.</p>
           </>
         )}
         {error && <p role="alert">{error}</p>}
         {canManage && !detail.meetingRoomManaged && (
-          <div className="schedule-detail-modal__actions">
-            <button onClick={onEdit} type="button">
+          <div className="mt-6 flex flex-wrap justify-end gap-3">
+            <button className={controlButtonClass} onClick={onEdit} type="button">
               일정 수정
             </button>
-            <button onClick={onCancel} type="button">
+            <button
+              className="rounded-lg border border-red-700 bg-red-700 px-3 py-2 font-semibold text-white focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-2"
+              onClick={onCancel}
+              type="button"
+            >
               일정 취소
             </button>
           </div>
         )}
-        <button onClick={onClose} ref={closeRef} type="button">
+        <button
+          className={`${controlButtonClass} mt-6`}
+          onClick={onClose}
+          ref={closeRef}
+          type="button"
+        >
           닫기
         </button>
       </section>
@@ -217,17 +254,24 @@ function EditModal({
     <div
       aria-labelledby="schedule-edit-title"
       aria-modal="true"
-      className="schedule-detail-backdrop"
+      className="fixed inset-0 z-10 grid place-items-center overflow-auto bg-slate-950/55 p-4"
       role="dialog"
     >
-      <section className="schedule-detail-modal">
-        <h2 id="schedule-edit-title">일정 수정</h2>
-        <form noValidate onSubmit={(event) => void form.handleSubmit(submit)(event)}>
+      <section className="w-full max-w-2xl rounded-xl bg-surface p-6 shadow-2xl">
+        <h2 className="m-0 text-xl font-bold text-text-primary" id="schedule-edit-title">
+          일정 수정
+        </h2>
+        <form
+          className="mt-4 grid gap-3"
+          noValidate
+          onSubmit={(event) => void form.handleSubmit(submit)(event)}
+        >
           <label htmlFor="schedule-edit-title-input">제목</label>
           <input
             aria-describedby={form.formState.errors.title ? 'schedule-edit-title-error' : undefined}
             aria-invalid={Boolean(form.formState.errors.title)}
             autoFocus
+            className={fieldClass}
             id="schedule-edit-title-input"
             {...form.register('title')}
           />
@@ -236,18 +280,28 @@ function EditModal({
               {form.formState.errors.title.message}
             </p>
           )}
-          <div className="schedule-modal__grid">
+          <div className="grid gap-3 sm:grid-cols-3">
             <label>
               날짜
-              <input type="date" {...form.register('date')} />
+              <input className={fieldClass} type="date" {...form.register('date')} />
             </label>
             <label>
               시작 시간
-              <input disabled={allDay} type="time" {...form.register('startTime')} />
+              <input
+                className={fieldClass}
+                disabled={allDay}
+                type="time"
+                {...form.register('startTime')}
+              />
             </label>
             <label>
               종료 시간
-              <input disabled={allDay} type="time" {...form.register('endTime')} />
+              <input
+                className={fieldClass}
+                disabled={allDay}
+                type="time"
+                {...form.register('endTime')}
+              />
             </label>
           </div>
           {form.formState.errors.endTime && (
@@ -348,11 +402,21 @@ function EditModal({
             <textarea {...form.register('content')} />
           </label>
           {error && <p role="alert">{error}</p>}
-          <div className="schedule-detail-modal__actions">
-            <button disabled={isSaving} onClick={close} ref={closeRef} type="button">
+          <div className="mt-4 flex flex-wrap justify-end gap-3">
+            <button
+              className={controlButtonClass}
+              disabled={isSaving}
+              onClick={close}
+              ref={closeRef}
+              type="button"
+            >
               수정 취소
             </button>
-            <button disabled={isSaving} type="submit">
+            <button
+              className="rounded-lg bg-primary px-3 py-2 font-semibold text-white focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-2 disabled:cursor-wait disabled:opacity-70"
+              disabled={isSaving}
+              type="submit"
+            >
               {isSaving ? '수정 저장 중' : '수정 저장'}
             </button>
           </div>
@@ -362,7 +426,7 @@ function EditModal({
         <div
           aria-labelledby="edit-discard-title"
           aria-modal="true"
-          className="schedule-confirmation"
+          className="fixed inset-1/2 z-20 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-xl bg-surface p-6 shadow-2xl"
           role="alertdialog"
         >
           <h2 id="edit-discard-title">수정 내용을 버릴까요?</h2>
@@ -462,9 +526,8 @@ export function ScheduleCalendar({
   const openDetail = (schedule: ScheduleSummary, trigger: HTMLElement) => {
     scheduleTrigger.current = trigger
     cancellationFocusFallback.current =
-      trigger
-        .closest('article')
-        ?.querySelector<HTMLButtonElement>('.schedule-calendar__day-button') ?? null
+      trigger.closest('article')?.querySelector<HTMLButtonElement>('[data-calendar-day-button]') ??
+      null
     setSelectedSchedule(schedule.id)
   }
   const closeDetail = () => {
@@ -478,20 +541,30 @@ export function ScheduleCalendar({
       : errorStatus === 403
         ? '일정을 볼 권한이 없습니다.'
         : '일정을 불러오지 못했습니다. 다시 시도해 주세요.'
+  const weekdays = ['일', '월', '화', '수', '목', '금', '토']
 
   return (
-    <main className="schedule-calendar">
-      <header className="schedule-calendar__header">
-        <div>
-          <p>CALENDAR</p>
-          <h1>{formatCalendarHeading(state.view, state.date)}</h1>
+    <main className="min-h-screen overflow-x-hidden p-4 sm:p-8">
+      <header
+        className="mb-6 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center sm:gap-x-8"
+        data-testid="calendar-header"
+      >
+        <div className="min-w-0">
+          <h1 className="m-0 text-3xl font-extrabold tracking-tight text-text-primary sm:text-4xl">
+            {formatCalendarHeading(state.view, state.date)}
+          </h1>
         </div>
-        <div className="schedule-calendar__controls">
+        <div
+          aria-label="캘린더 보기 제어"
+          className="flex flex-wrap items-center gap-2 sm:justify-end"
+          data-testid="calendar-view-controls"
+        >
           <button
             aria-label="이전 기간"
             onClick={() =>
               setUrlState({ ...state, date: navigateDate(state.view, state.date, -1) })
             }
+            className={controlButtonClass}
             type="button"
           >
             이전
@@ -499,6 +572,7 @@ export function ScheduleCalendar({
           {(['month', 'week', 'day'] as const).map((view) => (
             <button
               aria-pressed={state.view === view}
+              className={state.view === view ? activeControlButtonClass : controlButtonClass}
               key={view}
               onClick={() => setUrlState({ ...state, view })}
               type="button"
@@ -509,90 +583,142 @@ export function ScheduleCalendar({
           <button
             aria-label="다음 기간"
             onClick={() => setUrlState({ ...state, date: navigateDate(state.view, state.date, 1) })}
+            className={controlButtonClass}
             type="button"
           >
             다음
           </button>
         </div>
       </header>
-      {schedulesQuery.isLoading && <p role="status">일정을 불러오고 있습니다.</p>}
-      {notice && <p role="status">{notice}</p>}
+      {schedulesQuery.isLoading && (
+        <p className="mb-4 text-text-secondary" role="status">
+          일정을 불러오고 있습니다.
+        </p>
+      )}
+      {notice && (
+        <p className="mb-4 text-text-secondary" role="status">
+          {notice}
+        </p>
+      )}
       {schedulesQuery.isError && (
-        <section className="schedule-calendar__state" role="alert">
+        <section className="my-8 rounded-lg bg-surface p-4 shadow-md" role="alert">
           <p>{errorText}</p>
-          <button onClick={() => void schedulesQuery.refetch()} type="button">
+          <button
+            className={controlButtonClass}
+            onClick={() => void schedulesQuery.refetch()}
+            type="button"
+          >
             다시 시도
           </button>
         </section>
       )}
       {schedulesQuery.isSuccess && schedulesQuery.data.length === 0 && (
-        <p className="schedule-calendar__state">이 기간에는 일정이 없습니다.</p>
+        <p className="my-8 rounded-lg bg-surface p-4 shadow-md">이 기간에는 일정이 없습니다.</p>
       )}
       {schedulesQuery.isSuccess && (
         <section
           aria-label={`${formatCalendarHeading(state.view, state.date)} 달력`}
-          className={`schedule-calendar__grid schedule-calendar__grid--${state.view}`}
+          className={`grid overflow-hidden rounded-xl border border-border bg-border shadow-lg ${state.view === 'day' ? 'grid-cols-1' : 'grid-cols-7'}`}
+          data-testid="calendar-grid"
+          role="grid"
         >
-          {calendarDays(state.view, state.date).map((day) => (
-            <article className="schedule-calendar__day" key={day}>
-              <button
-                aria-label={`${koreanDate(day)} 일정 보기`}
-                className="schedule-calendar__day-button"
-                onClick={() => setSelectedDate(day)}
-                type="button"
+          {state.view !== 'day' &&
+            weekdays.map((weekday) => (
+              <div
+                className="bg-secondary px-2 py-2 text-center text-sm font-bold text-text-secondary"
+                data-testid={`calendar-weekday-${weekday}`}
+                key={weekday}
+                role="columnheader"
               >
-                {Number(day.slice(-2))}
-              </button>
-              {(schedulesQuery.data ?? [])
-                .filter((schedule) => schedule.startAt.slice(0, 10) === day)
-                .map((schedule) => (
-                  <button
-                    className={`schedule-chip schedule-chip--${schedule.colorLabel.toLowerCase()}`}
-                    key={schedule.id}
-                    onClick={(event) => openDetail(schedule, event.currentTarget)}
-                    type="button"
-                  >
-                    {typeLabel(schedule.type)} · {schedule.colorLabel} ·{' '}
-                    {schedule.allDay ? '종일 · ' : ''}
-                    {schedule.title}
-                  </button>
-                ))}
-            </article>
-          ))}
+                {weekday}
+              </div>
+            ))}
+          {calendarDays(state.view, state.date).map((day) => {
+            const outsideMonth =
+              state.view === 'month' && day.slice(0, 7) !== state.date.slice(0, 7)
+            return (
+              <article
+                className={`min-h-20 min-w-0 bg-surface p-1 sm:min-h-28 sm:p-2 ${outsideMonth ? 'bg-background/60' : ''}`}
+                key={day}
+                role="gridcell"
+              >
+                {!outsideMonth && (
+                  <>
+                    <button
+                      aria-label={`${koreanDate(day)} 일정 보기`}
+                      className="rounded px-1 py-0.5 text-xs font-bold text-text-primary hover:bg-secondary focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-1 sm:text-sm"
+                      data-calendar-day-button
+                      onClick={() => setSelectedDate(day)}
+                      type="button"
+                    >
+                      {Number(day.slice(-2))}
+                    </button>
+                    {(schedulesQuery.data ?? [])
+                      .filter((schedule) => schedule.startAt.slice(0, 10) === day)
+                      .map((schedule) => (
+                        <button
+                          className={`${chipBaseClass} ${chipColorClasses[schedule.colorLabel]}`}
+                          data-testid={`calendar-schedule-chip-${schedule.id}`}
+                          key={schedule.id}
+                          onClick={(event) => openDetail(schedule, event.currentTarget)}
+                          type="button"
+                        >
+                          {typeLabel(schedule.type)} · {schedule.colorLabel} ·{' '}
+                          {schedule.allDay ? '종일 · ' : ''}
+                          {schedule.title}
+                        </button>
+                      ))}
+                  </>
+                )}
+              </article>
+            )
+          })}
         </section>
       )}
       {selectedDate && (
         <aside
           aria-label={`${koreanDate(selectedDate)} 일정`}
           aria-modal={isMobile || undefined}
-          className={isMobile ? 'schedule-banner schedule-banner--overlay' : 'schedule-banner'}
+          className={
+            isMobile
+              ? 'fixed inset-0 z-10 overflow-auto bg-slate-950/55 p-4'
+              : 'fixed top-0 right-0 z-5 h-screen w-full max-w-sm overflow-auto bg-surface p-4 shadow-2xl'
+          }
           role={isMobile ? 'dialog' : 'complementary'}
         >
-          <header>
+          <header
+            className={
+              isMobile
+                ? 'mx-auto flex max-w-sm items-center justify-between gap-3 rounded-t-xl bg-surface p-4'
+                : 'flex items-center justify-between gap-3'
+            }
+          >
             <h2>{selectedDate} 일정</h2>
             <button onClick={() => setSelectedDate(null)} type="button">
               닫기
             </button>
           </header>
-          {daySchedules.length === 0 ? (
-            <p>선택한 날짜에는 일정이 없습니다.</p>
-          ) : (
-            <ul>
-              {daySchedules.map((schedule) => (
-                <li key={schedule.id}>
-                  <button
-                    className="schedule-chip"
-                    onClick={(event) => openDetail(schedule, event.currentTarget)}
-                    type="button"
-                  >
-                    {typeLabel(schedule.type)} · {schedule.colorLabel} ·{' '}
-                    {schedule.allDay ? '종일 · ' : ''}
-                    {schedule.title}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+          <div className={isMobile ? 'mx-auto max-w-sm rounded-b-xl bg-surface p-4' : ''}>
+            {daySchedules.length === 0 ? (
+              <p>선택한 날짜에는 일정이 없습니다.</p>
+            ) : (
+              <ul>
+                {daySchedules.map((schedule) => (
+                  <li key={schedule.id}>
+                    <button
+                      className={`${chipBaseClass} ${chipColorClasses[schedule.colorLabel]}`}
+                      onClick={(event) => openDetail(schedule, event.currentTarget)}
+                      type="button"
+                    >
+                      {typeLabel(schedule.type)} · {schedule.colorLabel} ·{' '}
+                      {schedule.allDay ? '종일 · ' : ''}
+                      {schedule.title}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </aside>
       )}
       {selectedSchedule !== null && detailQuery.isLoading && (
@@ -624,7 +750,7 @@ export function ScheduleCalendar({
         <div
           aria-labelledby="cancel-title"
           aria-modal="true"
-          className="schedule-confirmation"
+          className="fixed inset-1/2 z-20 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-xl bg-surface p-6 shadow-2xl"
           role="alertdialog"
         >
           <h2 id="cancel-title">{detailQuery.data.title} 취소</h2>

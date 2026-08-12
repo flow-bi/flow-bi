@@ -71,6 +71,21 @@ function renderCalendar(props: Partial<React.ComponentProps<typeof ScheduleCalen
 }
 
 describe('ScheduleCalendar', () => {
+  it('exposes Tailwind-styled calendar regions through stable hooks', async () => {
+    window.history.replaceState({}, '', '/?view=month&date=2024-02-15')
+    renderCalendar()
+
+    expect(await screen.findByTestId('calendar-header')).toHaveClass(
+      'flex',
+      'flex-col',
+      'sm:flex-row',
+    )
+    expect(screen.getByTestId('calendar-view-controls')).toHaveClass('flex-wrap')
+    expect(await screen.findByTestId('calendar-grid')).toHaveClass('grid', 'grid-cols-7')
+    expect(screen.getByTestId('calendar-weekday-일')).toHaveClass('bg-secondary')
+    expect(screen.getByTestId('calendar-schedule-chip-1')).toHaveClass('border-l-blue-600')
+  })
+
   it('lets the creator edit a normal schedule and updates only its list and detail queries', async () => {
     window.history.replaceState({}, '', '/?view=month&date=2024-02-29')
     const updateSchedule = vi.fn((_: number, request: { title: string }) =>
@@ -184,6 +199,15 @@ describe('ScheduleCalendar', () => {
     renderCalendar({ getSchedules })
 
     expect(await screen.findByRole('heading', { name: '2024년 2월' })).toBeVisible()
+    expect(screen.queryByText('CALENDAR')).not.toBeInTheDocument()
+    expect(
+      (await screen.findAllByRole('columnheader')).map((header) => header.textContent),
+    ).toEqual(['일', '월', '화', '수', '목', '금', '토'])
+    expect(screen.getAllByRole('gridcell')).toHaveLength(35)
+    expect(
+      screen.queryByRole('button', { name: '2024년 1월 28일 일정 보기' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '2024년 2월 1일 일정 보기' })).toBeVisible()
     expect(getSchedules).toHaveBeenCalledWith(
       { from: '2024-02-01T00:00:00+09:00', to: '2024-03-01T00:00:00+09:00' },
       expect.any(AbortSignal),
@@ -194,11 +218,29 @@ describe('ScheduleCalendar', () => {
 
     await user.click(screen.getByRole('button', { name: '주간 보기' }))
     expect(window.location.search).toContain('view=week')
-    expect(await screen.findByRole('heading', { name: '2024년 2월 12일 주' })).toBeVisible()
+    expect(await screen.findByRole('heading', { name: '2024년 2월 11일 주' })).toBeVisible()
 
     await user.click(screen.getByRole('button', { name: '일간 보기' }))
     expect(window.location.search).toContain('view=day')
     expect(await screen.findByRole('heading', { name: '2024년 2월 15일' })).toBeVisible()
+  })
+
+  it('closes detail only from its backdrop and restores focus to its original schedule trigger', async () => {
+    window.history.replaceState({}, '', '/?view=month&date=2024-02-29')
+    const user = userEvent.setup()
+    renderCalendar()
+    const chip = await screen.findByRole('button', { name: /기간을 넘는 팀 회의/ })
+
+    await user.click(chip)
+    const modal = await screen.findByRole('dialog', { name: '기간을 넘는 팀 회의 상세' })
+    await user.click(screen.getByText('회의실 예약에서 관리하는 일정입니다.'))
+    expect(modal).toBeVisible()
+
+    await user.click(screen.getByTestId('schedule-detail-backdrop'))
+    expect(
+      screen.queryByRole('dialog', { name: '기간을 넘는 팀 회의 상세' }),
+    ).not.toBeInTheDocument()
+    expect(chip).toHaveFocus()
   })
 
   it('opens the desktop date banner and room-managed detail modal, then restores focus', async () => {
