@@ -45,3 +45,9 @@ git config core.hooksPath scripts
 ```
 
 `git config --get core.hooksPath` 결과가 `scripts`인지 확인한다. Hook은 Staged Java 파일에 Spotless Formatting을 적용하지만 테스트와 빌드를 대체하지 않는다.
+
+## Development employee account adapter
+
+For local login-page fixtures, the anonymous development adapter is enabled only with the `local` or `test` profile and the explicit `auth.test-fixtures.enabled=true` setting. It exposes employee account options and creation under `/api/dev/auth`. The creation request remains CSRF-protected and uses the same transactional user and credential registration rules intended for an eventual HR administrator use case.
+
+No employee creation endpoint is exposed in production, or whenever fixtures are disabled. The future production endpoint must wait for the approved HR administrator RBAC session integration; it must not be introduced as `permitAll`.

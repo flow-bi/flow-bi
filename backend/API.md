@@ -303,3 +303,11 @@ AI 모델과 Action Routing이 미확정이므로 Endpoint를 아직 확정하�
 - 직원·팀의 삭제·비활성화 정책과 관련 상태값 및 응답 DTO
 - 상세 DTO와 Error Code 목록
 - OpenAPI 및 API 문서 자동화 도구
+
+## Development employee account adapter
+
+`GET /api/dev/auth/employee-account-options` and `POST /api/dev/auth/employee-accounts` exist only when the active profile is `local` or `test` and `auth.test-fixtures.enabled=true`. They are not production employee-management APIs; when either condition is absent, no controller is registered and both paths return `404 Not Found`.
+
+The options response contains only persisted team and position `{ id, name }` values. Creation accepts `employeeNumber`, `name`, `teamId`, `positionId`, `initialPassword`, and `confirmation`. It retains normal CSRF protection and returns `201 Created` with only the user ID, employee number, name, referenced team and position, and `mustChangePassword: true`.
+
+The shared employee-account registration use case requires existing team and position IDs, an unused employee number, matching passwords, and the existing password policy. It persists an `ACTIVE` user and an encoded credential in one transaction; `mustChangePassword` is always true and cannot be supplied by callers. Invalid input, missing references, duplicates, and persistence failures produce a safe `400 EMPLOYEE_ACCOUNT_INVALID` response without passwords, password hashes, CSRF values, or session identifiers.
