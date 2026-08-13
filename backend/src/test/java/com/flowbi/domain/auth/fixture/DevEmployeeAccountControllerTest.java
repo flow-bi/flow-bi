@@ -10,10 +10,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.flowbi.domain.auth.security.AbsoluteSessionTimeoutFilter;
-import com.flowbi.domain.auth.security.CsrfTokenController;
+import com.flowbi.domain.auth.controller.CsrfTokenController;
 import com.flowbi.domain.auth.security.SecurityConfiguration;
-import com.flowbi.domain.auth.session.SessionGenerationService;
-import com.flowbi.domain.auth.session.SessionGenerationValidationFilter;
+import com.flowbi.domain.auth.service.SessionGenerationService;
+import com.flowbi.domain.auth.security.SessionGenerationValidationFilter;
 import com.flowbi.domain.position.entity.Position;
 import com.flowbi.domain.position.service.PositionService;
 import com.flowbi.domain.team.entity.Team;

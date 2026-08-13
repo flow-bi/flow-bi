@@ -8,11 +8,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.flowbi.domain.auth.login.LoginPrincipal;
-import com.flowbi.domain.auth.login.LoginRateLimiter;
-import com.flowbi.domain.auth.persistence.entity.UserCredential;
-import com.flowbi.domain.auth.persistence.repository.UserCredentialRepository;
-import com.flowbi.domain.auth.session.SessionGenerationStore;
+import com.flowbi.domain.auth.security.LoginPrincipal;
+import com.flowbi.domain.auth.entity.UserCredential;
+import com.flowbi.domain.auth.repository.LoginRateLimiter;
+import com.flowbi.domain.auth.repository.SessionGenerationStore;
+import com.flowbi.domain.auth.repository.UserCredentialRepository;
 import com.flowbi.domain.position.entity.Position;
 import com.flowbi.domain.position.repository.PositionRepository;
 import com.flowbi.domain.team.entity.Team;

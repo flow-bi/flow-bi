@@ -9,9 +9,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.flowbi.domain.auth.password.PasswordPolicy;
-import com.flowbi.domain.auth.persistence.entity.UserCredential;
-import com.flowbi.domain.auth.persistence.repository.UserCredentialRepository;
+import com.flowbi.domain.auth.service.PasswordPolicy;
+import com.flowbi.domain.auth.entity.UserCredential;
+import com.flowbi.domain.auth.repository.UserCredentialRepository;
 import com.flowbi.domain.position.entity.Position;
 import com.flowbi.domain.position.service.PositionService;
 import com.flowbi.domain.team.entity.Team;

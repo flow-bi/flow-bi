@@ -6,13 +6,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.flowbi.domain.auth.login.LoginPrincipal;
-import com.flowbi.domain.auth.password.MustChangePasswordFilter;
+import com.flowbi.domain.auth.security.LoginPrincipal;
+import com.flowbi.domain.auth.security.MustChangePasswordFilter;
 import com.flowbi.domain.auth.security.AbsoluteSessionTimeoutFilter;
-import com.flowbi.domain.auth.security.CsrfTokenController;
+import com.flowbi.domain.auth.controller.CsrfTokenController;
 import com.flowbi.domain.auth.security.SecurityConfiguration;
-import com.flowbi.domain.auth.session.SessionGenerationService;
-import com.flowbi.domain.auth.session.SessionGenerationValidationFilter;
+import com.flowbi.domain.auth.service.SessionGenerationService;
+import com.flowbi.domain.auth.security.SessionGenerationValidationFilter;
 import com.flowbi.domain.user.controller.UserController;
 import com.flowbi.domain.user.dto.UserDetailResponse;
 import com.flowbi.domain.user.service.UserService;
