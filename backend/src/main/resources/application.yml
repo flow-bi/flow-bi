@@ -22,3 +22,24 @@ spring:
       hibernate:
         format_sql: true
     database-platform: org.hibernate.dialect.H2Dialect
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+---
+
+spring:
+  config:
+    activate:
+      on-profile: local
+
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
