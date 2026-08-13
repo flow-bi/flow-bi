@@ -34,18 +34,35 @@ class MustChangePasswordFilterTest {
   private SessionGenerationService generations;
 
   @Test
-  void blocksGeneralEndpointsButAllowsPasswordChangeAndLogoutForTemporaryPasswordUsers()
-      throws Exception {
+  void allowsOnlyPasswordChangeFlowEndpointsForTemporaryPasswordUsers() throws Exception {
     LoginPrincipal principal = new LoginPrincipal("42", true);
     MockHttpSession session = new MockHttpSession();
     session.setAttribute(SessionGenerationService.AUTH_GENERATION_ATTRIBUTE,0L);
 
+    mockMvc.perform(get("/api/password-test/general")).andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
     mockMvc.perform(get("/api/password-test/general").with(user(principal)).session(session))
         .andExpect(status().isForbidden())
         .andExpect(jsonPath("$.code").value("PASSWORD_CHANGE_REQUIRED"));
+    mockMvc.perform(get("/api/auth/csrf").with(user(principal)).session(session))
+        .andExpect(status().isOk());
+    mockMvc.perform(get("/api/auth/session").with(user(principal)).session(session))
+        .andExpect(status().isNotFound());
     mockMvc.perform(put("/api/auth/password").with(user(principal)).session(session).with(csrf()))
         .andExpect(status().isNotFound());
     mockMvc.perform(post("/api/auth/logout").with(user(principal)).session(session).with(csrf()))
         .andExpect(status().isNotFound());
+    mockMvc.perform(post("/api/auth/csrf").with(user(principal)).session(session).with(csrf()))
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.code").value("PASSWORD_CHANGE_REQUIRED"));
+    mockMvc.perform(put("/api/auth/session").with(user(principal)).session(session).with(csrf()))
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.code").value("PASSWORD_CHANGE_REQUIRED"));
+    mockMvc.perform(post("/api/auth/password").with(user(principal)).session(session).with(csrf()))
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.code").value("PASSWORD_CHANGE_REQUIRED"));
+    mockMvc.perform(get("/api/auth/logout").with(user(principal)).session(session))
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.code").value("PASSWORD_CHANGE_REQUIRED"));
   }
 }

@@ -197,11 +197,8 @@ function App() {
     navigate('/login', true)
   }
   const onLogout = async () => {
-    try {
-      await logout()
-    } finally {
-      onSessionExpired()
-    }
+    await logout()
+    onSessionExpired()
   }
 
   if (authentication.kind === 'loading') {
@@ -227,7 +224,12 @@ function App() {
   }
   if (authentication.session.mustChangePassword) {
     return (
-      <PasswordChangePage onCompleted={onPasswordCompleted} onSessionExpired={onSessionExpired} />
+      <PasswordChangePage
+        logout={logout}
+        onCompleted={onPasswordCompleted}
+        onLoggedOut={onSessionExpired}
+        onSessionExpired={onSessionExpired}
+      />
     )
   }
 
