@@ -139,7 +139,8 @@ must be 10-128 characters and include a letter, a number, and a special characte
 temporary password is forbidden.
 
 While password change is required, every authenticated `/api/**` endpoint is denied with
-`403 PASSWORD_CHANGE_REQUIRED` except `GET /api/auth/session`, `PUT /api/auth/password`, and
+`403 PASSWORD_CHANGE_REQUIRED` except `GET /api/auth/csrf` (to issue the CSRF Cookie required
+before password change or logout), `GET /api/auth/session`, `PUT /api/auth/password`, and
 `POST /api/auth/logout`.
 On success, the response is `200 OK` with `{ "mustChangePassword": false }`. The current session
 is retained with its updated generation and every other session is logically invalidated before
