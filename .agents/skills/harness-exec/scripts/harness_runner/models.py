@@ -77,6 +77,7 @@ class TaskResult:
     quality_score: int | None = None
     remaining_issues: tuple[str, ...] = ()
     final_status: str = ""
+    restored: bool = False
 
 
 @dataclass(frozen=True)
