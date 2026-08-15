@@ -42,9 +42,12 @@ class SyntheticAuthFixtureIntegrationTest {
     registry.add("spring.jpa.hibernate.ddl-auto",() -> "validate");
     registry.add("auth.test-fixtures.enabled",() -> true);
     registry.add("auth.test-fixtures.normal.employee-number",() -> NORMAL_EMPLOYEE_NUMBER);
+    registry.add("auth.test-fixtures.normal.email",() -> "normal@example.test");
     registry.add("auth.test-fixtures.normal.password",() -> NORMAL_PASSWORD);
     registry.add("auth.test-fixtures.password-change-required.employee-number",
         () -> CHANGE_EMPLOYEE_NUMBER);
+    registry.add("auth.test-fixtures.password-change-required.email",
+        () -> "password-change@example.test");
     registry.add("auth.test-fixtures.password-change-required.password",() -> CHANGE_PASSWORD);
   }
 

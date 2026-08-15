@@ -7,6 +7,7 @@ import com.flowbi.domain.position.repository.PositionRepository;
 import com.flowbi.domain.team.entity.Team;
 import com.flowbi.domain.team.repository.TeamRepository;
 import com.flowbi.domain.user.entity.User;
+import com.flowbi.domain.user.entity.UserStatus;
 import org.hibernate.SessionFactory;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -55,7 +56,8 @@ class UserRepositoryIntegrationTest {
   void fetchesTheActiveDetailWithTeamAndPositionInOneQuery() {
     Position position = positions.save(Position.create("Engineer"));
     Team team = teams.save(Team.create("Platform"));
-    User user = users.save(User.create("employee-7",position,team));
+    User user = users
+        .save(User.create("employee-7","employee-7@example.test","Fixture User",position,team));
     entityManager.flush();
     entityManager.clear();
     SessionFactory sessionFactory = entityManager.getEntityManagerFactory()
@@ -65,8 +67,8 @@ class UserRepositoryIntegrationTest {
     UserDetailProjection detail = users.findActiveDetailByUserId(user.getUserId()).orElseThrow();
 
     assertThat(detail.userId()).isEqualTo(user.getUserId());
-    assertThat(detail.name()).isEqualTo("Synthetic Fixture");
-    assertThat(detail.status()).isEqualTo("ACTIVE");
+    assertThat(detail.name()).isEqualTo("Fixture User");
+    assertThat(detail.status()).isEqualTo(UserStatus.ACTIVE);
     assertThat(detail.teamId()).isNotNull();
     assertThat(detail.teamName()).isEqualTo("Platform");
     assertThat(detail.positionId()).isNotNull();

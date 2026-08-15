@@ -9,6 +9,7 @@ import com.flowbi.domain.position.repository.PositionRepository;
 import com.flowbi.domain.team.entity.Team;
 import com.flowbi.domain.team.repository.TeamRepository;
 import com.flowbi.domain.user.entity.User;
+import com.flowbi.domain.user.entity.UserStatus;
 import com.flowbi.domain.user.repository.UserRepository;
 import com.flowbi.domain.user.service.EmployeeAccountRegistration;
 import com.flowbi.domain.user.service.EmployeeAccountRegistrationException;
@@ -82,12 +83,13 @@ class AuthenticationPersistenceIntegrationTest {
     Team team = team();
 
     EmployeeAccountRegistration registration = registrations
-        .register(new EmployeeAccountRegistrationRequest("employee-registration", "Kim",
-            team.getTeamId(), position.getPositionId(), "Password123!", "Password123!"));
+        .register(new EmployeeAccountRegistrationRequest("employee-registration",
+            "employee-registration@example.test", "Kim", team.getTeamId(), position.getPositionId(),
+            "Password123!", "Password123!"));
     UserCredential credential = userCredentialRepository
         .findByUserUserId(registration.user().getUserId()).orElseThrow();
 
-    assertThat(registration.user().getStatus()).isEqualTo("ACTIVE");
+    assertThat(registration.user().getStatus()).isEqualTo(UserStatus.ACTIVE);
     assertThat(registration.user().getTeam().getTeamId()).isEqualTo(team.getTeamId());
     assertThat(registration.user().getPosition().getPositionId())
         .isEqualTo(position.getPositionId());
@@ -95,13 +97,14 @@ class AuthenticationPersistenceIntegrationTest {
     assertThat(passwordEncoder.matches("Password123!",credential.getPasswordHash())).isTrue();
     long usersBeforeInvalidRequest = userRepository.count();
 
-    assertThatThrownBy(
-        () -> registrations.register(new EmployeeAccountRegistrationRequest("employee-invalid",
+    assertThatThrownBy(() -> registrations.register(
+        new EmployeeAccountRegistrationRequest("employee-invalid", "employee-invalid@example.test",
             "Kim", Long.MAX_VALUE, position.getPositionId(), "Password123!", "Password123!")))
         .isInstanceOf(EmployeeAccountRegistrationException.class);
     assertThatThrownBy(
         () -> registrations.register(new EmployeeAccountRegistrationRequest("employee-registration",
-            "Kim", team.getTeamId(), position.getPositionId(), "Password123!", "Password123!")))
+            "employee-registration@example.test", "Kim", team.getTeamId(), position.getPositionId(),
+            "Password123!", "Password123!")))
         .isInstanceOf(EmployeeAccountRegistrationException.class);
     assertThat(userRepository.count()).isEqualTo(usersBeforeInvalidRequest);
     assertThat(userCredentialRepository.count()).isEqualTo(1);
@@ -109,12 +112,13 @@ class AuthenticationPersistenceIntegrationTest {
 
   @Test
   void keepsEmployeeNumberAndCredentialUserRelationshipUnique() {
-    User user = userRepository.save(User.create("synthetic-user-a",position(),team()));
+    User user = userRepository.save(User.create("synthetic-user-a","synthetic-user-a@example.test",
+        "Fixture User",position(),team()));
     userCredentialRepository
         .save(UserCredential.create(user,"$2a$10$hash-value-that-is-never-a-real-password",true));
 
-    assertThatThrownBy(
-        () -> userRepository.saveAndFlush(User.create("synthetic-user-a",position(),team())))
+    assertThatThrownBy(() -> userRepository.saveAndFlush(User.create("synthetic-user-a",
+        "synthetic-user-a-2@example.test","Fixture User",position(),team())))
         .isInstanceOf(DataIntegrityViolationException.class);
   }
 
@@ -127,7 +131,8 @@ class AuthenticationPersistenceIntegrationTest {
 
     Position position = position();
     Team team = team();
-    User user = userRepository.save(User.create("synthetic-user-d",position,team));
+    User user = userRepository.save(User.create("synthetic-user-d","synthetic-user-d@example.test",
+        "Fixture User",position,team));
     User foundUser = userRepository.findByEmployeeNumber("synthetic-user-d").orElseThrow();
 
     assertThat(foundUser.getPosition()).isNotNull();
@@ -136,7 +141,8 @@ class AuthenticationPersistenceIntegrationTest {
 
   @Test
   void keepsOneCredentialPerUser() {
-    User user = userRepository.save(User.create("synthetic-user-c",position(),team()));
+    User user = userRepository.save(User.create("synthetic-user-c","synthetic-user-c@example.test",
+        "Fixture User",position(),team()));
     userCredentialRepository
         .save(UserCredential.create(user,"$2a$10$hash-value-that-is-never-a-real-password",true));
 
@@ -147,7 +153,8 @@ class AuthenticationPersistenceIntegrationTest {
 
   @Test
   void persistsCredentialWithoutExposingHashThroughUserLookup() {
-    User user = userRepository.save(User.create("synthetic-user-b",position(),team()));
+    User user = userRepository.save(User.create("synthetic-user-b","synthetic-user-b@example.test",
+        "Fixture User",position(),team()));
     UserCredential credential = userCredentialRepository
         .save(UserCredential.create(user,"$2a$10$hash-value-that-is-never-a-real-password",true));
 
@@ -167,7 +174,7 @@ class AuthenticationPersistenceIntegrationTest {
 
     Path failedMigrationDirectory = Files.createTempDirectory("failed-migration-");
     try {
-      Files.writeString(failedMigrationDirectory.resolve("V2__fail_atomically.sql"),
+      Files.writeString(failedMigrationDirectory.resolve("V3__fail_atomically.sql"),
           "CREATE TABLE failed_migration_probe (id BIGINT);\nINVALID SQL;");
 
       Flyway failingFlyway = Flyway.configure()
@@ -177,7 +184,7 @@ class AuthenticationPersistenceIntegrationTest {
       assertThatThrownBy(failingFlyway::migrate).isInstanceOf(RuntimeException.class);
       assertThat(tableExists("failed_migration_probe")).isFalse();
     } finally {
-      Files.deleteIfExists(failedMigrationDirectory.resolve("V2__fail_atomically.sql"));
+      Files.deleteIfExists(failedMigrationDirectory.resolve("V3__fail_atomically.sql"));
       Files.deleteIfExists(failedMigrationDirectory);
     }
   }

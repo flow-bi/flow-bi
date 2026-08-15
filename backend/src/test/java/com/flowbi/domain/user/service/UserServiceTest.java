@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
 import com.flowbi.domain.user.dto.UserDetailResponse;
+import com.flowbi.domain.user.entity.UserStatus;
 import com.flowbi.domain.user.repository.UserDetailProjection;
 import com.flowbi.domain.user.repository.UserRepository;
 import java.util.Optional;
@@ -19,8 +20,8 @@ class UserServiceTest {
 
   @Test
   void returnsOnlyTheMinimumActiveUserDetailWithTeamAndPosition() {
-    when(users.findActiveDetailByUserId(7L)).thenReturn(Optional
-        .of(new UserDetailProjection(7L, "Kim Flow", "ACTIVE", 3L, "Platform", 2L, "Engineer")));
+    when(users.findActiveDetailByUserId(7L)).thenReturn(Optional.of(new UserDetailProjection(7L,
+        "Kim Flow", UserStatus.ACTIVE, 3L, "Platform", 2L, "Engineer")));
 
     UserDetailResponse response = service.getUserDetail(7L);
 

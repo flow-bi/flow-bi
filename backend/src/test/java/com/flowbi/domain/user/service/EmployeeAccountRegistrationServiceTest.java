@@ -35,7 +35,7 @@ class EmployeeAccountRegistrationServiceTest {
     PasswordEncoder encoder = mock(PasswordEncoder.class);
     Team team = Team.create("People");
     Position position = Position.create("Manager");
-    User saved = User.create("E100","Kim",position,team);
+    User saved = User.create("E100","kim@example.test","Kim",position,team);
     when(teams.findExisting(1L)).thenReturn(team);
     when(positions.findExisting(2L)).thenReturn(position);
     when(users.findByEmployeeNumber("E100")).thenReturn(Optional.empty());
@@ -44,8 +44,9 @@ class EmployeeAccountRegistrationServiceTest {
     EmployeeAccountRegistrationService service = new EmployeeAccountRegistrationService(users,
         teams, positions, credentials, encoder, new PasswordPolicy());
 
-    EmployeeAccountRegistration registration = service.register(
-        new EmployeeAccountRegistrationRequest("E100", "Kim", 1L, 2L, "Password1!", "Password1!"));
+    EmployeeAccountRegistration registration = service
+        .register(new EmployeeAccountRegistrationRequest("E100", "kim@example.test", "Kim", 1L, 2L,
+            "Password1!", "Password1!"));
 
     assertThat(registration.user()).isSameAs(saved);
     assertThat(registration.mustChangePassword()).isTrue();
@@ -66,11 +67,11 @@ class EmployeeAccountRegistrationServiceTest {
     EmployeeAccountRegistrationService service = new EmployeeAccountRegistrationService(users,
         teams, positions, credentials, encoder, new PasswordPolicy());
 
-    assertThatThrownBy(() -> service.register(
-        new EmployeeAccountRegistrationRequest("E100", "Kim", 1L, 2L, "Password1!", "Password1!")))
+    assertThatThrownBy(() -> service.register(new EmployeeAccountRegistrationRequest("E100",
+        "kim@example.test", "Kim", 1L, 2L, "Password1!", "Password1!")))
         .isInstanceOf(EmployeeAccountRegistrationException.class);
-    assertThatThrownBy(() -> service.register(
-        new EmployeeAccountRegistrationRequest("E101", "Kim", 1L, 2L, "invalid", "different")))
+    assertThatThrownBy(() -> service.register(new EmployeeAccountRegistrationRequest("E101",
+        "kim2@example.test", "Kim", 1L, 2L, "invalid", "different")))
         .isInstanceOf(EmployeeAccountRegistrationException.class);
     verifyNoInteractions(teams,positions,credentials);
   }
@@ -84,7 +85,7 @@ class EmployeeAccountRegistrationServiceTest {
     PasswordEncoder encoder = mock(PasswordEncoder.class);
     Team team = Team.create("People");
     Position position = Position.create("Manager");
-    User saved = User.create("E100","Kim",position,team);
+    User saved = User.create("E100","kim@example.test","Kim",position,team);
     when(teams.findExisting(1L)).thenReturn(team);
     when(positions.findExisting(2L)).thenReturn(position);
     when(users.findByEmployeeNumber("E100")).thenReturn(Optional.empty());
@@ -95,8 +96,8 @@ class EmployeeAccountRegistrationServiceTest {
     EmployeeAccountRegistrationService service = new EmployeeAccountRegistrationService(users,
         teams, positions, credentials, encoder, new PasswordPolicy());
 
-    assertThatThrownBy(() -> service.register(
-        new EmployeeAccountRegistrationRequest("E100", "Kim", 1L, 2L, "Password1!", "Password1!")))
+    assertThatThrownBy(() -> service.register(new EmployeeAccountRegistrationRequest("E100",
+        "kim@example.test", "Kim", 1L, 2L, "Password1!", "Password1!")))
         .isInstanceOf(DataIntegrityViolationException.class);
   }
 
@@ -114,11 +115,11 @@ class EmployeeAccountRegistrationServiceTest {
     EmployeeAccountRegistrationService service = new EmployeeAccountRegistrationService(users,
         teams, positions, credentials, encoder, new PasswordPolicy());
 
-    assertThatThrownBy(() -> service.register(new EmployeeAccountRegistrationRequest("E100", "Kim",
-        1L, 2L, "Password123!", "Password123!")))
+    assertThatThrownBy(() -> service.register(new EmployeeAccountRegistrationRequest("E100",
+        "kim@example.test", "Kim", 1L, 2L, "Password123!", "Password123!")))
         .isInstanceOf(EmployeeAccountRegistrationException.class);
-    assertThatThrownBy(() -> service
-        .register(new EmployeeAccountRegistrationRequest("E101", "Kim", 1L, 2L, "short", "short")))
+    assertThatThrownBy(() -> service.register(new EmployeeAccountRegistrationRequest("E101",
+        "kim2@example.test", "Kim", 1L, 2L, "short", "short")))
         .isInstanceOf(EmployeeAccountRegistrationException.class);
     verify(users,never()).save(any(User.class));
     verifyNoInteractions(credentials,encoder);
@@ -133,7 +134,8 @@ class EmployeeAccountRegistrationServiceTest {
     PasswordEncoder encoder = mock(PasswordEncoder.class);
     Team team = Team.create("People");
     Position position = Position.create("Manager");
-    User saved = User.create("fixture-normal","Synthetic Fixture",position,team);
+    User saved = User.create("fixture-normal","normal@example.test","Synthetic Fixture",position,
+        team);
     when(teams.findExisting(1L)).thenReturn(team);
     when(positions.findExisting(2L)).thenReturn(position);
     when(users.findByEmployeeNumber("fixture-normal")).thenReturn(Optional.empty());
@@ -144,10 +146,23 @@ class EmployeeAccountRegistrationServiceTest {
 
     EmployeeAccountRegistration registration = service
         .registerFixture(new EmployeeAccountRegistrationRequest("fixture-normal",
-            "Synthetic Fixture", 1L, 2L, "Password1!", "Password1!"),false);
+            "normal@example.test", "Synthetic Fixture", 1L, 2L, "Password1!", "Password1!"),false);
 
     assertThat(registration.user()).isSameAs(saved);
     assertThat(registration.mustChangePassword()).isFalse();
     verify(credentials).save(any(UserCredential.class));
+  }
+
+  @Test
+  void rejectsARegistrationRequestWithoutAnExplicitEmailBeforePersistence() {
+    UserRepository users = mock(UserRepository.class);
+    EmployeeAccountRegistrationService service = new EmployeeAccountRegistrationService(users,
+        mock(TeamService.class), mock(PositionService.class), mock(UserCredentialRepository.class),
+        mock(PasswordEncoder.class), new PasswordPolicy());
+
+    assertThatThrownBy(() -> service.register(new EmployeeAccountRegistrationRequest("E100", " ",
+        "Kim", 1L, 2L, "Password1!", "Password1!")))
+        .isInstanceOf(EmployeeAccountRegistrationException.class);
+    verifyNoInteractions(users);
   }
 }

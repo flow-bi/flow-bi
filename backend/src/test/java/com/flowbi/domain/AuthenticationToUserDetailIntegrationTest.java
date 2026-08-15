@@ -100,7 +100,7 @@ class AuthenticationToUserDetailIntegrationTest {
     mockMvc.perform(get("/api/users/{userId}",user.getUserId()).session(session))
         .andExpect(status().isOk()).andExpect(header().string("Cache-Control","no-store"))
         .andExpect(jsonPath("$.userId").value(user.getUserId()))
-        .andExpect(jsonPath("$.name").value("Synthetic Fixture"))
+        .andExpect(jsonPath("$.name").value("Fixture User"))
         .andExpect(jsonPath("$.status").value("ACTIVE"))
         .andExpect(jsonPath("$.team.name").value(fixture.teamName()))
         .andExpect(jsonPath("$.position.name").value(fixture.positionName()))
@@ -152,7 +152,9 @@ class AuthenticationToUserDetailIntegrationTest {
     String teamName = "Team " + fixtureId;
     Position position = positions.save(Position.create(positionName));
     Team team = teams.save(Team.create(teamName));
-    User user = users.save(User.create("integration-" + UUID.randomUUID(),position,team));
+    String employeeNumber = "integration-" + UUID.randomUUID();
+    User user = users.save(
+        User.create(employeeNumber,employeeNumber + "@example.test","Fixture User",position,team));
     credentials
         .save(UserCredential.create(user,passwordEncoder.encode(password),mustChangePassword));
     return new Fixture(user, password, teamName, positionName);

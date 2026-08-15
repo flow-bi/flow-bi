@@ -63,7 +63,7 @@ class DevEmployeeAccountControllerTest {
   void exposesOnlySafeOptionsAndCreatesAnAccountWithCsrfProtection() throws Exception {
     Team team = Team.create("People");
     Position position = Position.create("Manager");
-    User user = User.create("E100","Kim",position,team);
+    User user = User.create("E100","kim@example.test","Kim",position,team);
     when(teams.findAll()).thenReturn(List.of(team));
     when(positions.findAll()).thenReturn(List.of(position));
     when(registrations.register(any())).thenReturn(new EmployeeAccountRegistration(user, true));
@@ -99,7 +99,7 @@ class DevEmployeeAccountControllerTest {
 
   private String requestBody() {
     return """
-        {"employeeNumber":"E100","name":"Kim","teamId":1,"positionId":2,
+        {"employeeNumber":"E100","email":"kim@example.test","name":"Kim","teamId":1,"positionId":2,
          "initialPassword":"Password123!","confirmation":"Password123!"}
         """;
   }
