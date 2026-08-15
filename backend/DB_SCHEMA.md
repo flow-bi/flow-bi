@@ -14,34 +14,36 @@
 
 임직원의 핵심 인사 정보를 관리한다.
 
-| 컬럼 | 타입 | 제약 | 설명 |
-| --- | --- | --- | --- |
-| `user_id` | `BIGINT` | PK | 사용자 ID |
-| `position_id` | `BIGINT` | FK, NOT NULL | 직급 ID |
-| `team_id` | `BIGINT` | FK, NOT NULL | 소속 팀 ID |
-| `employee_number` | `VARCHAR(50)` | NOT NULL | 사번 및 로그인 ID |
-| `name` | `VARCHAR(50)` | NOT NULL | 이름 |
-| `email` | `VARCHAR(255)` | NULL | 이메일 |
-| `phone_number` | `VARCHAR(20)` | NULL | 전화번호 |
-| `status` | `VARCHAR(30)` | NULL | 재직·활동 상태 |
-| `profile_image_url` | `VARCHAR(512)` | NULL | 프로필 이미지 URL |
-| `created_at` | `DATETIME` | DEFAULT NOW | 생성일시 |
-| `updated_at` | `DATETIME` | DEFAULT NOW | 수정일시 |
+| 컬럼                | 타입           | 제약         | 설명              |
+| ------------------- | -------------- | ------------ | ----------------- |
+| `user_id`           | `BIGINT`       | PK           | 사용자 ID         |
+| `position_id`       | `BIGINT`       | FK, NOT NULL | 직급 ID           |
+| `team_id`           | `BIGINT`       | FK, NOT NULL | 소속 팀 ID        |
+| `employee_number`   | `VARCHAR(50)`  | NOT NULL     | 사번 및 로그인 ID |
+| `name`              | `VARCHAR(50)`  | NOT NULL     | 이름              |
+| `email`             | `VARCHAR(255)` | UNIQUE, NOT NULL | 이메일         |
+| `phone_number`      | `VARCHAR(20)`  | NULL         | 전화번호          |
+| `status`            | `VARCHAR(30)`  | NOT NULL     | 계정 상태         |
+| `profile_image_url` | `VARCHAR(512)` | NULL         | 프로필 이미지 URL |
+| `created_at`        | `DATETIME`     | DEFAULT NOW  | 생성일시          |
+| `updated_at`        | `DATETIME`     | DEFAULT NOW  | 수정일시          |
 
 관계: Position N:1, Team N:1, User Credentials 1:1. 로그인 세션은 PostgreSQL이 아니라 Redis의 Spring Session 저장소에서 관리한다.
+
+`status`는 계정 활성화 상태인 `ACTIVE`, `INACTIVE`만 허용한다. 재직 상태와 업무 상태는 별도 개념이며 이 컬럼에 혼합하지 않는다. V2 Migration은 기존 사용자 이메일을 추측해 생성하지 않으며, 기존 사용자가 있으면 승인된 이메일 Backfill 전까지 적용을 중단한다.
 
 ### 2.2 `user_credentials`
 
 사용자 인증정보를 인사정보와 분리한다. 현재 자체 로그인만 고려하며 `provider`는 기준선에 없다.
 
-| 컬럼 | 타입 | 제약 | 설명 |
-| --- | --- | --- | --- |
-| `credential_id` | `BIGINT` | PK | 인증정보 ID |
-| `user_id` | `BIGINT` | FK, NOT NULL, UNIQUE | 사용자 ID |
-| `password_hash` | `VARCHAR(255)` | NOT NULL | 비밀번호 Hash |
-| `must_change_password` | `BOOLEAN` | NOT NULL, DEFAULT TRUE | 임시 비밀번호 변경 필요 여부 |
-| `created_at` | `DATETIME` | DEFAULT NOW | 생성일시 |
-| `updated_at` | `DATETIME` | DEFAULT NOW | 수정일시 |
+| 컬럼                   | 타입           | 제약                   | 설명                         |
+| ---------------------- | -------------- | ---------------------- | ---------------------------- |
+| `credential_id`        | `BIGINT`       | PK                     | 인증정보 ID                  |
+| `user_id`              | `BIGINT`       | FK, NOT NULL, UNIQUE   | 사용자 ID                    |
+| `password_hash`        | `VARCHAR(255)` | NOT NULL               | 비밀번호 Hash                |
+| `must_change_password` | `BOOLEAN`      | NOT NULL, DEFAULT TRUE | 임시 비밀번호 변경 필요 여부 |
+| `created_at`           | `DATETIME`     | DEFAULT NOW            | 생성일시                     |
+| `updated_at`           | `DATETIME`     | DEFAULT NOW            | 수정일시                     |
 
 관리자가 임시 비밀번호를 발급하거나 초기화할 때 `must_change_password`를 `TRUE`로 설정하고, 사용자가 새 비밀번호로 변경을 완료하면 `FALSE`로 변경한다.
 
@@ -49,39 +51,39 @@
 
 조직 계층의 팀을 관리한다.
 
-| 컬럼 | 타입 | 제약 | 설명 |
-| --- | --- | --- | --- |
-| `team_id` | `BIGINT` | PK | 팀 ID |
-| `parent_team_id` | `BIGINT` | NULL | 상위 팀 ID |
-| `team_name` | `VARCHAR(50)` | NOT NULL | 팀 이름 |
-| `created_at` | `DATETIME` | DEFAULT NOW | 생성일시 |
-| `updated_at` | `DATETIME` | DEFAULT NOW | 수정일시 |
+| 컬럼             | 타입          | 제약        | 설명       |
+| ---------------- | ------------- | ----------- | ---------- |
+| `team_id`        | `BIGINT`      | PK          | 팀 ID      |
+| `parent_team_id` | `BIGINT`      | NULL        | 상위 팀 ID |
+| `team_name`      | `VARCHAR(50)` | NOT NULL    | 팀 이름    |
+| `created_at`     | `DATETIME`    | DEFAULT NOW | 생성일시   |
+| `updated_at`     | `DATETIME`    | DEFAULT NOW | 수정일시   |
 
 ### 2.4 `teams_closure`
 
 팀 계층을 Closure Table Pattern으로 관리한다.
 
-| 컬럼 | 타입 | 제약 | 설명 |
-| --- | --- | --- | --- |
-| `ancestor_team_id` | `BIGINT` | PK, FK | 조상 팀 ID |
-| `descendant_team_id` | `BIGINT` | PK, FK | 자손 팀 ID |
-| `depth` | `INT` | NOT NULL | 계층 거리; 자신은 0 |
-| `created_at` | `DATETIME` | DEFAULT NOW | 생성일시 |
-| `updated_at` | `DATETIME` | DEFAULT NOW | 수정일시 |
+| 컬럼                 | 타입       | 제약        | 설명                |
+| -------------------- | ---------- | ----------- | ------------------- |
+| `ancestor_team_id`   | `BIGINT`   | PK, FK      | 조상 팀 ID          |
+| `descendant_team_id` | `BIGINT`   | PK, FK      | 자손 팀 ID          |
+| `depth`              | `INT`      | NOT NULL    | 계층 거리; 자신은 0 |
+| `created_at`         | `DATETIME` | DEFAULT NOW | 생성일시            |
+| `updated_at`         | `DATETIME` | DEFAULT NOW | 수정일시            |
 
 ### 2.5 `positions`
 
 임직원의 인사 직급을 관리한다.
 
-| 컬럼 | 타입 | 제약 | 설명 |
-| --- | --- | --- | --- |
-| `position_id` | `BIGINT` | PK | 직급 ID |
-| `position_name` | `VARCHAR(50)` | NOT NULL | 직급명 |
-| `code` | `VARCHAR(255)` | NULL | 직급 Code |
-| `status` | `VARCHAR(30)` | NULL | 사용 상태 |
-| `level` | `VARCHAR(255)` | NULL | 직급 Level |
-| `created_at` | `DATETIME` | DEFAULT NOW | 생성일시 |
-| `updated_at` | `DATETIME` | DEFAULT NOW | 수정일시 |
+| 컬럼            | 타입           | 제약        | 설명       |
+| --------------- | -------------- | ----------- | ---------- |
+| `position_id`   | `BIGINT`       | PK          | 직급 ID    |
+| `position_name` | `VARCHAR(50)`  | NOT NULL    | 직급명     |
+| `code`          | `VARCHAR(255)` | NULL        | 직급 Code  |
+| `status`        | `VARCHAR(30)`  | NULL        | 사용 상태  |
+| `level`         | `VARCHAR(255)` | NULL        | 직급 Level |
+| `created_at`    | `DATETIME`     | DEFAULT NOW | 생성일시   |
+| `updated_at`    | `DATETIME`     | DEFAULT NOW | 수정일시   |
 
 `user_position_histories`는 추후 논의 대상으로 기준선 테이블에 포함하지 않는다.
 
@@ -89,45 +91,45 @@
 
 ### 3.1 `roles`
 
-| 컬럼 | 타입 | 제약 | 설명 |
-| --- | --- | --- | --- |
-| `role_id` | `BIGINT` | PK | 역할 ID |
-| `role_name` | `VARCHAR(50)` | NOT NULL | 역할명 |
-| `created_at` | `DATETIME` | DEFAULT NOW | 생성일시 |
-| `updated_at` | `DATETIME` | DEFAULT NOW | 수정일시 |
+| 컬럼         | 타입          | 제약        | 설명     |
+| ------------ | ------------- | ----------- | -------- |
+| `role_id`    | `BIGINT`      | PK          | 역할 ID  |
+| `role_name`  | `VARCHAR(50)` | NOT NULL    | 역할명   |
+| `created_at` | `DATETIME`    | DEFAULT NOW | 생성일시 |
+| `updated_at` | `DATETIME`    | DEFAULT NOW | 수정일시 |
 
 ### 3.2 `permissions`
 
-| 컬럼 | 타입 | 제약 | 설명 |
-| --- | --- | --- | --- |
-| `permission_id` | `BIGINT` | PK | 권한 ID |
-| `permission_name` | `VARCHAR(50)` | NOT NULL | 권한명 |
-| `created_at` | `DATETIME` | DEFAULT NOW | 생성일시 |
-| `updated_at` | `DATETIME` | DEFAULT NOW | 수정일시 |
+| 컬럼              | 타입          | 제약        | 설명     |
+| ----------------- | ------------- | ----------- | -------- |
+| `permission_id`   | `BIGINT`      | PK          | 권한 ID  |
+| `permission_name` | `VARCHAR(50)` | NOT NULL    | 권한명   |
+| `created_at`      | `DATETIME`    | DEFAULT NOW | 생성일시 |
+| `updated_at`      | `DATETIME`    | DEFAULT NOW | 수정일시 |
 
 ### 3.3 `role_permissions`
 
 Role과 Permission의 N:M Mapping이다.
 
-| 컬럼 | 타입 | 제약 | 설명 |
-| --- | --- | --- | --- |
-| `role_permission_id` | `BIGINT` | PK | Mapping ID |
-| `role_id` | `BIGINT` | FK, NOT NULL | 역할 ID |
-| `permission_id` | `BIGINT` | FK, NOT NULL | 권한 ID |
-| `created_at` | `DATETIME` | DEFAULT NOW | 생성일시 |
-| `updated_at` | `DATETIME` | DEFAULT NOW | 수정일시 |
+| 컬럼                 | 타입       | 제약         | 설명       |
+| -------------------- | ---------- | ------------ | ---------- |
+| `role_permission_id` | `BIGINT`   | PK           | Mapping ID |
+| `role_id`            | `BIGINT`   | FK, NOT NULL | 역할 ID    |
+| `permission_id`      | `BIGINT`   | FK, NOT NULL | 권한 ID    |
+| `created_at`         | `DATETIME` | DEFAULT NOW  | 생성일시   |
+| `updated_at`         | `DATETIME` | DEFAULT NOW  | 수정일시   |
 
 ### 3.4 `user_roles`
 
 User와 Role의 N:M Mapping이다.
 
-| 컬럼 | 타입 | 제약 | 설명 |
-| --- | --- | --- | --- |
-| `user_role_id` | `BIGINT` | PK | Mapping ID |
-| `user_id` | `BIGINT` | FK, NOT NULL | 사용자 ID |
-| `role_id2` | `BIGINT` | FK, NOT NULL | 역할 ID |
-| `created_at` | `DATETIME` | DEFAULT NOW | 생성일시 |
-| `updated_at` | `DATETIME` | DEFAULT NOW | 수정일시 |
+| 컬럼           | 타입       | 제약         | 설명       |
+| -------------- | ---------- | ------------ | ---------- |
+| `user_role_id` | `BIGINT`   | PK           | Mapping ID |
+| `user_id`      | `BIGINT`   | FK, NOT NULL | 사용자 ID  |
+| `role_id2`     | `BIGINT`   | FK, NOT NULL | 역할 ID    |
+| `created_at`   | `DATETIME` | DEFAULT NOW  | 생성일시   |
+| `updated_at`   | `DATETIME` | DEFAULT NOW  | 수정일시   |
 
 ## 4. 일정 및 협업 관리
 
@@ -135,17 +137,17 @@ User와 Role의 N:M Mapping이다.
 
 일정의 핵심 Meta Data를 관리한다.
 
-| 컬럼 | 타입 | 제약 | 설명 |
-| --- | --- | --- | --- |
-| `schedule_id` | `BIGINT` | PK | 일정 ID |
-| `title` | `VARCHAR(200)` | NOT NULL | 제목 |
-| `schedule_type` | `VARCHAR(30)` | NULL | 전사·팀·개인·프로젝트 등 |
-| `visibility` | `VARCHAR(30)` | NULL | 공개 범위 |
-| `start_at` | `DATETIME` | NOT NULL | 시작일시 |
-| `end_at` | `DATETIME` | NOT NULL | 종료일시 |
-| `creator_id` | `BIGINT` | FK, NOT NULL | 등록자 ID |
-| `created_at` | `DATETIME` | DEFAULT NOW | 생성일시 |
-| `updated_at` | `DATETIME` | DEFAULT NOW | 수정일시 |
+| 컬럼            | 타입           | 제약         | 설명                     |
+| --------------- | -------------- | ------------ | ------------------------ |
+| `schedule_id`   | `BIGINT`       | PK           | 일정 ID                  |
+| `title`         | `VARCHAR(200)` | NOT NULL     | 제목                     |
+| `schedule_type` | `VARCHAR(30)`  | NULL         | 전사·팀·개인·프로젝트 등 |
+| `visibility`    | `VARCHAR(30)`  | NULL         | 공개 범위                |
+| `start_at`      | `DATETIME`     | NOT NULL     | 시작일시                 |
+| `end_at`        | `DATETIME`     | NOT NULL     | 종료일시                 |
+| `creator_id`    | `BIGINT`       | FK, NOT NULL | 등록자 ID                |
+| `created_at`    | `DATETIME`     | DEFAULT NOW  | 생성일시                 |
+| `updated_at`    | `DATETIME`     | DEFAULT NOW  | 수정일시                 |
 
 관계: User N:1, Schedule Details 1:N으로 설명되어 있으나 상세 명세는 1:1 의도, Schedule Targets 1:N, Room Reservations 1:N.
 
@@ -153,87 +155,87 @@ User와 Role의 N:M Mapping이다.
 
 일정의 상세 내용과 장소를 분리한다.
 
-| 컬럼 | 타입 | 제약 | 설명 |
-| --- | --- | --- | --- |
-| `schedule_details_id` | `BIGINT` | PK | 상세 ID |
-| `schedule_id` | `BIGINT` | FK, NOT NULL | 일정 ID |
-| `content` | `VARCHAR(200)` | NULL | 상세 내용 |
-| `location` | `VARCHAR(30)` | NULL | 장소 |
-| `created_at` | `DATETIME` | DEFAULT NOW | 생성일시 |
-| `updated_at` | `DATETIME` | DEFAULT NOW | 수정일시 |
+| 컬럼                  | 타입           | 제약         | 설명      |
+| --------------------- | -------------- | ------------ | --------- |
+| `schedule_details_id` | `BIGINT`       | PK           | 상세 ID   |
+| `schedule_id`         | `BIGINT`       | FK, NOT NULL | 일정 ID   |
+| `content`             | `VARCHAR(200)` | NULL         | 상세 내용 |
+| `location`            | `VARCHAR(30)`  | NULL         | 장소      |
+| `created_at`          | `DATETIME`     | DEFAULT NOW  | 생성일시  |
+| `updated_at`          | `DATETIME`     | DEFAULT NOW  | 수정일시  |
 
 ### 4.3 `schedule_targets`
 
 일정을 사용자·프로젝트·팀 대상에 연결한다.
 
-| 컬럼 | 타입 | 제약 | 설명 |
-| --- | --- | --- | --- |
-| `schedule_target_id` | `BIGINT` | PK | 공유 ID |
-| `schedule_id` | `BIGINT` | FK, NOT NULL | 일정 ID |
-| `user_id` | `BIGINT` | FK, NULL | 대상 사용자 |
-| `project_id` | `BIGINT` | FK, NULL | 대상 프로젝트 |
-| `ancestor_team_id` | `BIGINT` | FK, NULL | 조상 팀 ID |
-| `team_id` | `BIGINT` | FK, NULL | 자손 팀 ID |
-| `target_type` | `VARCHAR(30)` | NOT NULL | `USER`, `PROJECT`, `TEAM` |
-| `created_at` | `DATETIME` | DEFAULT NOW | 생성일시 |
-| `updated_at` | `DATETIME` | DEFAULT NOW | 수정일시 |
+| 컬럼                 | 타입          | 제약         | 설명                      |
+| -------------------- | ------------- | ------------ | ------------------------- |
+| `schedule_target_id` | `BIGINT`      | PK           | 공유 ID                   |
+| `schedule_id`        | `BIGINT`      | FK, NOT NULL | 일정 ID                   |
+| `user_id`            | `BIGINT`      | FK, NULL     | 대상 사용자               |
+| `project_id`         | `BIGINT`      | FK, NULL     | 대상 프로젝트             |
+| `ancestor_team_id`   | `BIGINT`      | FK, NULL     | 조상 팀 ID                |
+| `team_id`            | `BIGINT`      | FK, NULL     | 자손 팀 ID                |
+| `target_type`        | `VARCHAR(30)` | NOT NULL     | `USER`, `PROJECT`, `TEAM` |
+| `created_at`         | `DATETIME`    | DEFAULT NOW  | 생성일시                  |
+| `updated_at`         | `DATETIME`    | DEFAULT NOW  | 수정일시                  |
 
 ### 4.4 `projects`
 
-| 컬럼 | 타입 | 제약 | 설명 |
-| --- | --- | --- | --- |
-| `project_id` | `BIGINT` | PK | 프로젝트 ID |
-| `project_name` | `VARCHAR(50)` | NOT NULL | 프로젝트명 |
-| `description` | `TEXT` | NULL | 설명 |
-| `status` | `VARCHAR(30)` | NULL | 준비·진행·보류·완료 등 |
-| `created_at` | `DATETIME` | DEFAULT NOW | 생성일시 |
-| `updated_at` | `DATETIME` | DEFAULT NOW | 수정일시 |
+| 컬럼           | 타입          | 제약        | 설명                   |
+| -------------- | ------------- | ----------- | ---------------------- |
+| `project_id`   | `BIGINT`      | PK          | 프로젝트 ID            |
+| `project_name` | `VARCHAR(50)` | NOT NULL    | 프로젝트명             |
+| `description`  | `TEXT`        | NULL        | 설명                   |
+| `status`       | `VARCHAR(30)` | NULL        | 준비·진행·보류·완료 등 |
+| `created_at`   | `DATETIME`    | DEFAULT NOW | 생성일시               |
+| `updated_at`   | `DATETIME`    | DEFAULT NOW | 수정일시               |
 
 ### 4.5 `projects_members`
 
 Project와 User의 N:M Mapping이다.
 
-| 컬럼 | 타입 | 제약 | 설명 |
-| --- | --- | --- | --- |
-| `project_member_id` | `BIGINT` | PK | 참여 ID |
-| `project_id` | `BIGINT` | FK, NOT NULL | 프로젝트 ID |
-| `user_id` | `BIGINT` | FK, NOT NULL | 사용자 ID |
-| `joined_at` | `DATETIME` | DEFAULT NOW | 참여일시 |
-| `created_at` | `DATETIME` | DEFAULT NOW | 생성일시 |
-| `updated_at` | `DATETIME` | DEFAULT NOW | 수정일시 |
+| 컬럼                | 타입       | 제약         | 설명        |
+| ------------------- | ---------- | ------------ | ----------- |
+| `project_member_id` | `BIGINT`   | PK           | 참여 ID     |
+| `project_id`        | `BIGINT`   | FK, NOT NULL | 프로젝트 ID |
+| `user_id`           | `BIGINT`   | FK, NOT NULL | 사용자 ID   |
+| `joined_at`         | `DATETIME` | DEFAULT NOW  | 참여일시    |
+| `created_at`        | `DATETIME` | DEFAULT NOW  | 생성일시    |
+| `updated_at`        | `DATETIME` | DEFAULT NOW  | 수정일시    |
 
 ## 5. 자원 및 예약 관리
 
 ### 5.1 `rooms`
 
-| 컬럼 | 타입 | 제약 | 설명 |
-| --- | --- | --- | --- |
-| `room_id` | `BIGINT` | PK | 회의실 ID |
-| `room_name` | `VARCHAR(100)` | NOT NULL | 회의실명 |
-| `capacity` | `BIGINT` | NULL | 수용 인원 |
-| `location` | `VARCHAR(255)` | NULL | 위치 |
-| `Field` | `VARCHAR(255)` | NULL | 장비 등 비정형 특성 예비 Field |
-| `created_at` | `DATETIME` | DEFAULT NOW | 생성일시 |
-| `updated_at` | `DATETIME` | DEFAULT NOW | 수정일시 |
+| 컬럼         | 타입           | 제약        | 설명                           |
+| ------------ | -------------- | ----------- | ------------------------------ |
+| `room_id`    | `BIGINT`       | PK          | 회의실 ID                      |
+| `room_name`  | `VARCHAR(100)` | NOT NULL    | 회의실명                       |
+| `capacity`   | `BIGINT`       | NULL        | 수용 인원                      |
+| `location`   | `VARCHAR(255)` | NULL        | 위치                           |
+| `Field`      | `VARCHAR(255)` | NULL        | 장비 등 비정형 특성 예비 Field |
+| `created_at` | `DATETIME`     | DEFAULT NOW | 생성일시                       |
+| `updated_at` | `DATETIME`     | DEFAULT NOW | 수정일시                       |
 
 ### 5.2 `rooms_reservations`
 
 회의실 예약과 일정 연결을 관리한다.
 
-| 컬럼 | 타입 | 제약 | 설명 |
-| --- | --- | --- | --- |
-| `reservation_id` | `BIGINT` | PK | 예약 ID |
-| `room_id` | `BIGINT` | FK, NOT NULL | 회의실 ID |
-| `schedule_id` | `BIGINT` | FK, NOT NULL | 일정 ID |
-| `title` | `VARCHAR(200)` | NOT NULL | 예약 제목 |
-| `start_at` | `DATETIME` | NOT NULL | 시작일시 |
-| `end_at` | `DATETIME` | NOT NULL | 종료일시 |
-| `status` | `VARCHAR(30)` | NULL | 대기·완료·취소 등 |
-| `cancelled_at` | `DATETIME` | NULL | 취소일시 |
-| `count` | `INT` | NULL | 예상 인원 |
-| `Field` | `VARCHAR(255)` | NULL | 비고·특이사항 예비 Field |
-| `created_at` | `DATETIME` | DEFAULT NOW | 생성일시 |
-| `updated_at` | `DATETIME` | DEFAULT NOW | 수정일시 |
+| 컬럼             | 타입           | 제약         | 설명                     |
+| ---------------- | -------------- | ------------ | ------------------------ |
+| `reservation_id` | `BIGINT`       | PK           | 예약 ID                  |
+| `room_id`        | `BIGINT`       | FK, NOT NULL | 회의실 ID                |
+| `schedule_id`    | `BIGINT`       | FK, NOT NULL | 일정 ID                  |
+| `title`          | `VARCHAR(200)` | NOT NULL     | 예약 제목                |
+| `start_at`       | `DATETIME`     | NOT NULL     | 시작일시                 |
+| `end_at`         | `DATETIME`     | NOT NULL     | 종료일시                 |
+| `status`         | `VARCHAR(30)`  | NULL         | 대기·완료·취소 등        |
+| `cancelled_at`   | `DATETIME`     | NULL         | 취소일시                 |
+| `count`          | `INT`          | NULL         | 예상 인원                |
+| `Field`          | `VARCHAR(255)` | NULL         | 비고·특이사항 예비 Field |
+| `created_at`     | `DATETIME`     | DEFAULT NOW  | 생성일시                 |
+| `updated_at`     | `DATETIME`     | DEFAULT NOW  | 수정일시                 |
 
 ## 6. 기준선 관계 요약
 
