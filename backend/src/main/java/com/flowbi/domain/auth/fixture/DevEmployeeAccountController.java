@@ -52,8 +52,8 @@ public class DevEmployeeAccountController {
   @PostMapping("/employee-accounts")
   public ResponseEntity<EmployeeAccountResponse> create(
       @Valid @RequestBody CreateEmployeeAccount body) {
-    EmployeeAccountRegistration registration = registrations
-        .register(new EmployeeAccountRegistrationRequest(body.employeeNumber(), body.name(),
+    EmployeeAccountRegistration registration = registrations.register(
+        new EmployeeAccountRegistrationRequest(body.employeeNumber(), body.email(), body.name(),
             body.teamId(), body.positionId(), body.initialPassword(), body.confirmation()));
     return ResponseEntity.status(HttpStatus.CREATED)
         .body(EmployeeAccountResponse.from(registration));
@@ -73,7 +73,8 @@ public class DevEmployeeAccountController {
   }
 
   public record CreateEmployeeAccount(@NotBlank @Size(max = 50) String employeeNumber,
-      @NotBlank @Size(max = 50) String name, @NotNull Long teamId, @NotNull Long positionId,
+      @NotBlank @Size(max = 255) String email, @NotBlank @Size(max = 50) String name,
+      @NotNull Long teamId, @NotNull Long positionId,
       @NotBlank @Size(max = 128) String initialPassword,
       @NotBlank @Size(max = 128) String confirmation) {
   }

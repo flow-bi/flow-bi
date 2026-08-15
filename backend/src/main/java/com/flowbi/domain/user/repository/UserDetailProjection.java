@@ -1,5 +1,7 @@
 package com.flowbi.domain.user.repository;
 
-public record UserDetailProjection(Long userId, String name, String status, Long teamId,
+import com.flowbi.domain.user.entity.UserStatus;
+
+public record UserDetailProjection(Long userId, String name, UserStatus status, Long teamId,
     String teamName, Long positionId, String positionName) {
 }

@@ -43,10 +43,14 @@ public class EmployeeAccountRegistrationService {
     if (users.findByEmployeeNumber(employeeNumber).isPresent()) {
       throw new EmployeeAccountRegistrationException("Employee number is already registered.");
     }
+    String email = request.email().trim();
+    if (users.findByEmail(email).isPresent()) {
+      throw new EmployeeAccountRegistrationException("Email is already registered.");
+    }
     Team team = findTeam(request.teamId());
     Position position = findPosition(request.positionId());
-    return create(employeeNumber,request.name().trim(),team,position,request.initialPassword(),
-        true);
+    return create(employeeNumber,email,request.name().trim(),team,position,
+        request.initialPassword(),true);
   }
 
   /**
@@ -62,8 +66,8 @@ public class EmployeeAccountRegistrationService {
     Team team = findTeam(request.teamId());
     Position position = findPosition(request.positionId());
     String employeeNumber = request.employeeNumber().trim();
-    User user = users.findByEmployeeNumber(employeeNumber).orElseGet(
-        () -> users.save(User.create(employeeNumber,request.name().trim(),position,team)));
+    User user = users.findByEmployeeNumber(employeeNumber).orElseGet(() -> users.save(
+        User.create(employeeNumber,request.email().trim(),request.name().trim(),position,team)));
     if (credentials.findByUserUserId(user.getUserId()).isEmpty()) {
       credentials.save(UserCredential.create(user,passwordEncoder.encode(request.initialPassword()),
           mustChangePassword));
@@ -71,9 +75,9 @@ public class EmployeeAccountRegistrationService {
     return new EmployeeAccountRegistration(user, mustChangePassword);
   }
 
-  private EmployeeAccountRegistration create(String employeeNumber,String name,Team team,
-      Position position,String initialPassword,boolean mustChangePassword) {
-    User user = users.save(User.create(employeeNumber,name,position,team));
+  private EmployeeAccountRegistration create(String employeeNumber,String email,String name,
+      Team team,Position position,String initialPassword,boolean mustChangePassword) {
+    User user = users.save(User.create(employeeNumber,email,name,position,team));
     credentials.save(
         UserCredential.create(user,passwordEncoder.encode(initialPassword),mustChangePassword));
     return new EmployeeAccountRegistration(user, mustChangePassword);
@@ -97,9 +101,10 @@ public class EmployeeAccountRegistrationService {
 
   private void validate(EmployeeAccountRegistrationRequest request) {
     if (request == null || !StringUtils.hasText(request.employeeNumber())
-        || request.employeeNumber().trim().length() > 50 || !StringUtils.hasText(request.name())
-        || request.name().trim().length() > 50 || request.teamId() == null || request.teamId() <= 0
-        || request.positionId() == null || request.positionId() <= 0) {
+        || request.employeeNumber().trim().length() > 50 || !StringUtils.hasText(request.email())
+        || !StringUtils.hasText(request.name()) || request.name().trim().length() > 50
+        || request.teamId() == null || request.teamId() <= 0 || request.positionId() == null
+        || request.positionId() <= 0) {
       throw new EmployeeAccountRegistrationException("Employee account request is invalid.");
     }
     if (request.initialPassword() == null

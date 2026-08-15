@@ -35,6 +35,7 @@ public class TestFixtureProperties {
 
   public static class Account {
     private String employeeNumber;
+    private String email;
     private String password;
 
     public String getEmployeeNumber() {
@@ -43,6 +44,14 @@ public class TestFixtureProperties {
 
     public void setEmployeeNumber(String employeeNumber) {
       this.employeeNumber = employeeNumber;
+    }
+
+    public String getEmail() {
+      return email;
+    }
+
+    public void setEmail(String email) {
+      this.email = email;
     }
 
     public String getPassword() {

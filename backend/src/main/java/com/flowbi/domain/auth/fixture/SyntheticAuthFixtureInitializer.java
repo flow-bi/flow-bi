@@ -59,21 +59,22 @@ public class SyntheticAuthFixtureInitializer implements ApplicationRunner {
       throw new IllegalStateException(
           "Synthetic authentication fixture configuration is incomplete.");
     }
-    if (normal.getEmployeeNumber().equals(passwordChangeRequired.getEmployeeNumber())) {
+    if (normal.getEmployeeNumber().trim().equals(passwordChangeRequired.getEmployeeNumber().trim())
+        || normal.getEmail().trim().equalsIgnoreCase(passwordChangeRequired.getEmail().trim())) {
       throw new IllegalStateException(
-          "Synthetic authentication fixture employee numbers must be distinct.");
+          "Synthetic authentication fixture accounts must be distinct.");
     }
   }
 
   private boolean hasRequiredValues(TestFixtureProperties.Account account) {
     return account != null && StringUtils.hasText(account.getEmployeeNumber())
-        && StringUtils.hasText(account.getPassword());
+        && StringUtils.hasText(account.getEmail()) && StringUtils.hasText(account.getPassword());
   }
 
   private void createIfMissing(TestFixtureProperties.Account account,boolean mustChangePassword,
       Position position,Team team) {
     registrations.registerFixture(new EmployeeAccountRegistrationRequest(
-        account.getEmployeeNumber(), "Synthetic Fixture", team.getTeamId(),
+        account.getEmployeeNumber(), account.getEmail(), "Synthetic Fixture", team.getTeamId(),
         position.getPositionId(), account.getPassword(), account.getPassword()),mustChangePassword);
   }
 }
