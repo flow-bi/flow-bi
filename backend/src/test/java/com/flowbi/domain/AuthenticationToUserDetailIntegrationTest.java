@@ -9,10 +9,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.flowbi.domain.auth.security.LoginPrincipal;
-import com.flowbi.domain.auth.entity.UserCredential;
-import com.flowbi.domain.auth.repository.LoginRateLimiter;
-import com.flowbi.domain.auth.repository.SessionGenerationStore;
-import com.flowbi.domain.auth.repository.UserCredentialRepository;
+import com.flowbi.domain.auth.credential.UserCredential;
+import com.flowbi.domain.auth.login.ratelimit.LoginRateLimiter;
+import com.flowbi.domain.auth.session.SessionGenerationStore;
+import com.flowbi.domain.auth.credential.UserCredentialRepository;
 import com.flowbi.domain.position.entity.Position;
 import com.flowbi.domain.position.repository.PositionRepository;
 import com.flowbi.domain.team.entity.Team;
@@ -230,7 +230,7 @@ class AuthenticationToUserDetailIntegrationTest {
     private final ConcurrentHashMap<String, Long> generations = new ConcurrentHashMap<>();
 
     @Override
-    public java.util.OptionalLong currentGeneration(String userId) {
+    public java.util.OptionalLong findCurrentGeneration(String userId) {
       Long generation = generations.get(userId);
       return generation == null
           ? java.util.OptionalLong.empty()
@@ -238,22 +238,22 @@ class AuthenticationToUserDetailIntegrationTest {
     }
 
     @Override
-    public java.util.Optional<String> changeInProgress(String userId) {
+    public java.util.Optional<String> findRetainedSessionId(String userId) {
       return java.util.Optional.empty();
     }
 
     @Override
-    public long generationForNewSession(String userId,boolean hasExistingSessions) {
+    public long resolveGenerationForNewSession(String userId,boolean hasExistingSessions) {
       return generations.computeIfAbsent(userId,ignored -> 0L);
     }
 
     @Override
-    public long beginChange(String userId,String retainedSessionId) {
+    public long beginPasswordChange(String userId,String retainedSessionId) {
       return generations.merge(userId,1L,Long::sum);
     }
 
     @Override
-    public void completeChange(String userId) {
+    public void completePasswordChange(String userId) {
     }
   }
 }
