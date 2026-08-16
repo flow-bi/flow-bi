@@ -8,7 +8,16 @@ export const employeeAccountSchema = z
       .min(1, '사번을 입력해 주세요.')
       .max(50, '사번은 50자 이하여야 합니다.')
       .regex(/^[A-Za-z0-9-]+$/, '사번 형식을 확인해 주세요.'),
-    name: z.string().trim().min(1, '이름을 입력해 주세요.').max(100, '이름은 100자 이하여야 합니다.'),
+    email: z
+      .string()
+      .trim()
+      .email('이메일 형식을 확인해 주세요.')
+      .max(255, '이메일은 255자 이하여야 합니다.'),
+    name: z
+      .string()
+      .trim()
+      .min(1, '이름을 입력해 주세요.')
+      .max(100, '이름은 100자 이하여야 합니다.'),
     teamId: z.number().int().positive('팀을 선택해 주세요.'),
     positionId: z.number().int().positive('직급을 선택해 주세요.'),
     initialPassword: z

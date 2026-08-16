@@ -26,6 +26,7 @@ function renderModal(overrides: Partial<Parameters<typeof EmployeeAccountModal>[
 
 async function fillValidForm(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText('사번'), 'DEV-2001')
+  await user.type(screen.getByLabelText('이메일'), 'dev-2001@example.test')
   await user.type(screen.getByLabelText('이름'), '개발 사용자')
   await user.selectOptions(screen.getByLabelText('팀'), '1')
   await user.selectOptions(screen.getByLabelText('직급'), '2')
@@ -36,7 +37,9 @@ async function fillValidForm(user: ReturnType<typeof userEvent.setup>) {
 describe('EmployeeAccountModal', () => {
   it('loads persisted teams and positions and creates an account with required fields only', async () => {
     const user = userEvent.setup()
-    const createAccount = vi.fn().mockResolvedValue({ employeeNumber: 'DEV-2001', mustChangePassword: true })
+    const createAccount = vi
+      .fn()
+      .mockResolvedValue({ employeeNumber: 'DEV-2001', mustChangePassword: true })
     const { onCreated } = renderModal({ createAccount })
 
     await screen.findByRole('option', { name: 'Platform' })
@@ -46,6 +49,7 @@ describe('EmployeeAccountModal', () => {
     await waitFor(() => {
       expect(createAccount).toHaveBeenCalledWith({
         employeeNumber: 'DEV-2001',
+        email: 'dev-2001@example.test',
         name: '개발 사용자',
         teamId: 1,
         positionId: 2,
@@ -60,7 +64,10 @@ describe('EmployeeAccountModal', () => {
     const user = userEvent.setup()
     let resolveRequest: (() => void) | undefined
     const createAccount = vi.fn(
-      () => new Promise<{ employeeNumber: string; mustChangePassword: true }>((resolve) => { resolveRequest = () => resolve({ employeeNumber: 'DEV-2001', mustChangePassword: true }) }),
+      () =>
+        new Promise<{ employeeNumber: string; mustChangePassword: true }>((resolve) => {
+          resolveRequest = () => resolve({ employeeNumber: 'DEV-2001', mustChangePassword: true })
+        }),
     )
     renderModal({ createAccount })
 
@@ -77,18 +84,40 @@ describe('EmployeeAccountModal', () => {
     resolveRequest?.()
   })
 
+  it('passes the email required by the development adapter and returns only the employee number', async () => {
+    const user = userEvent.setup()
+    const createAccount = vi
+      .fn()
+      .mockResolvedValue({ employeeNumber: 'DEV-2001', mustChangePassword: true })
+    const { onCreated } = renderModal({ createAccount })
+
+    await screen.findByRole('option', { name: 'Platform' })
+    await fillValidForm(user)
+    await user.click(screen.getByRole('button', { name: '직원 계정 생성' }))
+
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith('DEV-2001'))
+    expect(onCreated.mock.calls[0]).toHaveLength(1)
+  })
+
   it('provides a retry action for options failure and status-specific creation errors', async () => {
     const user = userEvent.setup()
-    const loadOptions = vi.fn().mockRejectedValueOnce(new Response(null, { status: 503 })).mockResolvedValue(options)
+    const loadOptions = vi
+      .fn()
+      .mockRejectedValueOnce(new Response(null, { status: 503 }))
+      .mockResolvedValue(options)
     const createAccount = vi.fn().mockRejectedValue(new Response(null, { status: 409 }))
     renderModal({ loadOptions, createAccount })
 
-    expect(await screen.findByText('참조 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.')).toBeInTheDocument()
+    expect(
+      await screen.findByText('참조 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.'),
+    ).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '다시 시도' }))
     await screen.findByRole('option', { name: 'Platform' })
     await fillValidForm(user)
     await user.click(screen.getByRole('button', { name: '직원 계정 생성' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('이미 사용 중인 사번입니다. 다른 사번을 입력해 주세요.')
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '이미 사용 중인 사번입니다. 다른 사번을 입력해 주세요.',
+    )
   })
 
   it('keeps focus within the modal, confirms discarding entered data, and returns focus to the trigger', async () => {
@@ -103,7 +132,9 @@ describe('EmployeeAccountModal', () => {
     await user.type(screen.getByLabelText('사번'), 'DEV-2001')
     await user.keyboard('{Escape}')
     expect(screen.getByRole('dialog')).toBeInTheDocument()
-    expect(await screen.findByRole('alertdialog')).toHaveTextContent('입력한 내용을 버리고 닫을까요?')
+    expect(await screen.findByRole('alertdialog')).toHaveTextContent(
+      '입력한 내용을 버리고 닫을까요?',
+    )
     await user.click(screen.getByRole('button', { name: '닫기' }))
     expect(onClose).toHaveBeenCalledOnce()
     expect(trigger).toHaveFocus()

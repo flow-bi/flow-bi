@@ -5,8 +5,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { LoginPage } from './LoginPage'
 
 const normalAccount = {
-  employeeNumber: ['TEST', 1001].join('-'),
-  password: ['Synthetic', '!', 123].join(''),
+  employeeNumber: ['LOGIN', 1001].join('-'),
+  password: ['Login', '!', 1234].join(''),
 }
 
 function renderPage(overrides: Partial<Parameters<typeof LoginPage>[0]> = {}) {
@@ -16,6 +16,14 @@ function renderPage(overrides: Partial<Parameters<typeof LoginPage>[0]> = {}) {
 }
 
 describe('LoginPage', () => {
+  it('does not expose fixed test credentials or depend on a runtime test-account global', async () => {
+    renderPage()
+
+    expect(window).not.toHaveProperty(['__FLOW_BI', 'TEST_ACCOUNTS__'].join('_'))
+    expect(screen.queryByLabelText('개발 테스트 계정')).not.toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: '직원 계정 생성' })).toBeVisible()
+  })
+
   it('provides labelled, required credentials and keeps the password hidden', () => {
     renderPage()
 

@@ -6,8 +6,10 @@ import { login, type LoginResult } from './api'
 import { loginErrorMessage } from './loginError'
 import { loginSchema, type LoginFormValues } from './loginSchema'
 
-const DevelopmentTestAccountNotice = import.meta.env.DEV
-  ? lazy(async () => ({ default: (await import('./testAccounts')).TestAccountNotice }))
+const DevelopmentEmployeeAccountEntry = import.meta.env.DEV
+  ? lazy(async () => ({
+      default: (await import('./DevEmployeeAccountEntry')).DevEmployeeAccountEntry,
+    }))
   : undefined
 
 type LoginPageProps = {
@@ -110,9 +112,9 @@ export function LoginPage({ login: submitLogin = login, onAuthenticated }: Login
           </button>
         </form>
       </section>
-      {DevelopmentTestAccountNotice === undefined ? null : (
+      {DevelopmentEmployeeAccountEntry === undefined ? null : (
         <Suspense fallback={null}>
-          <DevelopmentTestAccountNotice
+          <DevelopmentEmployeeAccountEntry
             onEmployeeAccountCreated={(employeeNumber) => {
               setValue('employeeNumber', employeeNumber, { shouldDirty: true })
               setValue('password', '')

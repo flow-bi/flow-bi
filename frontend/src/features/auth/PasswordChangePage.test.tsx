@@ -114,13 +114,7 @@ describe('PasswordChangePage', () => {
         }),
     )
     const user = userEvent.setup()
-    render(
-      <PasswordChangePage
-        changePassword={vi.fn()}
-        logout={logout}
-        onCompleted={vi.fn()}
-      />,
-    )
+    render(<PasswordChangePage changePassword={vi.fn()} logout={logout} onCompleted={vi.fn()} />)
 
     await user.dblClick(screen.getByRole('button', { name: '로그아웃' }))
 

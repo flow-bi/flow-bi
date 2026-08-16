@@ -17,8 +17,8 @@ describe('authentication-based application routing', () => {
       statusCode: 200,
     })
     cy.visit('/login')
-    cy.get('#employee-number').type('TEST-1001')
-    cy.get('#password').type('Synthetic!123')
+    cy.get('#employee-number').type('ROUTE-1001')
+    cy.get('#password').type('Route!1234')
     cy.get('button').contains('로그인').click()
     cy.get('h1').contains('콘텐츠').should('be.visible')
     cy.location('pathname').should('eq', '/')

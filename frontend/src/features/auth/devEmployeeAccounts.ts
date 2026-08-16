@@ -1,7 +1,10 @@
 import type { EmployeeAccountFormValues } from './employeeAccountSchema'
 
 export type EmployeeAccountOption = { id: number; name: string }
-export type EmployeeAccountOptions = { teams: EmployeeAccountOption[]; positions: EmployeeAccountOption[] }
+export type EmployeeAccountOptions = {
+  teams: EmployeeAccountOption[]
+  positions: EmployeeAccountOption[]
+}
 export type CreatedEmployeeAccount = { employeeNumber: string; mustChangePassword: true }
 
 export class DevEmployeeAccountApiError extends Error {
@@ -22,16 +25,22 @@ function csrfToken(): string | undefined {
 async function csrfHeaders(): Promise<HeadersInit> {
   if (csrfToken() === undefined) {
     const response = await fetch('/api/auth/csrf', { credentials: 'include' })
-    if (!response.ok) throw new DevEmployeeAccountApiError(response.status)
+    if (!response.ok) {
+      throw new DevEmployeeAccountApiError(response.status)
+    }
   }
   const token = csrfToken()
-  if (token === undefined) throw new Error('CSRF token was not issued')
+  if (token === undefined) {
+    throw new Error('CSRF token was not issued')
+  }
   return { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': token }
 }
 
 export async function loadEmployeeAccountOptions(): Promise<EmployeeAccountOptions> {
   const response = await fetch('/api/dev/auth/employee-account-options', { credentials: 'include' })
-  if (!response.ok) throw new DevEmployeeAccountApiError(response.status)
+  if (!response.ok) {
+    throw new DevEmployeeAccountApiError(response.status)
+  }
   return (await response.json()) as EmployeeAccountOptions
 }
 
@@ -44,6 +53,8 @@ export async function createEmployeeAccount(
     headers: await csrfHeaders(),
     body: JSON.stringify(values),
   })
-  if (!response.ok) throw new DevEmployeeAccountApiError(response.status)
+  if (!response.ok) {
+    throw new DevEmployeeAccountApiError(response.status)
+  }
   return (await response.json()) as CreatedEmployeeAccount
 }
