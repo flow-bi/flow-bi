@@ -6,10 +6,6 @@ import com.flowbi.domain.auth.session.AbsoluteSessionTimeoutFilter;
 import com.flowbi.domain.auth.session.LogoutHandler;
 import com.flowbi.domain.auth.session.LogoutSuccessHandler;
 import com.flowbi.domain.auth.session.SessionGenerationValidationFilter;
-import com.flowbi.domain.auth.session.AbsoluteSessionTimeoutFilter;
-import com.flowbi.domain.auth.session.LogoutHandler;
-import com.flowbi.domain.auth.session.LogoutSuccessHandler;
-import com.flowbi.domain.auth.session.SessionGenerationValidationFilter;
 import java.util.List;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.beans.factory.ObjectProvider;
@@ -71,6 +67,8 @@ public class SecurityConfiguration {
 
             .requestMatchers(HttpMethod.GET,"/api/auth/csrf",
                 "/api/dev/auth/employee-account-options")
+            .permitAll()
+            .requestMatchers(HttpMethod.GET,"/v3/api-docs/**","/swagger-ui.html","/swagger-ui/**")
             .permitAll().anyRequest().authenticated())
 
         .exceptionHandling(exception -> exception
