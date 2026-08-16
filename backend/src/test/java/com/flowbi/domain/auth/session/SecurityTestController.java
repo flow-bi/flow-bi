@@ -1,4 +1,4 @@
-package com.flowbi.domain.auth.security;
+package com.flowbi.domain.auth.session;
 
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;

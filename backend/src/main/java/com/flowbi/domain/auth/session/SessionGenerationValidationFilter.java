@@ -1,8 +1,8 @@
-package com.flowbi.domain.auth.security;
+package com.flowbi.domain.auth.session;
 
-import com.flowbi.domain.auth.exception.SessionGenerationStoreUnavailableException;
-import com.flowbi.domain.auth.exception.SessionGenerationValidationException;
-import com.flowbi.domain.auth.service.SessionGenerationService;
+import com.flowbi.domain.auth.session.SessionGenerationStoreUnavailableException;
+import com.flowbi.domain.auth.session.SessionGenerationValidationException;
+import com.flowbi.domain.auth.session.SessionGenerationService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -45,8 +45,8 @@ public class SessionGenerationValidationFilter extends OncePerRequestFilter {
     }
 
     try {
-      sessionGenerationService.verify(authentication.getName(),((Number) generation).longValue(),
-          session.getId());
+      sessionGenerationService.verifySession(authentication.getName(),
+          ((Number) generation).longValue(),session.getId());
     } catch (SessionGenerationValidationException exception) {
       SecurityContextHolder.clearContext();
       rejectUnauthenticated(response);

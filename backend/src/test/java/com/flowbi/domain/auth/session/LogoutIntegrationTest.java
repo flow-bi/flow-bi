@@ -1,4 +1,5 @@
-package com.flowbi.domain.auth.security;
+package com.flowbi.domain.auth.session;
+import com.flowbi.domain.auth.security.LoginPrincipal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
@@ -11,8 +12,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.flowbi.domain.auth.audit.LogoutAuditLogger;
-import com.flowbi.domain.auth.controller.CsrfTokenController;
-import com.flowbi.domain.auth.service.SessionGenerationService;
+import com.flowbi.domain.auth.password.MustChangePasswordFilter;
+import com.flowbi.domain.auth.security.CsrfTokenController;
+import com.flowbi.domain.auth.security.SecurityConfiguration;
+import com.flowbi.domain.auth.session.SessionGenerationService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;

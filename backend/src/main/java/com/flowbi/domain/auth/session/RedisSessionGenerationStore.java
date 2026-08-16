@@ -1,6 +1,6 @@
-package com.flowbi.domain.auth.repository;
+package com.flowbi.domain.auth.session;
 
-import com.flowbi.domain.auth.exception.SessionGenerationStoreUnavailableException;
+import com.flowbi.domain.auth.session.SessionGenerationStoreUnavailableException;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
@@ -36,8 +36,9 @@ public class RedisSessionGenerationStore implements SessionGenerationStore {
   }
 
   @Override
-  public OptionalLong currentGeneration(String userId) {
+  public OptionalLong findCurrentGeneration(String userId) {
     try {
+
       String value = redisTemplate.opsForValue().get(generationKey(userId));
       return value == null ? OptionalLong.empty() : OptionalLong.of(Long.parseLong(value));
     } catch (DataAccessException | NumberFormatException exception) {
@@ -46,7 +47,7 @@ public class RedisSessionGenerationStore implements SessionGenerationStore {
   }
 
   @Override
-  public Optional<String> changeInProgress(String userId) {
+  public Optional<String> findRetainedSessionId(String userId) {
     try {
       return Optional.ofNullable(redisTemplate.opsForValue().get(changeKey(userId)));
     } catch (DataAccessException exception) {
@@ -55,7 +56,7 @@ public class RedisSessionGenerationStore implements SessionGenerationStore {
   }
 
   @Override
-  public long generationForNewSession(String userId,boolean hasExistingSessions) {
+  public long resolveGenerationForNewSession(String userId,boolean hasExistingSessions) {
     try {
       Long generation = redisTemplate.execute(LOGIN_GENERATION_SCRIPT,
           List.of(generationKey(userId),changeKey(userId)),hasExistingSessions ? "1" : "0",
@@ -71,7 +72,7 @@ public class RedisSessionGenerationStore implements SessionGenerationStore {
   }
 
   @Override
-  public long beginChange(String userId,String retainedSessionId) {
+  public long beginPasswordChange(String userId,String retainedSessionId) {
     try {
       Long generation = redisTemplate.execute(BEGIN_CHANGE_SCRIPT,
           List.of(generationKey(userId),changeKey(userId)),retainedSessionId,
@@ -87,7 +88,7 @@ public class RedisSessionGenerationStore implements SessionGenerationStore {
   }
 
   @Override
-  public void completeChange(String userId) {
+  public void completePasswordChange(String userId) {
     try {
       redisTemplate.delete(changeKey(userId));
     } catch (DataAccessException exception) {

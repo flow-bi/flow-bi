@@ -1,4 +1,4 @@
-package com.flowbi.domain.auth.security;
+package com.flowbi.domain.auth.session;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;

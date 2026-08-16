@@ -1,6 +1,15 @@
 package com.flowbi.domain.auth.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.flowbi.domain.auth.password.MustChangePasswordFilter;
+import com.flowbi.domain.auth.session.AbsoluteSessionTimeoutFilter;
+import com.flowbi.domain.auth.session.LogoutHandler;
+import com.flowbi.domain.auth.session.LogoutSuccessHandler;
+import com.flowbi.domain.auth.session.SessionGenerationValidationFilter;
+import com.flowbi.domain.auth.session.AbsoluteSessionTimeoutFilter;
+import com.flowbi.domain.auth.session.LogoutHandler;
+import com.flowbi.domain.auth.session.LogoutSuccessHandler;
+import com.flowbi.domain.auth.session.SessionGenerationValidationFilter;
 import java.util.List;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.beans.factory.ObjectProvider;
@@ -41,6 +50,7 @@ public class SecurityConfiguration {
       ObjectProvider<MustChangePasswordFilter> mustChangePasswordFilter,
       ObjectProvider<LogoutHandler> logoutHandlerProvider,
       ObjectProvider<LogoutSuccessHandler> logoutSuccessHandlerProvider) throws Exception {
+
     CookieCsrfTokenRepository csrfTokenRepository = CookieCsrfTokenRepository.withHttpOnlyFalse();
     csrfTokenRepository.setCookieName(CSRF_COOKIE_NAME);
     csrfTokenRepository.setHeaderName(CSRF_HEADER_NAME);
@@ -58,9 +68,11 @@ public class SecurityConfiguration {
         .authorizeHttpRequests(authorize -> authorize
             .requestMatchers(HttpMethod.POST,"/api/auth/login","/api/dev/auth/employee-accounts")
             .permitAll()
+
             .requestMatchers(HttpMethod.GET,"/api/auth/csrf",
                 "/api/dev/auth/employee-account-options")
             .permitAll().anyRequest().authenticated())
+
         .exceptionHandling(exception -> exception
             .authenticationEntryPoint(new JsonAuthenticationEntryPoint(objectMapper))
             .accessDeniedHandler(new JsonAccessDeniedHandler(objectMapper)))

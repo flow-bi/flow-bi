@@ -1,4 +1,4 @@
-package com.flowbi.domain.auth.exception;
+package com.flowbi.domain.auth.session;
 
 public class SessionGenerationStoreUnavailableException extends RuntimeException {
 

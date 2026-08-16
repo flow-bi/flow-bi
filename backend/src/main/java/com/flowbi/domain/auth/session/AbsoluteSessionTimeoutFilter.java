@@ -1,5 +1,6 @@
-package com.flowbi.domain.auth.security;
+package com.flowbi.domain.auth.session;
 
+import com.flowbi.domain.auth.security.AuthSecurityProperties;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;

@@ -1,5 +1,9 @@
-package com.flowbi.domain.auth.security;
+package com.flowbi.domain.auth.session;
+import com.flowbi.domain.auth.security.AuthSecurityProperties;
+import com.flowbi.domain.auth.security.SecurityConfiguration;
 
+import com.flowbi.domain.auth.session.AbsoluteSessionTimeoutFilter;
+import com.flowbi.domain.auth.session.SessionGenerationValidationFilter;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -24,8 +28,8 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import com.flowbi.domain.auth.controller.CsrfTokenController;
-import com.flowbi.domain.auth.service.SessionGenerationService;
+import com.flowbi.domain.auth.security.CsrfTokenController;
+import com.flowbi.domain.auth.session.SessionGenerationService;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -155,7 +159,7 @@ class SecurityConfigurationIntegrationTest {
     mockMvc.perform(get("/api/security-test/protected").with(user("42")).session(session))
         .andExpect(status().isOk());
 
-    verify(sessionGenerationService).verify("42",0L,session.getId());
+    verify(sessionGenerationService).verifySession("42",0L,session.getId());
   }
 
   private MockHttpSession authenticatedSession() {

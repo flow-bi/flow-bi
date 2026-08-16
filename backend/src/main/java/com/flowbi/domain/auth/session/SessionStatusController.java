@@ -1,4 +1,4 @@
-package com.flowbi.domain.auth.controller;
+package com.flowbi.domain.auth.session;
 
 import com.flowbi.domain.auth.security.LoginPrincipal;
 import java.util.Map;

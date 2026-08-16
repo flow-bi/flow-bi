@@ -1,4 +1,4 @@
-package com.flowbi.domain.auth.security;
+package com.flowbi.domain.auth.session;
 
 import com.flowbi.domain.auth.audit.LogoutAuditLogger;
 import jakarta.servlet.http.HttpServletRequest;

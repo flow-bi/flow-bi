@@ -1,16 +1,15 @@
-package com.flowbi.domain.auth.service;
+package com.flowbi.domain.auth.session;
 
 import org.springframework.session.FindByIndexNameSessionRepository;
 import org.springframework.session.Session;
 import org.springframework.stereotype.Component;
 
 @Component
-public class SessionIndexCleanup {
+public class UserSessionCleanup {
 
   private final FindByIndexNameSessionRepository<? extends Session> sessionRepository;
 
-  public SessionIndexCleanup(
-      FindByIndexNameSessionRepository<? extends Session> sessionRepository) {
+  public UserSessionCleanup(FindByIndexNameSessionRepository<? extends Session> sessionRepository) {
     this.sessionRepository = sessionRepository;
   }
 
