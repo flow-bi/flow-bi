@@ -15,7 +15,7 @@ class AuthEntryPointStructureTest {
 
   private static final String AUTH_PACKAGE = "com.flowbi.domain.auth.";
   private static final Set<String> ALLOWED_PACKAGES = Set.of("audit","controller","dto","entity",
-      "exception","repository","security","service");
+      "exception","ratelimit","repository","security","service","session");
 
   @Test
   void places_http_controllers_and_security_components_in_responsibility_packages() {
@@ -58,7 +58,7 @@ class AuthEntryPointStructureTest {
 
     List<String> serviceNames = List.of("service.LoginAuthenticationService",
         "service.InitialPasswordChangeService","service.SessionGenerationService",
-        "service.SessionIndexCleanup","service.PasswordPolicy");
+        "service.PasswordPolicy","session.UserSessionCleanup");
     for (String serviceName : serviceNames) {
       assertThat(fieldTypeNames(Class.forName(AUTH_PACKAGE + serviceName))).noneMatch(name -> name
           .matches("com\\.flowbi\\.domain\\.(?!auth\\.repository).*\\.repository\\..*"));

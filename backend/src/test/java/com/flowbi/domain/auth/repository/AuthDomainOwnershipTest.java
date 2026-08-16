@@ -2,7 +2,7 @@ package com.flowbi.domain.auth.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.flowbi.domain.auth.service.LoginAuthenticationService;
+import com.flowbi.domain.auth.login.LoginAuthenticationService;
 import java.util.Arrays;
 import org.junit.jupiter.api.Test;
 
@@ -10,14 +10,18 @@ class AuthDomainOwnershipTest {
 
   @Test
   void authPersistenceTypesFollowEntityAndRepositoryResponsibilities() {
-    assertThat(classIsPresent("com.flowbi.domain.auth.entity.UserCredential")).isTrue();
-    assertThat(classIsPresent("com.flowbi.domain.auth.repository.UserCredentialRepository"))
+    assertThat(classIsPresent("com.flowbi.domain.auth.credential.UserCredential")).isTrue();
+    assertThat(classIsPresent("com.flowbi.domain.auth.credential.UserCredentialRepository"))
         .isTrue();
-    assertThat(classIsPresent("com.flowbi.domain.auth.repository.SessionGenerationStore")).isTrue();
-    assertThat(classIsPresent("com.flowbi.domain.auth.repository.RedisSessionGenerationStore"))
+    assertThat(classIsPresent("com.flowbi.domain.auth.session.SessionGenerationStore")).isTrue();
+    assertThat(classIsPresent("com.flowbi.domain.auth.session.RedisSessionGenerationStore"))
         .isTrue();
-    assertThat(classIsPresent("com.flowbi.domain.auth.repository.LoginRateLimiter")).isTrue();
-    assertThat(classIsPresent("com.flowbi.domain.auth.repository.RedisLoginRateLimiter")).isTrue();
+    assertThat(classIsPresent("com.flowbi.domain.auth.login.ratelimit.LoginRateLimiter")).isTrue();
+    assertThat(classIsPresent("com.flowbi.domain.auth.login.ratelimit.RedisLoginRateLimiter")).isTrue();
+    assertThat(classIsPresent(legacyRepositoryType("LoginRateLimiter"))).isFalse();
+    assertThat(classIsPresent(legacyRepositoryType("RedisLoginRateLimiter"))).isFalse();
+    assertThat(classIsPresent(legacyRepositoryType("SessionGenerationStore"))).isFalse();
+    assertThat(classIsPresent(legacyRepositoryType("RedisSessionGenerationStore"))).isFalse();
     assertThat(classIsPresent(legacyPersistenceType("entity.UserCredential"))).isFalse();
     assertThat(classIsPresent(legacyPersistenceType("repository.UserCredentialRepository")))
         .isFalse();
@@ -49,5 +53,9 @@ class AuthDomainOwnershipTest {
 
   private String legacyPersistenceType(String type) {
     return "com.flowbi.domain.auth." + "persistence." + type;
+  }
+
+  private String legacyRepositoryType(String simpleName) {
+    return "com.flowbi.domain.auth.repository." + simpleName;
   }
 }
