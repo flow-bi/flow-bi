@@ -15,7 +15,7 @@ class AuthEntryPointStructureTest {
 
   private static final String AUTH_PACKAGE = "com.flowbi.domain.auth.";
   private static final Set<String> ALLOWED_PACKAGES = Set.of("audit","controller","dto","entity",
-      "exception","fixture","repository","security","service");
+      "exception","repository","security","service");
 
   @Test
   void places_http_controllers_and_security_components_in_responsibility_packages() {
@@ -68,6 +68,7 @@ class AuthEntryPointStructureTest {
   @Test
   void limits_production_auth_packages_and_prevents_entity_api_exposure()
       throws IOException, ClassNotFoundException {
+    assertThat(ALLOWED_PACKAGES).doesNotContain("fixture");
     try (var sourceFiles = Files.walk(Path.of("src/main/java/com/flowbi/domain/auth"))) {
       assertThat(sourceFiles.filter(path -> path.toString().endsWith(".java"))
           .map(this::topLevelPackage).distinct()).containsOnlyElementsOf(ALLOWED_PACKAGES);

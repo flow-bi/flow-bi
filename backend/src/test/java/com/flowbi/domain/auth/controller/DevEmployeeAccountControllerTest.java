@@ -1,4 +1,4 @@
-package com.flowbi.domain.auth.fixture;
+package com.flowbi.domain.auth.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -10,7 +10,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.flowbi.domain.auth.security.AbsoluteSessionTimeoutFilter;
-import com.flowbi.domain.auth.controller.CsrfTokenController;
 import com.flowbi.domain.auth.security.SecurityConfiguration;
 import com.flowbi.domain.auth.service.SessionGenerationService;
 import com.flowbi.domain.auth.security.SessionGenerationValidationFilter;
@@ -22,6 +21,7 @@ import com.flowbi.domain.user.entity.User;
 import com.flowbi.domain.user.service.EmployeeAccountRegistration;
 import com.flowbi.domain.user.service.EmployeeAccountRegistrationService;
 import java.util.List;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -36,7 +36,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(controllers = DevEmployeeAccountController.class)
 @ActiveProfiles("test")
-@TestPropertySource(properties = "auth.test-fixtures.enabled=true")
+@TestPropertySource(properties = "auth.dev-employee-account.enabled=true")
 @Import({SecurityConfiguration.class, AbsoluteSessionTimeoutFilter.class, CsrfTokenController.class,
     SessionGenerationValidationFilter.class})
 class DevEmployeeAccountControllerTest {
@@ -86,22 +86,26 @@ class DevEmployeeAccountControllerTest {
 
   @Test
   void registersTheDevelopmentAdapterOnlyForAnEnabledLocalOrTestProfile() {
-    contextRunner.withPropertyValues("auth.test-fixtures.enabled=true")
+    contextRunner.withPropertyValues("auth.dev-employee-account.enabled=true")
         .withInitializer(context -> context.getEnvironment().setActiveProfiles("test"))
         .run(context -> assertThat(context).hasSingleBean(DevEmployeeAccountController.class));
-    contextRunner.withPropertyValues("auth.test-fixtures.enabled=false")
+    contextRunner.withPropertyValues("auth.dev-employee-account.enabled=false")
         .withInitializer(context -> context.getEnvironment().setActiveProfiles("test"))
         .run(context -> assertThat(context).doesNotHaveBean(DevEmployeeAccountController.class));
-    contextRunner.withPropertyValues("auth.test-fixtures.enabled=true")
+    contextRunner.withPropertyValues("auth.dev-employee-account.enabled=true")
         .withInitializer(context -> context.getEnvironment().setActiveProfiles("production"))
+        .run(context -> assertThat(context).doesNotHaveBean(DevEmployeeAccountController.class));
+    contextRunner.withPropertyValues("auth.dev-employee-account.enabled=true")
+        .withInitializer(context -> context.getEnvironment().setActiveProfiles("test","production"))
         .run(context -> assertThat(context).doesNotHaveBean(DevEmployeeAccountController.class));
   }
 
   private String requestBody() {
+    String initialPassword = "A" + UUID.randomUUID() + "a!";
     return """
         {"employeeNumber":"E100","email":"kim@example.test","name":"Kim","teamId":1,"positionId":2,
-         "initialPassword":"Password123!","confirmation":"Password123!"}
-        """;
+         "initialPassword":"%s","confirmation":"%s"}
+        """.formatted(initialPassword,initialPassword);
   }
 
   @Configuration(proxyBeanMethods = false)

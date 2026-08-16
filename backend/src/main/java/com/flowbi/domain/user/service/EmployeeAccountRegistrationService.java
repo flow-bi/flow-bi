@@ -53,28 +53,6 @@ public class EmployeeAccountRegistrationService {
         request.initialPassword(),true);
   }
 
-  /**
-   * Creates or repairs the two fixed local/test authentication fixtures. This is
-   * intentionally separate from
-   * {@link #register(EmployeeAccountRegistrationRequest)} so regular callers can
-   * never choose whether an initial password change is required.
-   */
-  @Transactional
-  public EmployeeAccountRegistration registerFixture(EmployeeAccountRegistrationRequest request,
-      boolean mustChangePassword) {
-    validate(request);
-    Team team = findTeam(request.teamId());
-    Position position = findPosition(request.positionId());
-    String employeeNumber = request.employeeNumber().trim();
-    User user = users.findByEmployeeNumber(employeeNumber).orElseGet(() -> users.save(
-        User.create(employeeNumber,request.email().trim(),request.name().trim(),position,team)));
-    if (credentials.findByUserUserId(user.getUserId()).isEmpty()) {
-      credentials.save(UserCredential.create(user,passwordEncoder.encode(request.initialPassword()),
-          mustChangePassword));
-    }
-    return new EmployeeAccountRegistration(user, mustChangePassword);
-  }
-
   private EmployeeAccountRegistration create(String employeeNumber,String email,String name,
       Team team,Position position,String initialPassword,boolean mustChangePassword) {
     User user = users.save(User.create(employeeNumber,email,name,position,team));

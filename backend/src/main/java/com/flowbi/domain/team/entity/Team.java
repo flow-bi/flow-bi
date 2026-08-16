@@ -6,9 +6,11 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import lombok.Getter;
 
 @Entity
 @Table(name = "teams")
+@Getter
 public class Team {
 
   @Id
@@ -28,13 +30,5 @@ public class Team {
 
   public static Team create(String teamName) {
     return new Team(teamName);
-  }
-
-  public Long getTeamId() {
-    return teamId;
-  }
-
-  public String getTeamName() {
-    return teamName;
   }
 }

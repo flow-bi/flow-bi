@@ -126,31 +126,9 @@ class EmployeeAccountRegistrationServiceTest {
   }
 
   @Test
-  void createsSyntheticFixturesThroughTheSameRegistrationServiceWhileKeepingTheirFixedState() {
-    UserRepository users = mock(UserRepository.class);
-    TeamService teams = mock(TeamService.class);
-    PositionService positions = mock(PositionService.class);
-    UserCredentialRepository credentials = mock(UserCredentialRepository.class);
-    PasswordEncoder encoder = mock(PasswordEncoder.class);
-    Team team = Team.create("People");
-    Position position = Position.create("Manager");
-    User saved = User.create("fixture-normal","normal@example.test","Synthetic Fixture",position,
-        team);
-    when(teams.findExisting(1L)).thenReturn(team);
-    when(positions.findExisting(2L)).thenReturn(position);
-    when(users.findByEmployeeNumber("fixture-normal")).thenReturn(Optional.empty());
-    when(users.save(any(User.class))).thenReturn(saved);
-    when(encoder.encode("Password1!")).thenReturn("hash");
-    EmployeeAccountRegistrationService service = new EmployeeAccountRegistrationService(users,
-        teams, positions, credentials, encoder, new PasswordPolicy());
-
-    EmployeeAccountRegistration registration = service
-        .registerFixture(new EmployeeAccountRegistrationRequest("fixture-normal",
-            "normal@example.test", "Synthetic Fixture", 1L, 2L, "Password1!", "Password1!"),false);
-
-    assertThat(registration.user()).isSameAs(saved);
-    assertThat(registration.mustChangePassword()).isFalse();
-    verify(credentials).save(any(UserCredential.class));
+  void exposesOnlyTheNormalRegistrationPath() {
+    assertThat(EmployeeAccountRegistrationService.class.getDeclaredMethods())
+        .extracting(java.lang.reflect.Method::getName).doesNotContain("registerFixture");
   }
 
   @Test

@@ -2,6 +2,10 @@ spring:
   application:
     name: flowbi
 
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+
   config:
     import: optional:file:.env[.properties]
 
@@ -26,7 +30,7 @@ spring:
 
   jpa:
     open-in-view: false
-    show-sql: true
+    show-sql: false
     hibernate:
       ddl-auto: validate
     properties:
@@ -76,13 +80,5 @@ spring:
 auth:
   session:
     secure-cookie: ${SESSION_COOKIE_SECURE:false}
-  test-fixtures:
-    enabled: ${AUTH_TEST_FIXTURES_ENABLED:false}
-    normal:
-      employee-number: ${AUTH_TEST_FIXTURES_NORMAL_EMPLOYEE_NUMBER:}
-      email: ${AUTH_TEST_FIXTURES_NORMAL_EMAIL:}
-      password: ${AUTH_TEST_FIXTURES_NORMAL_PASSWORD:}
-    password-change-required:
-      employee-number: ${AUTH_TEST_FIXTURES_PASSWORD_CHANGE_EMPLOYEE_NUMBER:}
-      email: ${AUTH_TEST_FIXTURES_PASSWORD_CHANGE_EMAIL:}
-      password: ${AUTH_TEST_FIXTURES_PASSWORD_CHANGE_PASSWORD:}
+  dev-employee-account:
+    enabled: ${AUTH_DEV_EMPLOYEE_ACCOUNT_ENABLED:false}

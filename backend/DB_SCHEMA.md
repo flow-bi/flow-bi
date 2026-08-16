@@ -299,7 +299,11 @@ schedules 1 --- N rooms_reservations
 
 - `backend/src/main/resources/db/migration/V1__create_authentication_tables.sql` creates the minimal `positions`, `teams`, `users`, and `user_credentials` tables required by the authentication baseline.
 - `users.employee_number` is unique; `user_credentials.user_id` is unique and required; both user reference keys are required foreign keys. `must_change_password` defaults to `TRUE`, and `password_hash` is required with a maximum length of 255.
-- Synthetic authentication fixtures are not migrations. They are created only at runtime when the `local` or `test` profile and the explicit `auth.test-fixtures.enabled` flag are both active, with all values injected from runtime configuration. Production profiles refuse startup if the flag is enabled.
+- Development account creation is not a migration or a startup fixture. The optional adapter is
+  registered only when the `local` or `test` profile and
+  `auth.dev-employee-account.enabled=true` (or
+  `AUTH_DEV_EMPLOYEE_ACCOUNT_ENABLED=true`) are both active. Production profiles never register
+  the adapter.
 
 ## 8. 변경 절차
 

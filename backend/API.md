@@ -307,7 +307,7 @@ AI 모델과 Action Routing이 미확정이므로 Endpoint를 아직 확정하�
 
 ## Development employee account adapter
 
-`GET /api/dev/auth/employee-account-options` and `POST /api/dev/auth/employee-accounts` exist only when the active profile is `local` or `test` and `auth.test-fixtures.enabled=true`. They are not production employee-management APIs; when either condition is absent, no controller is registered and both paths return `404 Not Found`.
+`GET /api/dev/auth/employee-account-options` and `POST /api/dev/auth/employee-accounts` exist only when the active profile is `local` or `test` and `auth.dev-employee-account.enabled=true` (or `AUTH_DEV_EMPLOYEE_ACCOUNT_ENABLED=true`). They are not production employee-management APIs; when either condition is absent, no controller is registered and both paths return `404 Not Found`.
 
 The options response contains only persisted team and position `{ id, name }` values. Creation accepts `employeeNumber`, `email`, `name`, `teamId`, `positionId`, `initialPassword`, and `confirmation`. `email` is required and must be supplied explicitly; the adapter never derives it. It retains normal CSRF protection and returns `201 Created` with only the user ID, employee number, name, referenced team and position, and `mustChangePassword: true`.
 

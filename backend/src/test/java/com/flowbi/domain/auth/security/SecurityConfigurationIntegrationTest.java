@@ -17,6 +17,9 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -33,6 +36,8 @@ import org.springframework.mock.web.MockHttpSession;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.session.web.http.CookieSerializer;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(controllers = SecurityTestController.class)
@@ -45,6 +50,9 @@ class SecurityConfigurationIntegrationTest {
 
   @Autowired
   private CookieSerializer cookieSerializer;
+
+  @Autowired
+  private PasswordEncoder passwordEncoder;
 
   @MockBean
   private SessionGenerationService sessionGenerationService;
@@ -88,6 +96,20 @@ class SecurityConfigurationIntegrationTest {
     String setCookie = response.getHeader("Set-Cookie");
     assertThat(setCookie).contains("SESSION=","Path=/","HttpOnly","Secure","SameSite=Lax")
         .doesNotContain("opaque-session-id");
+  }
+
+  @Test
+  void providesThePasswordEncoderFromTheAuthenticationSecurityConfiguration() {
+    assertThat(passwordEncoder).isInstanceOf(BCryptPasswordEncoder.class);
+  }
+
+  @Test
+  void suppressesGeneratedCredentialsAndCredentialValuesInApplicationLogs() throws IOException {
+    String applicationConfiguration = Files
+        .readString(Path.of("src/main/resources/application.yml"));
+
+    assertThat(applicationConfiguration).contains("show-sql: false",
+        "UserDetailsServiceAutoConfiguration");
   }
 
   @Test

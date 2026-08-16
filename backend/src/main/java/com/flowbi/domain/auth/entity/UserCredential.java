@@ -11,11 +11,13 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
+import lombok.Getter;
 
 @Entity
 @Table(name = "user_credentials")
 public class UserCredential {
 
+  @Getter
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   @Column(name = "credential_id")
@@ -25,9 +27,11 @@ public class UserCredential {
   @JoinColumn(name = "user_id", nullable = false, unique = true)
   private User user;
 
+  @Getter
   @Column(name = "password_hash", nullable = false, length = 255)
   private String passwordHash;
 
+  @Getter
   @Column(name = "must_change_password", nullable = false)
   private boolean mustChangePassword = true;
 
@@ -42,18 +46,6 @@ public class UserCredential {
 
   public static UserCredential create(User user,String passwordHash,boolean mustChangePassword) {
     return new UserCredential(user, passwordHash, mustChangePassword);
-  }
-
-  public Long getCredentialId() {
-    return credentialId;
-  }
-
-  public String getPasswordHash() {
-    return passwordHash;
-  }
-
-  public boolean isMustChangePassword() {
-    return mustChangePassword;
   }
 
   public void changePassword(String passwordHash) {

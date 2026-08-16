@@ -48,25 +48,9 @@ git config core.hooksPath scripts
 
 ## Development employee account adapter
 
-For local login-page fixtures, the anonymous development adapter is enabled only with the `local` or `test` profile and the explicit `auth.test-fixtures.enabled=true` setting. It exposes employee account options and creation under `/api/dev/auth`. The creation request remains CSRF-protected and uses the same transactional user and credential registration rules intended for an eventual HR administrator use case.
+The anonymous development adapter is enabled only with the `local` or `test` profile and the explicit `auth.dev-employee-account.enabled=true` setting (or `AUTH_DEV_EMPLOYEE_ACCOUNT_ENABLED=true`). It exposes employee account options and creation under `/api/dev/auth`. The creation request remains CSRF-protected and uses the same transactional user and credential registration rules intended for an eventual HR administrator use case.
 
 No employee creation endpoint is exposed in production, or whenever fixtures are disabled. The future production endpoint must wait for the approved HR administrator RBAC session integration; it must not be introduced as `permitAll`.
 
-## Synthetic authentication fixture configuration
-
-Synthetic login fixtures start only when the active profile is `local` or `test` and
-`AUTH_TEST_FIXTURES_ENABLED=true`. Both accounts require explicitly supplied synthetic email
-addresses as well as employee numbers and passwords:
-
-```text
-AUTH_TEST_FIXTURES_NORMAL_EMPLOYEE_NUMBER=
-AUTH_TEST_FIXTURES_NORMAL_EMAIL=
-AUTH_TEST_FIXTURES_NORMAL_PASSWORD=
-AUTH_TEST_FIXTURES_PASSWORD_CHANGE_EMPLOYEE_NUMBER=
-AUTH_TEST_FIXTURES_PASSWORD_CHANGE_EMAIL=
-AUTH_TEST_FIXTURES_PASSWORD_CHANGE_PASSWORD=
-```
-
-Blank values, or duplicate employee numbers or emails across the two accounts, stop startup with
-a generic configuration error. Fixture configuration is rejected outside `local` and `test`,
-including production profiles; it never generates email addresses or logs fixture passwords.
+The adapter is not registered for production profiles. Never commit real credentials; local
+configuration must be supplied outside version control.

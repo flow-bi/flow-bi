@@ -1,4 +1,4 @@
-package com.flowbi.domain.auth.fixture;
+package com.flowbi.domain.auth.controller;
 
 import com.flowbi.domain.position.entity.Position;
 import com.flowbi.domain.position.service.PositionService;
@@ -26,8 +26,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-@Profile({"local", "test"})
-@ConditionalOnProperty(prefix = "auth.test-fixtures", name = "enabled", havingValue = "true")
+@Profile({"local & !prod & !production", "test & !prod & !production"})
+@ConditionalOnProperty(prefix = "auth.dev-employee-account", name = "enabled", havingValue = "true")
 @RestController
 @RequestMapping("/api/dev/auth")
 public class DevEmployeeAccountController {
