@@ -223,7 +223,16 @@ AI 모델과 Action Routing이 미확정이므로 Endpoint를 아직 확정하�
 - 구현과 `API.md`를 같은 Task에서 갱신한다.
 - Frontend Mock과 실제 API 계약이 다른 상태를 완료로 처리하지 않는다.
 
-## 12. 미결정 사항
+## 12. OpenAPI 문서화
+
+- 자동화 도구는 Spring Boot 3.5.7 WebMVC용 `springdoc-openapi-starter-webmvc-ui:2.8.17`을 사용한다.
+- OpenAPI 공통 metadata의 제목은 `Flow BI API`, 버전은 애플리케이션 빌드 버전을 사용한다.
+- 기본 프로필에서는 OpenAPI JSON과 Swagger UI를 비활성화한다.
+- `local`·`harness` 프로필에서만 OpenAPI JSON을 `/v3/api-docs`, Swagger UI를 `/swagger-ui.html`로 제공한다.
+- Harness MockMvc 테스트는 OpenAPI JSON 형식과 공통 metadata 및 Swagger UI 진입점을 검증한다.
+- 기본 프로필 MockMvc 테스트는 두 문서 경로가 성공 응답을 반환하지 않는지 검증한다.
+
+## 13. 미결정 사항
 
 - `/api/v1` 등 Versioning
 - 공통 성공 Envelope 사용 여부
@@ -231,4 +240,3 @@ AI 모델과 Action Routing이 미확정이므로 Endpoint를 아직 확정하�
 - Session Cookie 이름, `SameSite` 값과 CSRF Token 전달 방식
 - 직원·팀의 삭제·비활성화 정책과 관련 상태값 및 응답 DTO
 - 상세 DTO와 Error Code 목록
-- OpenAPI 및 API 문서 자동화 도구
