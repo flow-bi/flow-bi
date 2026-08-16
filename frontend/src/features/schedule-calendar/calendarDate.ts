@@ -6,6 +6,65 @@ export interface CalendarPeriod {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000
+const SEOUL_TIME_ZONE = 'Asia/Seoul'
+
+interface CalendarDateTimeParts {
+  year: string
+  month: string
+  day: string
+  hour: string
+  minute: string
+}
+
+const scheduleDateTimeFormatter = new Intl.DateTimeFormat('en-CA', {
+  timeZone: SEOUL_TIME_ZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+})
+
+function scheduleDateTimeParts(value: string): CalendarDateTimeParts {
+  const parts = scheduleDateTimeFormatter.formatToParts(new Date(value))
+  const valueFor = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value
+
+  return {
+    year: valueFor('year') ?? '',
+    month: valueFor('month') ?? '',
+    day: valueFor('day') ?? '',
+    hour: valueFor('hour') ?? '',
+    minute: valueFor('minute') ?? '',
+  }
+}
+
+function formatScheduleDate(parts: CalendarDateTimeParts): string {
+  return `${parts.year}년 ${Number(parts.month)}월 ${Number(parts.day)}일`
+}
+
+function formatScheduleTime(parts: CalendarDateTimeParts): string {
+  return `${parts.hour}:${parts.minute}`
+}
+
+export function formatScheduleDateTime(value: string): string {
+  const parts = scheduleDateTimeParts(value)
+  return `${formatScheduleDate(parts)} ${formatScheduleTime(parts)}`
+}
+
+export function formatScheduleTimeRange(startAt: string, endAt: string, allDay: boolean): string {
+  const start = scheduleDateTimeParts(startAt)
+  if (allDay) {
+    return `${formatScheduleDate(start)} · 하루 종일`
+  }
+
+  const end = scheduleDateTimeParts(endAt)
+  if (formatScheduleDate(start) === formatScheduleDate(end)) {
+    return `${formatScheduleDate(start)} ${formatScheduleTime(start)}–${formatScheduleTime(end)}`
+  }
+  return `${formatScheduleDateTime(startAt)}–${formatScheduleDateTime(endAt)}`
+}
 
 function parseDate(value: string): Date {
   const [year, month, day] = value.split('-').map(Number)

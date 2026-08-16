@@ -1,15 +1,17 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 
 import {
   calendarDays,
   formatCalendarHeading,
+  formatScheduleTimeRange,
   getCalendarPeriod,
   navigateDate,
   type CalendarView,
 } from './calendarDate'
+import { layoutDayTimelineSchedules } from './dayTimeline'
 import {
   getScheduleDetail as getScheduleDetailRequest,
   getSchedules as getSchedulesRequest,
@@ -19,6 +21,7 @@ import {
   type ScheduleSummary,
   type UpdateScheduleRequest,
 } from './scheduleCalendarApi'
+import { getScheduleColorClasses } from './scheduleColor'
 import {
   parseIdList,
   scheduleFormSchema,
@@ -32,15 +35,7 @@ const controlButtonClass =
 const activeControlButtonClass =
   'rounded-lg border border-primary bg-primary px-3 py-2 font-semibold text-white transition focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-2'
 const chipBaseClass =
-  'mt-1 block w-full overflow-hidden rounded-r-md border-l-4 bg-secondary px-2 py-1 text-left text-xs font-medium text-text-primary text-ellipsis whitespace-nowrap hover:bg-background focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-1 sm:text-sm'
-const chipColorClasses = {
-  RED: 'border-l-red-700',
-  ORANGE: 'border-l-orange-700',
-  YELLOW: 'border-l-yellow-600',
-  GREEN: 'border-l-green-700',
-  BLUE: 'border-l-blue-600',
-  PURPLE: 'border-l-violet-700',
-} as const
+  'mt-1 block w-full overflow-hidden rounded-md border px-2 py-1 text-left text-xs font-medium text-ellipsis whitespace-nowrap focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-1 sm:text-sm'
 const fieldClass =
   'w-full rounded-md border border-border bg-surface px-3 py-2 text-text-primary focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:bg-background'
 
@@ -91,6 +86,120 @@ function koreanDate(date: string): string {
   return `${year}년 ${month}월 ${day}일`
 }
 
+function colorOptionLabel(color: ScheduleSummary['colorLabel']): string {
+  return {
+    RED: '빨강',
+    ORANGE: '주황',
+    YELLOW: '노랑',
+    GREEN: '초록',
+    BLUE: '파랑',
+    PURPLE: '보라',
+  }[color]
+}
+
+function ScheduleChip({
+  schedule,
+  onOpen,
+  testId,
+}: {
+  schedule: ScheduleSummary
+  onOpen: (schedule: ScheduleSummary, trigger: HTMLButtonElement) => void
+  testId?: string
+}) {
+  const color = getScheduleColorClasses(schedule.colorLabel)
+  return (
+    <button
+      className={`${chipBaseClass} ${color.background} ${color.border} ${color.text}`}
+      data-testid={testId}
+      onClick={(event) => onOpen(schedule, event.currentTarget)}
+      type="button"
+    >
+      {schedule.title} ·{' '}
+      {typeLabel(schedule.type)}
+    </button>
+  )
+}
+
+function DayTimeline({
+  date,
+  schedules,
+  onOpen,
+}: {
+  date: string
+  schedules: ScheduleSummary[]
+  onOpen: (schedule: ScheduleSummary, trigger: HTMLButtonElement) => void
+}) {
+  const allDaySchedules = schedules.filter((schedule) => schedule.allDay)
+  const timedSchedules = schedules.filter((schedule) => !schedule.allDay)
+  const placements = layoutDayTimelineSchedules(date, timedSchedules)
+  const schedulesById = new Map(timedSchedules.map((schedule) => [schedule.id, schedule]))
+  return (
+    <section
+      aria-label={`${koreanDate(date)} 일간 시간표`}
+      className="overflow-hidden rounded-xl border border-border bg-surface shadow-lg"
+    >
+      <div className="border-b border-border p-3" data-testid="calendar-day-all-day">
+        <p className="mb-2 text-sm font-bold text-text-primary">하루 종일</p>
+        {allDaySchedules.length === 0 ? (
+          <p className="text-sm text-text-secondary">종일 일정이 없습니다.</p>
+        ) : (
+          allDaySchedules.map((schedule) => (
+            <ScheduleChip key={schedule.id} onOpen={onOpen} schedule={schedule} />
+          ))
+        )}
+      </div>
+      <div className="grid grid-cols-[4rem_minmax(0,1fr)]" data-testid="calendar-day-timeline">
+        <div className="border-r border-border bg-secondary" data-testid="calendar-day-time-labels">
+          {Array.from({ length: 25 }, (_, hour) => (
+            <div
+              className={
+                hour === 24
+                  ? 'relative h-0 -top-2 px-2 text-right text-xs text-text-secondary'
+                  : 'h-[60px] px-2 pt-1 text-right text-xs text-text-secondary'
+              }
+              key={hour}
+            >
+              {String(hour).padStart(2, '0')}:00
+            </div>
+          ))}
+        </div>
+        <div className="relative h-[1440px] bg-surface">
+          {Array.from({ length: 24 }, (_, hour) => (
+            <div className="h-[60px] border-b border-border/70" key={hour} />
+          ))}
+          {placements.map((placement) => {
+            const schedule = schedulesById.get(placement.id)
+            if (!schedule) {
+              return null
+            }
+            const color = getScheduleColorClasses(schedule.colorLabel)
+            return (
+              <button
+                className={`absolute right-2 left-2 overflow-hidden rounded-md border px-2 py-1 text-left text-xs font-medium ${color.background} ${color.border} ${color.text} focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-1`}
+                data-testid={`calendar-day-timed-${schedule.id}`}
+                key={schedule.id}
+                onClick={(event) => onOpen(schedule, event.currentTarget)}
+                style={{
+                  top: `${placement.top}px`,
+                  height: `${placement.height}px`,
+                  left: `calc(${(placement.column / placement.columnCount) * 100}% + 0.5rem)`,
+                  right: `calc(${((placement.columnCount - placement.column - 1) / placement.columnCount) * 100}% + 0.5rem)`,
+                }}
+                type="button"
+              >
+                {schedule.title} ·{' '}
+                {typeLabel(schedule.type)} ·{' '}
+                {formatScheduleTimeRange(schedule.startAt, schedule.endAt, false)}
+                
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function apiErrorText(error: unknown, action: 'update' | 'cancel'): string {
   const status = (error as { status?: number } | undefined)?.status
   if (status === 401) {
@@ -115,6 +224,7 @@ function DetailModal({
   onEdit,
   onCancel,
   error,
+  hasConfirmation,
 }: {
   detail: ScheduleDetail
   canManage: boolean
@@ -122,18 +232,19 @@ function DetailModal({
   onEdit: () => void
   onCancel: () => void
   error: string | null
+  hasConfirmation: boolean
 }) {
   const closeRef = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     closeRef.current?.focus()
     const escape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+      if (event.key === 'Escape' && !hasConfirmation) {
         onClose()
       }
     }
     document.addEventListener('keydown', escape)
     return () => document.removeEventListener('keydown', escape)
-  }, [onClose])
+  }, [hasConfirmation, onClose])
 
   const handleBackdropClick = (event: React.MouseEvent<HTMLDivElement>) => {
     if (event.target === event.currentTarget) {
@@ -150,14 +261,21 @@ function DetailModal({
       onClick={handleBackdropClick}
       role="dialog"
     >
-      <section className="w-full max-w-lg rounded-xl bg-surface p-6 shadow-2xl">
+      <section className="relative w-full max-w-lg rounded-xl bg-surface p-6 shadow-2xl">
         <h2 className="m-0 text-xl font-bold text-text-primary" id="schedule-detail-title">
-          {detail.title} 상세
+          {detail.title}
         </h2>
-        <p className="text-text-secondary">
-          {typeLabel(detail.type)} 일정 · {detail.colorLabel} 라벨
-        </p>
-        <p>{detail.allDay ? '하루종일' : `${detail.startAt} ~ ${detail.endAt}`}</p>
+        <button
+          aria-label="닫기"
+          className="absolute top-4 right-4 rounded p-1 text-text-secondary hover:bg-secondary focus-visible:outline-3 focus-visible:outline-focus-ring"
+          onClick={onClose}
+          ref={closeRef}
+          type="button"
+        >
+          ×
+        </button>
+        <p className="text-text-secondary">{typeLabel(detail.type)} 일정</p>
+        <p>{formatScheduleTimeRange(detail.startAt, detail.endAt, detail.allDay)}</p>
         {detail.location && <p>위치: {detail.location}</p>}
         {detail.content && <p>{detail.content}</p>}
         {detail.meetingRoomManaged && (
@@ -181,14 +299,6 @@ function DetailModal({
             </button>
           </div>
         )}
-        <button
-          className={`${controlButtonClass} mt-6`}
-          onClick={onClose}
-          ref={closeRef}
-          type="button"
-        >
-          닫기
-        </button>
       </section>
     </div>
   )
@@ -240,27 +350,56 @@ function EditModal({
   useEffect(() => {
     form.setValue('visibility', scheduleTypeDefaults[scheduleType], { shouldValidate: true })
   }, [form, scheduleType])
-  const close = () => {
+  const close = useCallback(() => {
     if (form.formState.isDirty && !isSaving) {
       setConfirmClose(true)
     } else {
       onClose()
     }
-  }
+  }, [form.formState.isDirty, isSaving, onClose])
   const submit = (values: ScheduleFormValues) => {
     onSave(toScheduleRequest(values))
   }
+  useEffect(() => {
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') {
+        return
+      }
+      if (confirmClose) {
+        setConfirmClose(false)
+      } else {
+        close()
+      }
+    }
+    document.addEventListener('keydown', escape)
+    return () => document.removeEventListener('keydown', escape)
+  }, [close, confirmClose])
   return (
     <div
       aria-labelledby="schedule-edit-title"
       aria-modal="true"
       className="fixed inset-0 z-10 grid place-items-center overflow-auto bg-slate-950/55 p-4"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) {
+          close()
+        }
+      }}
       role="dialog"
     >
-      <section className="w-full max-w-2xl rounded-xl bg-surface p-6 shadow-2xl">
+      <section className="relative w-full max-w-2xl rounded-xl bg-surface p-6 shadow-2xl">
         <h2 className="m-0 text-xl font-bold text-text-primary" id="schedule-edit-title">
           일정 수정
         </h2>
+        <button
+          aria-label="닫기"
+          className="absolute top-4 right-4 rounded p-1 text-text-secondary hover:bg-secondary focus-visible:outline-3 focus-visible:outline-focus-ring"
+          disabled={isSaving}
+          onClick={close}
+          ref={closeRef}
+          type="button"
+        >
+          ×
+        </button>
         <form
           className="mt-4 grid gap-3"
           noValidate
@@ -270,7 +409,6 @@ function EditModal({
           <input
             aria-describedby={form.formState.errors.title ? 'schedule-edit-title-error' : undefined}
             aria-invalid={Boolean(form.formState.errors.title)}
-            autoFocus
             className={fieldClass}
             id="schedule-edit-title-input"
             {...form.register('title')}
@@ -377,7 +515,7 @@ function EditModal({
             <select {...form.register('colorLabel')}>
               {(['RED', 'ORANGE', 'YELLOW', 'GREEN', 'BLUE', 'PURPLE'] as const).map((color) => (
                 <option key={color} value={color}>
-                  {color}
+                  {colorOptionLabel(color)}
                 </option>
               ))}
             </select>
@@ -404,15 +542,6 @@ function EditModal({
           {error && <p role="alert">{error}</p>}
           <div className="mt-4 flex flex-wrap justify-end gap-3">
             <button
-              className={controlButtonClass}
-              disabled={isSaving}
-              onClick={close}
-              ref={closeRef}
-              type="button"
-            >
-              수정 취소
-            </button>
-            <button
               className="rounded-lg bg-primary px-3 py-2 font-semibold text-white focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-2 disabled:cursor-wait disabled:opacity-70"
               disabled={isSaving}
               type="submit"
@@ -430,6 +559,14 @@ function EditModal({
           role="alertdialog"
         >
           <h2 id="edit-discard-title">수정 내용을 버릴까요?</h2>
+          <button
+            aria-label="닫기"
+            className="absolute top-4 right-4"
+            onClick={() => setConfirmClose(false)}
+            type="button"
+          >
+            ×
+          </button>
           <button onClick={() => setConfirmClose(false)} type="button">
             계속 수정
           </button>
@@ -518,6 +655,18 @@ export function ScheduleCalendar({
     window.addEventListener('popstate', popstate)
     return () => window.removeEventListener('popstate', popstate)
   }, [now])
+  useEffect(() => {
+    if (!cancelConfirmation) {
+      return
+    }
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setCancelConfirmation(false)
+      }
+    }
+    document.addEventListener('keydown', escape)
+    return () => document.removeEventListener('keydown', escape)
+  }, [cancelConfirmation])
 
   const isMobile = window.innerWidth <= 640
   const daySchedules = (schedulesQuery.data ?? []).filter(
@@ -615,15 +764,23 @@ export function ScheduleCalendar({
       {schedulesQuery.isSuccess && schedulesQuery.data.length === 0 && (
         <p className="my-8 rounded-lg bg-surface p-4 shadow-md">이 기간에는 일정이 없습니다.</p>
       )}
-      {schedulesQuery.isSuccess && (
-        <section
-          aria-label={`${formatCalendarHeading(state.view, state.date)} 달력`}
-          className={`grid overflow-hidden rounded-xl border border-border bg-border shadow-lg ${state.view === 'day' ? 'grid-cols-1' : 'grid-cols-7'}`}
-          data-testid="calendar-grid"
-          role="grid"
-        >
-          {state.view !== 'day' &&
-            weekdays.map((weekday) => (
+      {schedulesQuery.isSuccess &&
+        (state.view === 'day' ? (
+          <DayTimeline
+            date={state.date}
+            onOpen={openDetail}
+            schedules={(schedulesQuery.data ?? []).filter((schedule) =>
+              scheduleOnDate(schedule, state.date),
+            )}
+          />
+        ) : (
+          <section
+            aria-label={`${formatCalendarHeading(state.view, state.date)} 달력`}
+            className="grid grid-cols-7 overflow-hidden rounded-xl border border-border bg-border shadow-lg"
+            data-testid="calendar-grid"
+            role="grid"
+          >
+            {weekdays.map((weekday) => (
               <div
                 className="bg-secondary px-2 py-2 text-center text-sm font-bold text-text-secondary"
                 data-testid={`calendar-weekday-${weekday}`}
@@ -633,48 +790,43 @@ export function ScheduleCalendar({
                 {weekday}
               </div>
             ))}
-          {calendarDays(state.view, state.date).map((day) => {
-            const outsideMonth =
-              state.view === 'month' && day.slice(0, 7) !== state.date.slice(0, 7)
-            return (
-              <article
-                className={`min-h-20 min-w-0 bg-surface p-1 sm:min-h-28 sm:p-2 ${outsideMonth ? 'bg-background/60' : ''}`}
-                key={day}
-                role="gridcell"
-              >
-                {!outsideMonth && (
-                  <>
-                    <button
-                      aria-label={`${koreanDate(day)} 일정 보기`}
-                      className="rounded px-1 py-0.5 text-xs font-bold text-text-primary hover:bg-secondary focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-1 sm:text-sm"
-                      data-calendar-day-button
-                      onClick={() => setSelectedDate(day)}
-                      type="button"
-                    >
-                      {Number(day.slice(-2))}
-                    </button>
-                    {(schedulesQuery.data ?? [])
-                      .filter((schedule) => schedule.startAt.slice(0, 10) === day)
-                      .map((schedule) => (
-                        <button
-                          className={`${chipBaseClass} ${chipColorClasses[schedule.colorLabel]}`}
-                          data-testid={`calendar-schedule-chip-${schedule.id}`}
-                          key={schedule.id}
-                          onClick={(event) => openDetail(schedule, event.currentTarget)}
-                          type="button"
-                        >
-                          {typeLabel(schedule.type)} · {schedule.colorLabel} ·{' '}
-                          {schedule.allDay ? '종일 · ' : ''}
-                          {schedule.title}
-                        </button>
-                      ))}
-                  </>
-                )}
-              </article>
-            )
-          })}
-        </section>
-      )}
+            {calendarDays(state.view, state.date).map((day) => {
+              const outsideMonth =
+                state.view === 'month' && day.slice(0, 7) !== state.date.slice(0, 7)
+              return (
+                <article
+                  className={`min-h-20 min-w-0 bg-surface p-1 sm:min-h-28 sm:p-2 ${outsideMonth ? 'bg-background/60' : ''}`}
+                  key={day}
+                  role="gridcell"
+                >
+                  {!outsideMonth && (
+                    <>
+                      <button
+                        aria-label={`${koreanDate(day)} 일정 보기`}
+                        className="rounded px-1 py-0.5 text-xs font-bold text-text-primary hover:bg-secondary focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-1 sm:text-sm"
+                        data-calendar-day-button
+                        onClick={() => setSelectedDate(day)}
+                        type="button"
+                      >
+                        {Number(day.slice(-2))}
+                      </button>
+                      {(schedulesQuery.data ?? [])
+                        .filter((schedule) => schedule.startAt.slice(0, 10) === day)
+                        .map((schedule) => (
+                          <ScheduleChip
+                            key={schedule.id}
+                            onOpen={openDetail}
+                            schedule={schedule}
+                            testId={`calendar-schedule-chip-${schedule.id}`}
+                          />
+                        ))}
+                    </>
+                  )}
+                </article>
+              )
+            })}
+          </section>
+        ))}
       {selectedDate && (
         <aside
           aria-label={`${koreanDate(selectedDate)} 일정`}
@@ -693,8 +845,13 @@ export function ScheduleCalendar({
                 : 'flex items-center justify-between gap-3'
             }
           >
-            <h2>{selectedDate} 일정</h2>
-            <button onClick={() => setSelectedDate(null)} type="button">
+            <h2>{koreanDate(selectedDate)} 일정</h2>
+            <button
+              aria-label="닫기"
+              className="rounded p-1 focus-visible:outline-3 focus-visible:outline-focus-ring"
+              onClick={() => setSelectedDate(null)}
+              type="button"
+            >
               닫기
             </button>
           </header>
@@ -705,15 +862,7 @@ export function ScheduleCalendar({
               <ul>
                 {daySchedules.map((schedule) => (
                   <li key={schedule.id}>
-                    <button
-                      className={`${chipBaseClass} ${chipColorClasses[schedule.colorLabel]}`}
-                      onClick={(event) => openDetail(schedule, event.currentTarget)}
-                      type="button"
-                    >
-                      {typeLabel(schedule.type)} · {schedule.colorLabel} ·{' '}
-                      {schedule.allDay ? '종일 · ' : ''}
-                      {schedule.title}
-                    </button>
+                    <ScheduleChip onOpen={openDetail} schedule={schedule} />
                   </li>
                 ))}
               </ul>
@@ -729,6 +878,7 @@ export function ScheduleCalendar({
           detail={detailQuery.data}
           canManage={detailQuery.data.canManage}
           error={actionError}
+          hasConfirmation={cancelConfirmation}
           onCancel={() => setCancelConfirmation(true)}
           onClose={closeDetail}
           onEdit={() => {
@@ -748,27 +898,44 @@ export function ScheduleCalendar({
       )}
       {detailQuery.data && cancelConfirmation && (
         <div
-          aria-labelledby="cancel-title"
-          aria-modal="true"
-          className="fixed inset-1/2 z-20 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-xl bg-surface p-6 shadow-2xl"
-          role="alertdialog"
+          className="fixed inset-0 z-20 grid place-items-center bg-slate-950/55 p-4"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              setCancelConfirmation(false)
+            }
+          }}
         >
-          <h2 id="cancel-title">{detailQuery.data.title} 취소</h2>
-          <p>취소한 일정은 캘린더와 상세에서 사라집니다.</p>
-          <button
-            disabled={cancelMutation.isPending}
-            onClick={() => setCancelConfirmation(false)}
-            type="button"
+          <div
+            aria-labelledby="cancel-title"
+            aria-modal="true"
+            className="relative w-full max-w-sm rounded-xl bg-surface p-6 shadow-2xl"
+            role="alertdialog"
           >
-            계속 일정 보기
-          </button>
-          <button
-            disabled={cancelMutation.isPending}
-            onClick={() => cancelMutation.mutate(detailQuery.data.id)}
-            type="button"
-          >
-            {cancelMutation.isPending ? '일정 취소 중' : '일정 취소 확정'}
-          </button>
+            <h2 id="cancel-title">{detailQuery.data.title} 취소</h2>
+            <button
+              aria-label="닫기"
+              className="absolute top-4 right-4"
+              onClick={() => setCancelConfirmation(false)}
+              type="button"
+            >
+              ×
+            </button>
+            <p>취소한 일정은 캘린더와 상세에서 사라집니다.</p>
+            <button
+              disabled={cancelMutation.isPending}
+              onClick={() => setCancelConfirmation(false)}
+              type="button"
+            >
+              계속 일정 보기
+            </button>
+            <button
+              disabled={cancelMutation.isPending}
+              onClick={() => cancelMutation.mutate(detailQuery.data.id)}
+              type="button"
+            >
+              {cancelMutation.isPending ? '일정 취소 중' : '일정 취소 확정'}
+            </button>
+          </div>
         </div>
       )}
       {detailQuery.isError && <p role="alert">일정 상세를 불러오지 못했습니다.</p>}
