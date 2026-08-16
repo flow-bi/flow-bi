@@ -47,6 +47,7 @@ export interface ScheduleCalendarProps {
   getScheduleDetail?: (id: number, signal?: AbortSignal) => Promise<ScheduleDetail>
   updateSchedule?: (id: number, request: UpdateScheduleRequest) => Promise<ScheduleDetail>
   cancelSchedule?: (id: number) => Promise<void>
+  onCreateSchedule?: () => void
   now?: () => Date
 }
 
@@ -114,8 +115,7 @@ function ScheduleChip({
       onClick={(event) => onOpen(schedule, event.currentTarget)}
       type="button"
     >
-      {schedule.title} ·{' '}
-      {typeLabel(schedule.type)}
+      {schedule.title} · {typeLabel(schedule.type)}
     </button>
   )
 }
@@ -187,10 +187,8 @@ function DayTimeline({
                 }}
                 type="button"
               >
-                {schedule.title} ·{' '}
-                {typeLabel(schedule.type)} ·{' '}
+                {schedule.title} · {typeLabel(schedule.type)} ·{' '}
                 {formatScheduleTimeRange(schedule.startAt, schedule.endAt, false)}
-                
               </button>
             )
           })}
@@ -584,6 +582,7 @@ export function ScheduleCalendar({
   getScheduleDetail = getScheduleDetailRequest,
   updateSchedule = updateScheduleRequest,
   cancelSchedule = cancelScheduleRequest,
+  onCreateSchedule,
   now = () => new Date(),
 }: ScheduleCalendarProps) {
   const [state, setState] = useState(() => readState(now))
@@ -594,6 +593,7 @@ export function ScheduleCalendar({
   const [actionError, setActionError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const scheduleTrigger = useRef<HTMLElement | null>(null)
+  const selectedDateTrigger = useRef<HTMLButtonElement | null>(null)
   const cancellationFocusFallback = useRef<HTMLButtonElement | null>(null)
   const queryClient = useQueryClient()
   const period = getCalendarPeriod(state.view, state.date)
@@ -668,7 +668,6 @@ export function ScheduleCalendar({
     return () => document.removeEventListener('keydown', escape)
   }, [cancelConfirmation])
 
-  const isMobile = window.innerWidth <= 640
   const daySchedules = (schedulesQuery.data ?? []).filter(
     (schedule) => selectedDate && scheduleOnDate(schedule, selectedDate),
   )
@@ -682,6 +681,10 @@ export function ScheduleCalendar({
   const closeDetail = () => {
     setSelectedSchedule(null)
     scheduleTrigger.current?.focus()
+  }
+  const closeDatePanel = () => {
+    setSelectedDate(null)
+    window.setTimeout(() => selectedDateTrigger.current?.focus(), 0)
   }
   const errorStatus = (schedulesQuery.error as { status?: number } | undefined)?.status
   const errorText =
@@ -704,39 +707,55 @@ export function ScheduleCalendar({
           </h1>
         </div>
         <div
-          aria-label="캘린더 보기 제어"
           className="flex flex-wrap items-center gap-2 sm:justify-end"
-          data-testid="calendar-view-controls"
+          data-testid="calendar-header-actions"
         >
-          <button
-            aria-label="이전 기간"
-            onClick={() =>
-              setUrlState({ ...state, date: navigateDate(state.view, state.date, -1) })
-            }
-            className={controlButtonClass}
-            type="button"
-          >
-            이전
-          </button>
-          {(['month', 'week', 'day'] as const).map((view) => (
+          {onCreateSchedule && (
             <button
-              aria-pressed={state.view === view}
-              className={state.view === view ? activeControlButtonClass : controlButtonClass}
-              key={view}
-              onClick={() => setUrlState({ ...state, view })}
+              className="rounded-lg bg-primary px-4 py-2 font-semibold text-white shadow-sm transition hover:bg-primary/90 focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-2"
+              onClick={onCreateSchedule}
               type="button"
             >
-              {view === 'month' ? '월간 보기' : view === 'week' ? '주간 보기' : '일간 보기'}
+              일정 추가
             </button>
-          ))}
-          <button
-            aria-label="다음 기간"
-            onClick={() => setUrlState({ ...state, date: navigateDate(state.view, state.date, 1) })}
-            className={controlButtonClass}
-            type="button"
+          )}
+          <div
+            aria-label="캘린더 보기 제어"
+            className="flex flex-wrap items-center gap-2 sm:justify-end"
+            data-testid="calendar-view-controls"
           >
-            다음
-          </button>
+            <button
+              aria-label="이전 기간"
+              onClick={() =>
+                setUrlState({ ...state, date: navigateDate(state.view, state.date, -1) })
+              }
+              className={controlButtonClass}
+              type="button"
+            >
+              이전
+            </button>
+            {(['month', 'week', 'day'] as const).map((view) => (
+              <button
+                aria-pressed={state.view === view}
+                className={state.view === view ? activeControlButtonClass : controlButtonClass}
+                key={view}
+                onClick={() => setUrlState({ ...state, view })}
+                type="button"
+              >
+                {view === 'month' ? '월간 보기' : view === 'week' ? '주간 보기' : '일간 보기'}
+              </button>
+            ))}
+            <button
+              aria-label="다음 기간"
+              onClick={() =>
+                setUrlState({ ...state, date: navigateDate(state.view, state.date, 1) })
+              }
+              className={controlButtonClass}
+              type="button"
+            >
+              다음
+            </button>
+          </div>
         </div>
       </header>
       {schedulesQuery.isLoading && (
@@ -805,7 +824,10 @@ export function ScheduleCalendar({
                         aria-label={`${koreanDate(day)} 일정 보기`}
                         className="rounded px-1 py-0.5 text-xs font-bold text-text-primary hover:bg-secondary focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-1 sm:text-sm"
                         data-calendar-day-button
-                        onClick={() => setSelectedDate(day)}
+                        onClick={(event) => {
+                          selectedDateTrigger.current = event.currentTarget
+                          setSelectedDate(day)
+                        }}
                         type="button"
                       >
                         {Number(day.slice(-2))}
@@ -828,47 +850,37 @@ export function ScheduleCalendar({
           </section>
         ))}
       {selectedDate && (
-        <aside
-          aria-label={`${koreanDate(selectedDate)} 일정`}
-          aria-modal={isMobile || undefined}
-          className={
-            isMobile
-              ? 'fixed inset-0 z-10 overflow-auto bg-slate-950/55 p-4'
-              : 'fixed top-0 right-0 z-5 h-screen w-full max-w-sm overflow-auto bg-surface p-4 shadow-2xl'
-          }
-          role={isMobile ? 'dialog' : 'complementary'}
-        >
-          <header
-            className={
-              isMobile
-                ? 'mx-auto flex max-w-sm items-center justify-between gap-3 rounded-t-xl bg-surface p-4'
-                : 'flex items-center justify-between gap-3'
+        <div
+          className="fixed inset-0 z-10 bg-slate-950/55"
+          data-testid="calendar-date-panel-backdrop"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              closeDatePanel()
             }
+          }}
+        >
+          <aside
+            aria-label={`${koreanDate(selectedDate)} 일정`}
+            aria-modal="true"
+            className="ml-auto h-full w-full max-w-lg overflow-y-auto bg-background p-4 shadow-2xl sm:p-6"
+            role="dialog"
           >
-            <h2>{koreanDate(selectedDate)} 일정</h2>
-            <button
-              aria-label="닫기"
-              className="rounded p-1 focus-visible:outline-3 focus-visible:outline-focus-ring"
-              onClick={() => setSelectedDate(null)}
-              type="button"
-            >
-              닫기
-            </button>
-          </header>
-          <div className={isMobile ? 'mx-auto max-w-sm rounded-b-xl bg-surface p-4' : ''}>
-            {daySchedules.length === 0 ? (
-              <p>선택한 날짜에는 일정이 없습니다.</p>
-            ) : (
-              <ul>
-                {daySchedules.map((schedule) => (
-                  <li key={schedule.id}>
-                    <ScheduleChip onOpen={openDetail} schedule={schedule} />
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </aside>
+            <header className="mb-4 flex items-center justify-between gap-3">
+              <h2 className="m-0 text-xl font-bold text-text-primary">
+                {koreanDate(selectedDate)} 일정
+              </h2>
+              <button
+                aria-label="닫기"
+                className="rounded p-2 text-text-primary focus-visible:outline-3 focus-visible:outline-focus-ring"
+                onClick={closeDatePanel}
+                type="button"
+              >
+                ×
+              </button>
+            </header>
+            <DayTimeline date={selectedDate} onOpen={openDetail} schedules={daySchedules} />
+          </aside>
+        </div>
       )}
       {selectedSchedule !== null && detailQuery.isLoading && (
         <p role="status">일정 상세를 불러오고 있습니다.</p>

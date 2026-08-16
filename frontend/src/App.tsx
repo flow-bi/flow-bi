@@ -17,14 +17,7 @@ function CalendarStarter() {
 
   return (
     <>
-      <ScheduleCalendar />
-      <button
-        className="mt-6 rounded-lg bg-primary px-4 py-2.5 font-semibold text-white shadow-sm transition hover:bg-primary/90 focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-2"
-        onClick={() => setIsCreateOpen(true)}
-        type="button"
-      >
-        일정 추가
-      </button>
+      <ScheduleCalendar onCreateSchedule={() => setIsCreateOpen(true)} />
       {isCreateOpen && <ScheduleCreateModal onClose={() => setIsCreateOpen(false)} />}
     </>
   )

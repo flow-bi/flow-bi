@@ -22,6 +22,8 @@ import {
 const fieldClass =
   'w-full rounded-md border border-border bg-surface px-3 py-2 text-text-primary focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:bg-background'
 const labelClass = 'grid gap-1.5 font-semibold text-text-primary'
+const checkboxLabelClass = 'flex items-center gap-2 font-semibold text-text-primary'
+const checkboxClass = 'h-4 w-4 shrink-0 accent-primary'
 const secondaryButtonClass =
   'rounded-lg border border-border bg-surface px-3 py-2 font-semibold text-text-primary hover:border-primary hover:bg-secondary focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-2'
 
@@ -256,8 +258,8 @@ export function ScheduleCreateModal({
           {form.formState.errors.endTime && (
             <p role="alert">{form.formState.errors.endTime.message}</p>
           )}
-          <label className={labelClass}>
-            <input type="checkbox" {...form.register('allDay')} />
+          <label className={checkboxLabelClass} data-testid="schedule-all-day-field">
+            <input className={checkboxClass} type="checkbox" {...form.register('allDay')} />
             하루종일
           </label>
           <label className={labelClass}>
@@ -356,8 +358,8 @@ export function ScheduleCreateModal({
             </ul>
           )}
           <p>자동 참석 인원: {totalAttendees}명</p>
-          <label className={labelClass}>
-            <input type="checkbox" {...form.register('creatorAttends')} />
+          <label className={checkboxLabelClass} data-testid="schedule-creator-attends-field">
+            <input className={checkboxClass} type="checkbox" {...form.register('creatorAttends')} />
             등록자도 참석
           </label>
           <label>
