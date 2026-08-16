@@ -349,13 +349,6 @@ def execute_workers(
     states = state_store or PlanStateStore(root / "docs" / "plans" / "state")
 
     tasks_by_number = {task.number: task for task in plan.tasks}
-    if (
-        request.start_task_number is not None
-        and request.start_task_number not in tasks_by_number
-    ):
-        raise ValueError(
-            f"시작 Task가 Plan에 없습니다: Task {request.start_task_number}"
-        )
     statuses = {task.number: "pending" for task in plan.tasks}
     results: dict[int, TaskResult] = {}
     try:
@@ -390,7 +383,7 @@ def execute_workers(
         )
     ]
     heapq.heapify(ready)
-    submitted = set(ready) | prior_task_numbers
+    submitted = set(ready)
     running: dict[Future[TaskResult], int] = {}
 
     with ThreadPoolExecutor(max_workers=max_parallel_tasks) as executor:
