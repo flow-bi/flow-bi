@@ -92,7 +92,13 @@ describe('calendar display contract', () => {
     for (const view of ['month', 'week', 'day']) {
       cy.visit(`/?view=${view}&date=2026-08-10`)
       expectNoRawColors()
-      cy.contains('2026년 8월 10일 09:00–10:00').should('be.visible')
+      if (view === 'day') {
+        cy.contains('2026년 8월 10일 09:00–10:00').should('be.visible')
+      } else {
+        cy.contains('button', '오전 주황 회의')
+          .should('have.text', '오전 주황 회의 · 팀')
+          .and('not.contain.text', '2026년 8월 10일')
+      }
       cy.contains('2026-08-10T09:00:00+09:00').should('not.exist')
 
       cy.contains('button', '오전 주황 회의')
@@ -124,7 +130,16 @@ describe('calendar display contract', () => {
   it('uses the readable Korean date format in the date schedule panel', () => {
     cy.visit('/?view=month&date=2026-08-10')
     cy.get('button[aria-label="2026년 8월 10일 일정 보기"]').click()
-    cy.get('[role="complementary"]').find('h2').should('have.text', '2026년 8월 10일 일정')
+    cy.get('[role="dialog"][aria-label="2026년 8월 10일 일정"]')
+      .as('datePanel')
+      .find('h2')
+      .should('have.text', '2026년 8월 10일 일정')
+    cy.get('@datePanel')
+      .find('[data-testid="calendar-day-timed-2"]')
+      .should('have.css', 'top', '540px')
+      .and('have.css', 'height', '60px')
+    cy.get('[data-testid="calendar-date-panel-backdrop"]').click('topLeft')
+    cy.get('@datePanel').should('not.exist')
   })
 
   it('provides top-right close controls and keeps modal footers for work actions', () => {
@@ -151,10 +166,16 @@ describe('calendar display contract', () => {
 
     cy.get('@cancel').find('button[aria-label="닫기"]').click()
     cy.get('@detail').find('button[aria-label="닫기"]').click()
-    cy.contains('button', '일정 추가').click()
+    cy.get('[data-testid="calendar-header"]').contains('button', '일정 추가').click()
     cy.get('[role="dialog"][aria-labelledby="schedule-create-title"]')
       .find('button')
       .contains('닫기')
       .should('have.length', 1)
+    cy.get('[data-testid="schedule-all-day-field"]')
+      .should('have.css', 'display', 'flex')
+      .and('have.css', 'align-items', 'center')
+    cy.get('[data-testid="schedule-creator-attends-field"]')
+      .should('have.css', 'display', 'flex')
+      .and('have.css', 'align-items', 'center')
   })
 })

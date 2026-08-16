@@ -85,7 +85,8 @@ describe('ScheduleCalendar', () => {
     expect(screen.getByTestId('calendar-weekday-일')).toHaveClass('bg-secondary')
     const chip = screen.getByTestId('calendar-schedule-chip-1')
     expect(chip).toHaveClass('bg-blue-100', 'border-blue-300', 'text-blue-950')
-    expect(chip).toHaveTextContent('개인 · 2024년 2월 29일 · 하루 종일 · 종일 개인 일정')
+    expect(chip).toHaveTextContent('종일 개인 일정 · 개인')
+    expect(chip).not.toHaveTextContent('2024년 2월 29일')
     expect(chip).not.toHaveTextContent('BLUE')
   })
 
@@ -121,7 +122,7 @@ describe('ScheduleCalendar', () => {
         projectTargetIds: [],
       }),
     )
-    expect(await screen.findByRole('dialog', { name: '변경된 일정 상세' })).toBeVisible()
+    expect(await screen.findByRole('dialog', { name: '변경된 일정' })).toBeVisible()
   }, 10_000)
 
   it('sends an all-day edit as a complete [start, end) day', async () => {
@@ -165,7 +166,7 @@ describe('ScheduleCalendar', () => {
     await user.click(screen.getByRole('button', { name: '일정 취소 확정' }))
     expect(cancelSchedule).toHaveBeenCalledWith(3)
     expect(await screen.findByText('일정이 취소되었습니다.')).toBeVisible()
-    expect(screen.queryByRole('dialog', { name: /상세/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: '수정할 개인 일정' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '2024년 2월 29일 일정 보기' })).toHaveFocus()
   })
 
@@ -193,7 +194,7 @@ describe('ScheduleCalendar', () => {
     await user.click(await screen.findByRole('button', { name: '일정 취소' }))
     await user.click(screen.getByRole('button', { name: '일정 취소 확정' }))
     expect(await screen.findByText(message)).toBeVisible()
-    expect(screen.getByText('수정할 개인 일정 상세')).toBeVisible()
+    expect(screen.getByRole('heading', { name: '수정할 개인 일정' })).toBeVisible()
   })
   it('defaults to the monthly URL view, calculates leap-month range, and switches views', async () => {
     window.history.replaceState({}, '', '/?view=month&date=2024-02-15')
@@ -216,7 +217,7 @@ describe('ScheduleCalendar', () => {
       expect.any(AbortSignal),
     )
     expect(await screen.findByRole('button', { name: /종일 개인 일정/ })).toHaveTextContent(
-      '개인 · 2024년 2월 29일 · 하루 종일 · 종일 개인 일정',
+      '종일 개인 일정 · 개인',
     )
 
     await user.click(screen.getByRole('button', { name: '주간 보기' }))
@@ -235,46 +236,80 @@ describe('ScheduleCalendar', () => {
     const chip = await screen.findByRole('button', { name: /기간을 넘는 팀 회의/ })
 
     await user.click(chip)
-    const modal = await screen.findByRole('dialog', { name: '기간을 넘는 팀 회의 상세' })
+    const modal = await screen.findByRole('dialog', { name: '기간을 넘는 팀 회의' })
     await user.click(screen.getByText('회의실 예약에서 관리하는 일정입니다.'))
     expect(modal).toBeVisible()
 
     await user.click(screen.getByTestId('schedule-detail-backdrop'))
-    expect(
-      screen.queryByRole('dialog', { name: '기간을 넘는 팀 회의 상세' }),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: '기간을 넘는 팀 회의' })).not.toBeInTheDocument()
     expect(chip).toHaveFocus()
   })
 
-  it('opens the desktop date banner and room-managed detail modal, then restores focus', async () => {
+  it('opens the date timeline panel and room-managed detail modal, then restores focus', async () => {
     window.history.replaceState({}, '', '/?view=month&date=2024-02-29')
     const user = userEvent.setup()
     renderCalendar()
 
     const dayButton = await screen.findByRole('button', { name: '2024년 2월 29일 일정 보기' })
     await user.click(dayButton)
-    expect(screen.getByRole('complementary', { name: '2024년 2월 29일 일정' })).toBeVisible()
+    expect(screen.getByRole('dialog', { name: '2024년 2월 29일 일정' })).toBeVisible()
 
-    const banner = screen.getByRole('complementary', { name: '2024년 2월 29일 일정' })
-    const scheduleButton = within(banner).getByRole('button', { name: /기간을 넘는 팀 회의/ })
+    const panel = screen.getByRole('dialog', { name: '2024년 2월 29일 일정' })
+    expect(within(panel).getByTestId('calendar-day-timeline')).toBeVisible()
+    expect(within(panel).getByTestId('calendar-day-timed-2')).toHaveStyle({
+      top: '1380px',
+      height: '60px',
+    })
+    const scheduleButton = within(panel).getByRole('button', { name: /기간을 넘는 팀 회의/ })
     await user.click(scheduleButton)
-    expect(await screen.findByRole('dialog', { name: '기간을 넘는 팀 회의 상세' })).toBeVisible()
+    expect(await screen.findByRole('dialog', { name: '기간을 넘는 팀 회의' })).toBeVisible()
     expect(screen.getByText('회의실 예약에서 관리하는 일정입니다.')).toBeVisible()
 
     await user.keyboard('{Escape}')
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: '기간을 넘는 팀 회의' })).not.toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: '2024년 2월 29일 일정' })).toBeVisible()
     expect(scheduleButton).toHaveFocus()
   })
 
-  it('includes a timed schedule that starts and ends on the selected date in its banner', async () => {
+  it('includes a timed schedule that starts and ends on the selected date in its timeline panel', async () => {
     window.history.replaceState({}, '', '/?view=month&date=2024-02-29')
     const user = userEvent.setup()
     renderCalendar({ getSchedules: () => Promise.resolve([{ ...editableDetail }]) })
 
     await user.click(await screen.findByRole('button', { name: '2024년 2월 29일 일정 보기' }))
 
-    const banner = screen.getByRole('complementary', { name: '2024년 2월 29일 일정' })
-    expect(within(banner).getByRole('button', { name: /수정할 개인 일정/ })).toBeVisible()
+    const panel = screen.getByRole('dialog', { name: '2024년 2월 29일 일정' })
+    expect(within(panel).getByTestId('calendar-day-timed-3')).toHaveStyle({
+      top: '540px',
+      height: '60px',
+    })
+  })
+
+  it('closes the date timeline panel only from its backdrop and restores date-button focus', async () => {
+    window.history.replaceState({}, '', '/?view=month&date=2024-02-29')
+    const user = userEvent.setup()
+    renderCalendar()
+
+    const dayButton = await screen.findByRole('button', { name: '2024년 2월 29일 일정 보기' })
+    await user.click(dayButton)
+    const panel = screen.getByRole('dialog', { name: '2024년 2월 29일 일정' })
+    await user.click(within(panel).getByText('하루 종일'))
+    expect(panel).toBeVisible()
+
+    await user.click(screen.getByTestId('calendar-date-panel-backdrop'))
+    expect(screen.queryByRole('dialog', { name: '2024년 2월 29일 일정' })).not.toBeInTheDocument()
+    expect(dayButton).toHaveFocus()
+  })
+
+  it('renders the schedule-create action in the calendar header', async () => {
+    window.history.replaceState({}, '', '/?view=month&date=2024-02-15')
+    const onCreateSchedule = vi.fn()
+    const user = userEvent.setup()
+    renderCalendar({ onCreateSchedule })
+
+    const header = await screen.findByTestId('calendar-header')
+    await user.click(within(header).getByRole('button', { name: '일정 추가' }))
+    expect(onCreateSchedule).toHaveBeenCalledTimes(1)
   })
 
   it('keeps error and permission states distinct from empty data and offers retry', async () => {
@@ -362,12 +397,12 @@ describe('ScheduleCalendar', () => {
     expect(screen.getByTestId('calendar-day-time-labels')).toHaveTextContent('23:00')
     expect(screen.getByTestId('calendar-day-time-labels')).toHaveTextContent('24:00')
     expect(timedSchedule).toHaveAccessibleName(
-      '개인 · 2024년 2월 29일 09:00–10:00 · 수정할 개인 일정',
+      '수정할 개인 일정 · 개인 · 2024년 2월 29일 09:00–10:00',
     )
 
     timedSchedule.focus()
     await user.keyboard('{Enter}')
-    expect(await screen.findByRole('dialog', { name: '수정할 개인 일정 상세' })).toBeVisible()
+    expect(await screen.findByRole('dialog', { name: '수정할 개인 일정' })).toBeVisible()
   })
 
   it('keeps calendar modal close controls in the top-right and footer actions business-only', async () => {
@@ -379,7 +414,7 @@ describe('ScheduleCalendar', () => {
     })
 
     await user.click(await screen.findByRole('button', { name: /수정할 개인 일정/ }))
-    const detail = await screen.findByRole('dialog', { name: '수정할 개인 일정 상세' })
+    const detail = await screen.findByRole('dialog', { name: '수정할 개인 일정' })
     expect(within(detail).getByRole('button', { name: '닫기' })).toHaveClass(
       'absolute',
       'top-4',

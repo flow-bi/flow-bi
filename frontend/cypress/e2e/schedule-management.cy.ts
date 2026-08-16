@@ -87,7 +87,9 @@ describe('calendar schedule management', () => {
       .then((id) => cy.get(`#${id}`).clear().type('수정된 스프린트 계획'))
     cy.contains('button', '수정 저장').click()
     cy.wait('@update')
-    cy.get('[role="dialog"]').should('contain.text', '수정된 스프린트 계획 상세')
+    cy.get('[role="dialog"][aria-labelledby="schedule-detail-title"]')
+      .find('h2')
+      .should('have.text', '수정된 스프린트 계획')
     cy.contains('button', '일정 취소').click()
     cy.get('[role="alertdialog"]').should('contain.text', '수정된 스프린트 계획 취소')
     cy.contains('button', '일정 취소 확정').click()
@@ -105,7 +107,9 @@ describe('calendar schedule management', () => {
     cy.get('[role="dialog"][aria-label="2026년 8월 10일 일정"]').within(() => {
       cy.contains('button', '스프린트 계획').click()
     })
-    cy.get('[role="dialog"]').should('contain.text', '스프린트 계획 상세')
+    cy.get('[role="dialog"][aria-labelledby="schedule-detail-title"]')
+      .find('h2')
+      .should('have.text', '스프린트 계획')
     cy.contains('button', '일정 수정').should('be.visible')
     cy.document().then((document) => {
       expect(document.documentElement.scrollWidth).to.be.at.most(390)

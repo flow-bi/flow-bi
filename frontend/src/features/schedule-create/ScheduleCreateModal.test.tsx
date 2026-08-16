@@ -45,6 +45,16 @@ describe('ScheduleCreateModal', () => {
     expect(screen.getByTestId('schedule-create-backdrop')).toHaveClass('fixed', 'inset-0')
     expect(screen.getByTestId('schedule-create-panel')).toHaveClass('w-full', 'max-w-2xl')
     expect(screen.getByTestId('schedule-create-form-grid')).toHaveClass('grid', 'sm:grid-cols-3')
+    expect(screen.getByTestId('schedule-all-day-field')).toHaveClass(
+      'flex',
+      'items-center',
+      'gap-2',
+    )
+    expect(screen.getByTestId('schedule-creator-attends-field')).toHaveClass(
+      'flex',
+      'items-center',
+      'gap-2',
+    )
   })
 
   it('opens with the title focused, validates required fields, and restores focus after Escape', async () => {
