@@ -1,8 +1,8 @@
 package com.flowbi.domain.user.service;
 
-import com.flowbi.domain.auth.service.PasswordPolicy;
-import com.flowbi.domain.auth.entity.UserCredential;
-import com.flowbi.domain.auth.repository.UserCredentialRepository;
+import com.flowbi.domain.auth.password.PasswordPolicy;
+import com.flowbi.domain.auth.credential.UserCredential;
+import com.flowbi.domain.auth.credential.UserCredentialRepository;
 import com.flowbi.domain.position.entity.Position;
 import com.flowbi.domain.position.service.PositionService;
 import com.flowbi.domain.team.entity.Team;

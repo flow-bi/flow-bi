@@ -1,4 +1,4 @@
-package com.flowbi.domain.auth.controller;
+package com.flowbi.domain.auth.dev;
 
 import com.flowbi.domain.position.entity.Position;
 import com.flowbi.domain.position.service.PositionService;

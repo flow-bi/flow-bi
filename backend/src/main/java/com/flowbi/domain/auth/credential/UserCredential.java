@@ -1,4 +1,4 @@
-package com.flowbi.domain.auth.entity;
+package com.flowbi.domain.auth.credential;
 
 import com.flowbi.domain.user.entity.User;
 
