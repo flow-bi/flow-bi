@@ -1,4 +1,5 @@
-package com.flowbi.domain.auth.security;
+package com.flowbi.domain.auth.password;
+import com.flowbi.domain.auth.security.LoginPrincipal;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -8,8 +9,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 
-import com.flowbi.domain.auth.controller.CsrfTokenController;
-import com.flowbi.domain.auth.service.SessionGenerationService;
+import com.flowbi.domain.auth.security.CsrfTokenController;
+import com.flowbi.domain.auth.security.SecurityConfiguration;
+import com.flowbi.domain.auth.session.AbsoluteSessionTimeoutFilter;
+import com.flowbi.domain.auth.session.SessionGenerationService;
+import com.flowbi.domain.auth.session.SessionGenerationValidationFilter;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;

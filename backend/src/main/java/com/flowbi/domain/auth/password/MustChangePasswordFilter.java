@@ -1,5 +1,6 @@
-package com.flowbi.domain.auth.security;
+package com.flowbi.domain.auth.password;
 
+import com.flowbi.domain.auth.security.LoginPrincipal;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;

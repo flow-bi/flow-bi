@@ -1,4 +1,4 @@
-package com.flowbi.domain.auth.security;
+package com.flowbi.domain.auth.password;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;

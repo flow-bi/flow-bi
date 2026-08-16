@@ -1,4 +1,4 @@
-package com.flowbi.domain.auth.exception;
+package com.flowbi.domain.auth.password;
 
 public class PasswordChangeException extends RuntimeException {
 

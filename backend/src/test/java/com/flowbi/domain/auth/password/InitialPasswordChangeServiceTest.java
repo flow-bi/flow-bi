@@ -1,8 +1,9 @@
-package com.flowbi.domain.auth.service;
+package com.flowbi.domain.auth.password;
+import com.flowbi.domain.auth.session.SessionGenerationService;
 
 import com.flowbi.domain.auth.audit.PasswordChangeAuditLogger;
-import com.flowbi.domain.auth.exception.PasswordChangeDependencyUnavailableException;
-import com.flowbi.domain.auth.exception.PasswordChangeException;
+import com.flowbi.domain.auth.password.PasswordChangeDependencyUnavailableException;
+import com.flowbi.domain.auth.password.PasswordChangeException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -11,8 +12,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.flowbi.domain.auth.entity.UserCredential;
-import com.flowbi.domain.auth.repository.UserCredentialRepository;
+import com.flowbi.domain.auth.credential.UserCredential;
+import com.flowbi.domain.auth.credential.UserCredentialRepository;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.password.PasswordEncoder;
