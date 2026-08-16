@@ -1,4 +1,4 @@
-package com.flowbi.domain.auth.repository;
+package com.flowbi.domain.auth.login.ratelimit;
 
 public interface LoginRateLimiter {
 

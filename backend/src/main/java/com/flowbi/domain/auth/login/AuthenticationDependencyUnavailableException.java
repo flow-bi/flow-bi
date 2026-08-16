@@ -1,4 +1,4 @@
-package com.flowbi.domain.auth.exception;
+package com.flowbi.domain.auth.login;
 
 public class AuthenticationDependencyUnavailableException extends RuntimeException {
   public AuthenticationDependencyUnavailableException(Throwable cause) {

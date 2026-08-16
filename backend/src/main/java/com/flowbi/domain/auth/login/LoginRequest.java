@@ -1,4 +1,4 @@
-package com.flowbi.domain.auth.dto;
+package com.flowbi.domain.auth.login;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;

@@ -1,4 +1,4 @@
-package com.flowbi.domain.auth.exception;
+package com.flowbi.domain.auth.login.ratelimit;
 
 public class LoginRateLimitUnavailableException extends RuntimeException {
 

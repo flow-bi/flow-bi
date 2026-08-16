@@ -1,4 +1,4 @@
-package com.flowbi.domain.auth.dto;
+package com.flowbi.domain.auth.login;
 
 public record LoginResult(Status status, AuthenticatedLogin authenticatedLogin) {
 

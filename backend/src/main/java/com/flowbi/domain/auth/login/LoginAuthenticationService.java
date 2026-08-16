@@ -1,12 +1,13 @@
-package com.flowbi.domain.auth.service;
+package com.flowbi.domain.auth.login;
 
-import com.flowbi.domain.auth.entity.UserCredential;
+import com.flowbi.domain.auth.credential.UserCredential;
 import com.flowbi.domain.auth.audit.LoginAuditLogger;
-import com.flowbi.domain.auth.dto.AuthenticatedLogin;
-import com.flowbi.domain.auth.dto.LoginResult;
-import com.flowbi.domain.auth.exception.AuthenticationDependencyUnavailableException;
-import com.flowbi.domain.auth.repository.LoginRateLimiter;
-import com.flowbi.domain.auth.repository.UserCredentialRepository;
+import com.flowbi.domain.auth.login.AuthenticatedLogin;
+import com.flowbi.domain.auth.login.LoginResult;
+import com.flowbi.domain.auth.login.AuthenticationDependencyUnavailableException;
+import com.flowbi.domain.auth.login.ratelimit.LoginRateLimiter;
+import com.flowbi.domain.auth.session.SessionGenerationService;
+import com.flowbi.domain.auth.credential.UserCredentialRepository;
 import com.flowbi.domain.user.service.UserAuthentication;
 import com.flowbi.domain.user.service.UserService;
 import java.util.Optional;
@@ -42,27 +43,44 @@ public class LoginAuthenticationService {
         audit.rateLimited(masked,null);
         return LoginResult.rateLimited();
       }
+
       Optional<UserAuthentication> user = users.findAuthenticationByEmployeeNumber(employeeNumber);
       Optional<UserCredential> credential = user
           .flatMap(value -> credentials.findByUserUserId(value.userId()));
-      boolean valid = passwordEncoder.matches(password,
-          credential.map(UserCredential::getPasswordHash).orElse(DUMMY_HASH));
-      if (user.isEmpty() || credential.isEmpty() || !valid
-          || !"ACTIVE".equals(user.get().status())) {
+      String passwordHash = credential.map(UserCredential::getPasswordHash).orElse(DUMMY_HASH);
+
+      boolean passwordMatches = matchesPassword(password,passwordHash);
+
+      if (user.isEmpty() || credential.isEmpty() || !passwordMatches
+          || !isActive(user.orElseThrow())) {
         rateLimiter.recordFailure(employeeNumber,source);
         audit.failure(masked,null);
         return LoginResult.invalidCredentials();
       }
+
+      UserAuthentication authenticatedUser = user.orElseThrow();
+      UserCredential authenticatedCredential = credential.orElseThrow();
+      String userId = String.valueOf(authenticatedUser.userId());
+
       rateLimiter.reset(employeeNumber,source);
-      long generation = generations.generationForNewSession(String.valueOf(user.get().userId()),
-          hasExistingSessions);
+
+      long generation = generations.resolveGenerationForNewSession(userId,hasExistingSessions);
       audit.success(masked,null);
-      return LoginResult.success(new AuthenticatedLogin(String.valueOf(user.get().userId()),
-          credential.get().isMustChangePassword(), generation));
+
+      return LoginResult.success(new AuthenticatedLogin(userId,
+          authenticatedCredential.isMustChangePassword(), generation));
     } catch (RuntimeException exception) {
       audit.dependencyUnavailable(masked,null);
       throw new AuthenticationDependencyUnavailableException(exception);
     }
+  }
+
+  private boolean matchesPassword(String password,String passwordHash) {
+    return passwordEncoder.matches(password,passwordHash);
+  }
+
+  private boolean isActive(UserAuthentication user) {
+    return "ACTIVE".equals(user.status());
   }
 
   private String mask(String employeeNumber) {
