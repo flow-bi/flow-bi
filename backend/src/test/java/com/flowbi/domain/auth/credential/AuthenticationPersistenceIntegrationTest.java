@@ -3,7 +3,6 @@ package com.flowbi.domain.auth.credential;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.flowbi.domain.auth.credential.UserCredential;
 import com.flowbi.domain.position.entity.Position;
 import com.flowbi.domain.position.repository.PositionRepository;
 import com.flowbi.domain.team.entity.Team;

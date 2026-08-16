@@ -2,8 +2,6 @@ package com.flowbi.domain.auth.session;
 import com.flowbi.domain.auth.security.AuthSecurityProperties;
 import com.flowbi.domain.auth.security.SecurityConfiguration;
 
-import com.flowbi.domain.auth.session.AbsoluteSessionTimeoutFilter;
-import com.flowbi.domain.auth.session.SessionGenerationValidationFilter;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -29,7 +27,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import com.flowbi.domain.auth.security.CsrfTokenController;
-import com.flowbi.domain.auth.session.SessionGenerationService;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.beans.factory.annotation.Autowired;

@@ -1,9 +1,5 @@
 package com.flowbi.domain.auth.password;
 
-import com.flowbi.domain.auth.password.PasswordChangeRequest;
-import com.flowbi.domain.auth.password.PasswordChangeDependencyUnavailableException;
-import com.flowbi.domain.auth.password.PasswordChangeException;
-import com.flowbi.domain.auth.password.InitialPasswordChangeService;
 import com.flowbi.domain.auth.session.SessionGenerationService;
 import com.flowbi.domain.auth.security.LoginPrincipal;
 import jakarta.servlet.http.HttpServletRequest;

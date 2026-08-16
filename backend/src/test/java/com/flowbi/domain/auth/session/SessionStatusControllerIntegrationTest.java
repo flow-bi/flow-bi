@@ -11,12 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.flowbi.domain.auth.security.LoginPrincipal;
 import com.flowbi.domain.auth.security.CsrfTokenController;
-import com.flowbi.domain.auth.session.SessionGenerationStoreUnavailableException;
-import com.flowbi.domain.auth.session.SessionGenerationValidationException;
-import com.flowbi.domain.auth.session.SessionGenerationService;
 import com.flowbi.domain.auth.password.MustChangePasswordFilter;
-import com.flowbi.domain.auth.session.AbsoluteSessionTimeoutFilter;
-import com.flowbi.domain.auth.session.SessionGenerationValidationFilter;
 import com.flowbi.domain.auth.security.SecurityConfiguration;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

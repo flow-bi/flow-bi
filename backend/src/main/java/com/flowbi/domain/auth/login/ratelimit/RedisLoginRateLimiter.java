@@ -1,6 +1,5 @@
 package com.flowbi.domain.auth.login.ratelimit;
 
-import com.flowbi.domain.auth.login.ratelimit.LoginRateLimitUnavailableException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;

@@ -1,6 +1,5 @@
 package com.flowbi.domain.auth.credential;
 
-import com.flowbi.domain.auth.credential.UserCredential;
 import java.util.Optional;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;

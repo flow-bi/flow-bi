@@ -17,7 +17,8 @@ class AuthDomainOwnershipTest {
     assertThat(classIsPresent("com.flowbi.domain.auth.session.RedisSessionGenerationStore"))
         .isTrue();
     assertThat(classIsPresent("com.flowbi.domain.auth.login.ratelimit.LoginRateLimiter")).isTrue();
-    assertThat(classIsPresent("com.flowbi.domain.auth.login.ratelimit.RedisLoginRateLimiter")).isTrue();
+    assertThat(classIsPresent("com.flowbi.domain.auth.login.ratelimit.RedisLoginRateLimiter"))
+        .isTrue();
     assertThat(classIsPresent(legacyRepositoryType("LoginRateLimiter"))).isFalse();
     assertThat(classIsPresent(legacyRepositoryType("RedisLoginRateLimiter"))).isFalse();
     assertThat(classIsPresent(legacyRepositoryType("SessionGenerationStore"))).isFalse();

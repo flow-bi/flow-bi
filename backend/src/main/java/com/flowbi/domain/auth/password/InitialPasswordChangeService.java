@@ -2,8 +2,6 @@ package com.flowbi.domain.auth.password;
 
 import com.flowbi.domain.auth.credential.UserCredential;
 import com.flowbi.domain.auth.audit.PasswordChangeAuditLogger;
-import com.flowbi.domain.auth.password.PasswordChangeDependencyUnavailableException;
-import com.flowbi.domain.auth.password.PasswordChangeException;
 import com.flowbi.domain.auth.credential.UserCredentialRepository;
 import com.flowbi.domain.auth.session.SessionGenerationService;
 import org.springframework.beans.factory.annotation.Autowired;

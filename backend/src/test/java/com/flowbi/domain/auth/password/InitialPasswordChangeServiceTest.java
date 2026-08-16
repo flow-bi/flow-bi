@@ -2,8 +2,6 @@ package com.flowbi.domain.auth.password;
 import com.flowbi.domain.auth.session.SessionGenerationService;
 
 import com.flowbi.domain.auth.audit.PasswordChangeAuditLogger;
-import com.flowbi.domain.auth.password.PasswordChangeDependencyUnavailableException;
-import com.flowbi.domain.auth.password.PasswordChangeException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

@@ -1,6 +1,5 @@
 package com.flowbi.domain.auth.session;
 
-import com.flowbi.domain.auth.session.SessionGenerationStoreUnavailableException;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
