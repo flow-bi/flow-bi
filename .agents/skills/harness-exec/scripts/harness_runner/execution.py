@@ -19,6 +19,7 @@ from .models import (
     VerificationResult,
 )
 from .evidence import EvidenceRecordError, ExecutionRecordStore, revision_fingerprint
+from .state import PlanStateStore, StateRecordError
 from .worker_gateway import invoke_task
 
 MAX_PARALLEL_TASKS = 4
@@ -291,6 +292,8 @@ def _block_failed_descendants(
     tasks_by_number: dict[int, Task],
     statuses: dict[int, str],
     results: dict[int, TaskResult],
+    state_store: PlanStateStore,
+    plan_id: str,
 ) -> None:
     changed = True
     while changed:
@@ -318,6 +321,7 @@ def _block_failed_descendants(
                     )
                 ),
             )
+            state_store.update(plan_id, task, "blocked", reason=results[task_number].message)
             changed = True
 
 
@@ -330,6 +334,7 @@ def execute_workers(
     call_worker: WorkerInvoker | None = None,
     project_root: Path | None = None,
     record_store: ExecutionRecordStore | None = None,
+    state_store: PlanStateStore | None = None,
 ) -> ExecutionReport:
     
     if invoker is not None and call_worker is not None:
@@ -341,6 +346,7 @@ def execute_workers(
     store = record_store or ExecutionRecordStore(
         root / ".agents" / "skills" / "harness-exec" / "scripts" / "harness_runner" / ".execution-records"
     )
+    states = state_store or PlanStateStore(root / "docs" / "plans" / "state")
 
     tasks_by_number = {task.number: task for task in plan.tasks}
     if (
@@ -352,63 +358,33 @@ def execute_workers(
         )
     statuses = {task.number: "pending" for task in plan.tasks}
     results: dict[int, TaskResult] = {}
-
-    prior_task_numbers = {
-        task.number
-        for task in plan.tasks
-        if request.start_task_number is not None
-        and task.number < request.start_task_number
-    }
-    for task_number in sorted(prior_task_numbers):
-        task = tasks_by_number[task_number]
-        fingerprint = revision_fingerprint(
-            root, request.plan_id, task, plan.common_prompt
+    try:
+        state_document = states.load(request.plan_id, plan.tasks)
+    except StateRecordError as error:
+        failure = TaskResult(
+            task_number=plan.tasks[0].number,
+            title=plan.tasks[0].title,
+            status="failed",
+            message=f"상태 기록 읽기 실패: {error}",
         )
-        try:
-            prior_record = store.load(request.plan_id, task.number, fingerprint)
-        except EvidenceRecordError as error:
-            prior_record = None
-            message = f"HUMAN_REVIEW_REQUIRED: {error}"
-        else:
-            message = ""
-
-        if prior_record is None:
-            statuses[task_number] = "failed"
-            results[task_number] = TaskResult(
-                task.number,
-                task.title,
-                "failed",
-                message=message or "신뢰할 수 있는 이전 PASS 실행 기록이 없습니다.",
+        return ExecutionReport((failure,))
+    _, plan_number = states._parts(request.plan_id)
+    saved_plan = state_document.get(plan_number, {})
+    for task in plan.tasks:
+        record = saved_plan.get(f"task{task.number}")
+        if record and record["status"] == "succeeded":
+            statuses[task.number] = "succeeded"
+            results[task.number] = TaskResult(
+                task_number=task.number,
+                title=task.title,
+                status="succeeded",
+                message="이전 실행의 완료 상태를 복원했습니다.",
+                restored=True,
             )
-            continue
-
-        statuses[task_number] = "succeeded"
-        results[task_number] = TaskResult(
-            task.number,
-            task.title,
-            "succeeded",
-            work_summary=(
-                "검증된 이전 PASS 실행 기록을 재사용해 Worker와 검증을 "
-                "다시 실행하지 않았습니다."
-            ),
-            verification=tuple(
-                VerificationResult(
-                    str(item["item"]),
-                    str(item["result"]),
-                    str(item["evidence"]),
-                )
-                for item in prior_record["verification"]
-            ),
-            quality_score=prior_record["quality_score"],
-            final_status="PASS",
-        )
-
-    _block_failed_descendants(tasks_by_number, statuses, results)
     ready = [
         task.number
         for task in plan.tasks
-        if statuses[task.number] == "pending"
-        and all(
+        if statuses[task.number] == "pending" and all(
             statuses.get(prerequisite) == "succeeded"
             for prerequisite in task.prerequisite_numbers
         )
@@ -423,6 +399,14 @@ def execute_workers(
                 task_number = heapq.heappop(ready)
                 task = tasks_by_number[task_number]
                 statuses[task_number] = "running"
+                try:
+                    states.update(request.plan_id, task, "running")
+                except StateRecordError as error:
+                    result = TaskResult(task.number, task.title, "failed", message=f"상태 기록 저장 실패: {error}")
+                    results[task_number] = result
+                    statuses[task_number] = result.status
+                    _block_failed_descendants(tasks_by_number, statuses, results, states, request.plan_id)
+                    continue
                 fingerprint = revision_fingerprint(root, request.plan_id, task, plan.common_prompt)
                 try:
                     prior_record = store.load(request.plan_id, task.number, fingerprint)
@@ -430,7 +414,11 @@ def execute_workers(
                     result = TaskResult(task.number, task.title, "failed", message=f"HUMAN_REVIEW_REQUIRED: {error}")
                     results[task_number] = result
                     statuses[task_number] = result.status
-                    _block_failed_descendants(tasks_by_number, statuses, results)
+                    try:
+                        states.update(request.plan_id, task, "failed", reason=result.message)
+                    except StateRecordError:
+                        pass
+                    _block_failed_descendants(tasks_by_number, statuses, results, states, request.plan_id)
                     continue
                 invocation = TaskInvocation(
                     common_prompt=plan.common_prompt,
@@ -461,8 +449,17 @@ def execute_workers(
                 result = future.result()
                 results[task_number] = result
                 statuses[task_number] = result.status
+                try:
+                    if result.status == "succeeded":
+                        states.update(request.plan_id, tasks_by_number[task_number], "succeeded")
+                    else:
+                        states.update(request.plan_id, tasks_by_number[task_number], "failed", reason=result.message or "Worker 실행 실패")
+                except StateRecordError as error:
+                    result = replace(result, status="failed", message=f"상태 기록 저장 실패: {error}")
+                    results[task_number] = result
+                    statuses[task_number] = result.status
 
-            _block_failed_descendants(tasks_by_number, statuses, results)
+            _block_failed_descendants(tasks_by_number, statuses, results, states, request.plan_id)
 
             for task_number in sorted(tasks_by_number):
                 if statuses[task_number] != "pending" or task_number in submitted:
@@ -485,6 +482,10 @@ def execute_workers(
             status="blocked",
             message="선행 Task 조건을 충족할 수 없어 차단되었습니다.",
         )
+        try:
+            states.update(request.plan_id, task, "blocked", reason=results[task_number].message)
+        except StateRecordError:
+            pass
 
     return ExecutionReport(
         tuple(results[number] for number in sorted(results))

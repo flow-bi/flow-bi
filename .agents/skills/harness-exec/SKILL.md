@@ -5,6 +5,12 @@ description: Validate and execute an active repository plan.
 
 # harness-exec
 
+## Task 재개 상태
+
+Harness는 `docs/plans/state/<feature>.json`에 기능별 상태를 한 개의 JSON 루트 객체로 보관한다. Plan ID는 `<feature>-NN` 형식이며, `NN`은 최상위 키, 각 Plan의 `taskN` 객체는 Task 상태가 된다. 허용 상태는 `pending`, `running`, `succeeded`, `failed`, `blocked`이고 `failed`·`blocked`에만 비어 있지 않은 `reason`을 둔다.
+
+재실행에서는 스키마가 유효한 현재 Plan의 `succeeded` Task만 Worker를 호출하지 않고 완료 상태로 복원한다. `pending`, `running`, `failed`, `blocked`는 다시 실행하며 상태 파일 오류는 성공으로 취급하거나 덮어쓰지 않는다. 이 파일에는 Mandatory Gate, TDD, 검증, 품질점수 또는 실행 증거를 저장하지 않으며, 기존 `.execution-records`와 분리된다.
+
 지정된 active plan을 하네스 실행 스크립트에 전달하여 검증하고 실행한 후 실행 결과로 report를 작성해 알린다.
 
 ## DO NOT

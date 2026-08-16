@@ -14,7 +14,7 @@ if str(SCRIPTS) not in sys.path:
 from harness_runner.evidence import ExecutionRecordStore, revision_fingerprint
 from harness_runner.execution import execute_workers
 from harness_runner.models import HarnessRequest, ParsedPlan, Task
-from harness_runner.parse import parse_invocation
+from harness_runner.state import PlanStateStore, StateRecordError
 
 
 def task(number: int, *, prerequisites: tuple[int, ...] = ()) -> Task:
@@ -49,6 +49,8 @@ def worker_result(*, quality_score: object = 90, decision: str = "PASS") -> obje
             "remaining_issues": [],
             "final_status": "PASS",
             "quality_score": quality_score,
+            "remaining_issues": [],
+            "final_status": "PASS",
         }
 
     return Result()
@@ -63,8 +65,9 @@ class RevisionEvidenceTests(unittest.TestCase):
         (self.root / "implementation" / "feature.py").write_text("value = 1\n", encoding="utf-8")
         (self.root / "tests" / "test_feature.py").write_text("assert True\n", encoding="utf-8")
         self.plan = ParsedPlan("requirements", (task(1), task(2, prerequisites=(1,))))
-        self.request = HarnessRequest("rerun-plan")
+        self.request = HarnessRequest("rerun-plan-01")
         self.store = ExecutionRecordStore(self.root / "records")
+        self.state_store = PlanStateStore(self.root / "docs" / "plans" / "state")
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
@@ -76,9 +79,54 @@ class RevisionEvidenceTests(unittest.TestCase):
 
         self.assertTrue(first.succeeded)
         self.assertTrue(second.succeeded)
-        self.assertEqual(calls[2].execution_context.mode, "rerun")
-        self.assertTrue(calls[2].execution_context.prior_tdd_evidence)
-        self.assertEqual(len(calls), 4)
+        self.assertEqual(len(calls), 2)
+        self.assertTrue(all(result.restored for result in second.results))
+
+    def test_resume_restores_succeeded_predecessor_and_retries_failed_task(self) -> None:
+        calls: list[int] = []
+
+        def fail_second(invocation: object) -> object:
+            calls.append(invocation.task.number)
+            if invocation.task.number == 2:
+                return type("Failed", (), {"returncode": 1, "output": None, "output_error": "test failure"})()
+            return worker_result()
+
+        first = execute_workers(self.plan, self.request, fail_second, project_root=self.root, record_store=self.store, state_store=self.state_store)
+        second = execute_workers(self.plan, self.request, lambda invocation: calls.append(invocation.task.number) or worker_result(), project_root=self.root, record_store=self.store, state_store=self.state_store)
+
+        self.assertEqual([result.status for result in first.results], ["succeeded", "failed"])
+        self.assertEqual(calls, [1, 2, 2])
+        self.assertTrue(second.results[0].restored)
+        self.assertFalse(second.results[1].restored)
+        state = self.state_store.load(self.request.plan_id, self.plan.tasks)
+        self.assertEqual(state["01"]["task1"], {"status": "succeeded"})
+        self.assertEqual(state["01"]["task2"], {"status": "succeeded"})
+
+    def test_feature_state_uses_one_root_object_and_preserves_parallel_updates(self) -> None:
+        other = HarnessRequest("rerun-plan-02")
+        self.state_store.update(self.request.plan_id, task(1), "succeeded")
+        self.state_store.update(self.request.plan_id, task(2), "failed", reason="test failure")
+        self.state_store.update(other.plan_id, task(1), "pending")
+
+        path = self.state_store.path_for(self.request.plan_id)
+        import json
+        document = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(document, {
+            "01": {"task1": {"status": "succeeded"}, "task2": {"status": "failed", "reason": "test failure"}},
+            "02": {"task1": {"status": "pending"}},
+        })
+
+    def test_state_schema_rejects_invalid_json_and_reason_rules(self) -> None:
+        path = self.state_store.path_for(self.request.plan_id)
+        path.parent.mkdir(parents=True)
+        path.write_text("[]", encoding="utf-8")
+        with self.assertRaises(StateRecordError):
+            self.state_store.load(self.request.plan_id, self.plan.tasks)
+        path.write_text('{"01":{"task1":{"status":"failed"}}}', encoding="utf-8")
+        with self.assertRaises(StateRecordError):
+            self.state_store.load(self.request.plan_id, self.plan.tasks)
+        with self.assertRaises(ValueError):
+            self.state_store.update(self.request.plan_id, task(1), "succeeded", reason="evidence")
 
     def test_from_task_reuses_prior_pass_records_without_invoking_earlier_workers(self) -> None:
         execute_workers(
@@ -121,8 +169,7 @@ class RevisionEvidenceTests(unittest.TestCase):
         contexts: list[object] = []
         execute_workers(self.plan, self.request, lambda invocation: contexts.append(invocation.execution_context) or worker_result(), project_root=self.root, record_store=self.store)
 
-        self.assertEqual(contexts[0].mode, "rerun")
-        self.assertTrue(contexts[0].prior_tdd_evidence)
+        self.assertEqual(contexts, [])
 
     def test_other_task_or_common_prompt_change_does_not_invalidate_task_evidence(self) -> None:
         original = revision_fingerprint(
@@ -156,8 +203,7 @@ class RevisionEvidenceTests(unittest.TestCase):
             record_store=self.store,
         )
 
-        self.assertEqual(contexts[0].mode, "new_or_changed")
-        self.assertFalse(contexts[0].prior_tdd_evidence)
+        self.assertEqual(contexts, [])
 
     def test_corrupt_record_is_not_reused_and_blocks_dependent_task(self) -> None:
         fingerprint = revision_fingerprint(self.root, self.request.plan_id, task(1), self.plan.common_prompt)
