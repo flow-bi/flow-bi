@@ -59,4 +59,14 @@ describe('calendar modal dismissal', () => {
     cy.get('[role="dialog"][aria-labelledby="schedule-detail-title"]').should('not.exist')
     cy.get('@trigger').should('be.focused')
   })
+
+  it('dismisses a detail modal with Escape and returns focus to the schedule', () => {
+    interceptCalendar()
+    cy.visit('/?view=month&date=2026-08-10')
+    cy.contains('button', '스프린트 계획').as('trigger').click()
+    cy.get('[role="dialog"]').should('be.visible')
+    cy.get('body').type('{esc}')
+    cy.get('[role="dialog"][aria-labelledby="schedule-detail-title"]').should('not.exist')
+    cy.get('@trigger').should('be.focused')
+  })
 })

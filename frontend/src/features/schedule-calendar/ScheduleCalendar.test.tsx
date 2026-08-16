@@ -83,7 +83,10 @@ describe('ScheduleCalendar', () => {
     expect(screen.getByTestId('calendar-view-controls')).toHaveClass('flex-wrap')
     expect(await screen.findByTestId('calendar-grid')).toHaveClass('grid', 'grid-cols-7')
     expect(screen.getByTestId('calendar-weekday-일')).toHaveClass('bg-secondary')
-    expect(screen.getByTestId('calendar-schedule-chip-1')).toHaveClass('border-l-blue-600')
+    const chip = screen.getByTestId('calendar-schedule-chip-1')
+    expect(chip).toHaveClass('bg-blue-100', 'border-blue-300', 'text-blue-950')
+    expect(chip).toHaveTextContent('개인 · 2024년 2월 29일 · 하루 종일 · 종일 개인 일정')
+    expect(chip).not.toHaveTextContent('BLUE')
   })
 
   it('lets the creator edit a normal schedule and updates only its list and detail queries', async () => {
@@ -213,7 +216,7 @@ describe('ScheduleCalendar', () => {
       expect.any(AbortSignal),
     )
     expect(await screen.findByRole('button', { name: /종일 개인 일정/ })).toHaveTextContent(
-      '개인 · BLUE · 종일 · 종일 개인 일정',
+      '개인 · 2024년 2월 29일 · 하루 종일 · 종일 개인 일정',
     )
 
     await user.click(screen.getByRole('button', { name: '주간 보기' }))
@@ -302,5 +305,96 @@ describe('ScheduleCalendar', () => {
     await user.click(await screen.findByRole('button', { name: '2024년 2월 29일 일정 보기' }))
     expect(screen.getByRole('dialog', { name: '2024년 2월 29일 일정' })).toBeVisible()
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth)
+  })
+
+  it('renders every calendar color as a distinct background without exposing raw enum names', async () => {
+    window.history.replaceState({}, '', '/?view=month&date=2024-02-29')
+    const coloredSchedules = (['RED', 'ORANGE', 'YELLOW', 'GREEN', 'BLUE', 'PURPLE'] as const).map(
+      (colorLabel, index) => ({
+        ...editableDetail,
+        id: index + 10,
+        title: `${index + 1}번 일정`,
+        colorLabel,
+      }),
+    )
+    renderCalendar({ getSchedules: () => Promise.resolve(coloredSchedules) })
+
+    const expectedBackgrounds = [
+      'bg-red-100',
+      'bg-orange-100',
+      'bg-yellow-100',
+      'bg-green-100',
+      'bg-blue-100',
+      'bg-violet-100',
+    ]
+    for (const [index, background] of expectedBackgrounds.entries()) {
+      expect(await screen.findByTestId(`calendar-schedule-chip-${index + 10}`)).toHaveClass(
+        background,
+      )
+    }
+    expect(screen.queryByText(/^(RED|ORANGE|YELLOW|GREEN|BLUE|PURPLE)$/)).not.toBeInTheDocument()
+  })
+
+  it('places day-view schedules on a 24-hour vertical timeline and keeps all-day schedules separate', async () => {
+    window.history.replaceState({}, '', '/?view=day&date=2024-02-29')
+    renderCalendar({ getSchedules: () => Promise.resolve([{ ...editableDetail }, schedules[0]]) })
+
+    expect(await screen.findByTestId('calendar-day-timeline')).toBeVisible()
+    expect(screen.getByText('00:00')).toBeVisible()
+    expect(screen.getByText('23:00')).toBeVisible()
+    expect(screen.getByTestId('calendar-day-all-day')).toHaveTextContent('종일 개인 일정')
+    expect(screen.getByTestId('calendar-day-timed-3')).toHaveStyle({ top: '540px', height: '60px' })
+  })
+
+  it('keeps day timeline labels accessible and opens a timed schedule from the keyboard', async () => {
+    window.history.replaceState({}, '', '/?view=day&date=2024-02-29')
+    const user = userEvent.setup()
+    renderCalendar({
+      getSchedules: () => Promise.resolve([{ ...editableDetail }, schedules[0]]),
+      getScheduleDetail: () => Promise.resolve(editableDetail),
+    })
+
+    const allDayRegion = await screen.findByTestId('calendar-day-all-day')
+    const timedSchedule = screen.getByTestId('calendar-day-timed-3')
+    expect(within(allDayRegion).getByRole('button', { name: /종일 개인 일정/ })).toBeVisible()
+    expect(within(allDayRegion).queryByRole('button', { name: /수정할 개인 일정/ })).toBeNull()
+    expect(screen.getByTestId('calendar-day-time-labels')).toHaveTextContent('00:00')
+    expect(screen.getByTestId('calendar-day-time-labels')).toHaveTextContent('23:00')
+    expect(screen.getByTestId('calendar-day-time-labels')).toHaveTextContent('24:00')
+    expect(timedSchedule).toHaveAccessibleName(
+      '개인 · 2024년 2월 29일 09:00–10:00 · 수정할 개인 일정',
+    )
+
+    timedSchedule.focus()
+    await user.keyboard('{Enter}')
+    expect(await screen.findByRole('dialog', { name: '수정할 개인 일정 상세' })).toBeVisible()
+  })
+
+  it('keeps calendar modal close controls in the top-right and footer actions business-only', async () => {
+    window.history.replaceState({}, '', '/?view=month&date=2024-02-29')
+    const user = userEvent.setup()
+    renderCalendar({
+      getSchedules: () => Promise.resolve([{ ...editableDetail }]),
+      getScheduleDetail: () => Promise.resolve(editableDetail),
+    })
+
+    await user.click(await screen.findByRole('button', { name: /수정할 개인 일정/ }))
+    const detail = await screen.findByRole('dialog', { name: '수정할 개인 일정 상세' })
+    expect(within(detail).getByRole('button', { name: '닫기' })).toHaveClass(
+      'absolute',
+      'top-4',
+      'right-4',
+    )
+    expect(within(detail).queryByRole('button', { name: '닫기' })).toBeInTheDocument()
+    await user.click(within(detail).getByRole('button', { name: '일정 수정' }))
+
+    const edit = screen.getByRole('dialog', { name: '일정 수정' })
+    expect(within(edit).getByRole('button', { name: '닫기' })).toHaveClass(
+      'absolute',
+      'top-4',
+      'right-4',
+    )
+    expect(within(edit).queryByRole('button', { name: '수정 취소' })).not.toBeInTheDocument()
+    expect(within(edit).getByRole('button', { name: '수정 저장' })).toBeVisible()
   })
 })
