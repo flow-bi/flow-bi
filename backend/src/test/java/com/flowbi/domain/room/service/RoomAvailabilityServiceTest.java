@@ -3,9 +3,12 @@ package com.flowbi.domain.room.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.flowbi.domain.room.dto.ReservationDisplayStatus;
+import com.flowbi.domain.room.dto.RoomAvailabilityStatus;
 import com.flowbi.domain.room.dto.RoomAvailabilityQuery;
 import com.flowbi.domain.room.dto.RoomAvailabilityResponse;
 import com.flowbi.domain.room.dto.RoomDetailResponse;
@@ -67,12 +70,12 @@ class RoomAvailabilityServiceTest {
   @Test
   void returnsAnEmptyRoomListWhenNoRoomsAreRegistered() {
     when(roomRepository.findAllByOrderByIdAsc()).thenReturn(List.of());
-    when(reservationRepository.findActiveOverlapping(any(),any())).thenReturn(List.of());
 
     RoomAvailabilityResponse response = service
         .findAvailability(RoomAvailabilityQuery.forDate(DATE));
 
     assertThat(response.rooms()).isEmpty();
+    verify(reservationRepository,never()).findActiveOverlapping(any(),any());
   }
 
   @Test
@@ -94,17 +97,39 @@ class RoomAvailabilityServiceTest {
         reservation(2L,room,LocalTime.of(10,0),LocalTime.of(11,0),ReservationStatus.RESERVED),
         reservation(3L,room,LocalTime.of(11,0),LocalTime.of(12,0),ReservationStatus.CANCELED)));
 
-    RoomAvailabilityResponse response = service.findAvailability(
-        new RoomAvailabilityQuery(DATE, LocalTime.of(9,0), LocalTime.of(10,0), null, null));
+    RoomAvailabilityResponse response = service.findAvailability(new RoomAvailabilityQuery(DATE,
+        LocalTime.of(9,0), LocalTime.of(10,0), null, RoomAvailabilityStatus.RESERVED));
 
     assertThat(response.rooms().get(0).reservations()).extracting(reservation -> reservation.id())
         .containsExactly(1L);
     assertThat(response.rooms().get(0).reservations().get(0).displayStatus())
         .isEqualTo(ReservationDisplayStatus.IN_USE);
+    assertThat(response.rooms().get(0).reservations().get(0).title()).isEqualTo("Planning");
   }
 
   @Test
-  void prioritizesMatchesWithoutRemovingNonMatchingRoomsAndKeepsTiesStable() {
+  void calculatesReservationDisplayStatusFromTheCurrentTime() {
+    Room room = room(1L,"A",4);
+    when(roomRepository.findAllByOrderByIdAsc()).thenReturn(List.of(room));
+    when(reservationRepository.findActiveOverlapping(any(),any())).thenReturn(List.of(
+        reservation(1L,room,LocalTime.of(9,0),LocalTime.of(9,15),ReservationStatus.RESERVED),
+        reservation(2L,room,LocalTime.of(9,15),LocalTime.of(9,45),ReservationStatus.RESERVED),
+        reservation(3L,room,LocalTime.of(10,0),LocalTime.of(11,0),ReservationStatus.RESERVED),
+        reservation(4L,room,LocalTime.of(11,0),LocalTime.of(12,0),ReservationStatus.CANCELED)));
+
+    RoomAvailabilityResponse response = service.findAvailability(
+        new RoomAvailabilityQuery(DATE, LocalTime.of(9,0), LocalTime.of(18,0), null, null));
+
+    assertThat(response.rooms().get(0).reservations()).extracting(reservation -> reservation.id())
+        .containsExactly(1L,2L,3L);
+    assertThat(response.rooms().get(0).reservations())
+        .extracting(reservation -> reservation.displayStatus())
+        .containsExactly(ReservationDisplayStatus.COMPLETED,ReservationDisplayStatus.IN_USE,
+            ReservationDisplayStatus.UPCOMING);
+  }
+
+  @Test
+  void returnsOnlyRoomsMatchingTheRequestedMinimumCapacity() {
     Room small = room(1L,"Small",2);
     Room matchingFirst = room(2L,"Matching first",8);
     Room matchingSecond = room(3L,"Matching second",10);
@@ -116,26 +141,47 @@ class RoomAvailabilityServiceTest {
         new RoomAvailabilityQuery(DATE, LocalTime.of(9,0), LocalTime.of(18,0), 6, null));
 
     assertThat(response.rooms()).extracting(room -> room.name()).containsExactly("Matching first",
-        "Matching second","Small");
+        "Matching second");
   }
 
   @Test
-  void prioritizesAvailableTimeAndRequestedDisplayStatusWithoutFilteringRooms() {
-    Room occupied = room(1L,"Occupied",4);
-    Room available = room(2L,"Available",4);
-    when(roomRepository.findAllByOrderByIdAsc()).thenReturn(List.of(occupied,available));
+  void keepsRepositoryOrderForRoomsThatMatchTheSearchConditions() {
+    Room first = room(30L,"First",8);
+    Room second = room(10L,"Second",8);
+    Room third = room(20L,"Third",2);
+    when(roomRepository.findAllByOrderByIdAsc()).thenReturn(List.of(first,second,third));
+    when(reservationRepository.findActiveOverlapping(any(),any())).thenReturn(List.of());
+
+    RoomAvailabilityResponse response = service.findAvailability(
+        new RoomAvailabilityQuery(DATE, LocalTime.of(9,0), LocalTime.of(18,0), 6, null));
+
+    assertThat(response.rooms()).extracting(room -> room.name()).containsExactly("First","Second");
+  }
+
+  @Test
+  void filtersRoomsByOverlappingReservationsForAvailabilitySearches() {
+    Room occupied = room(1L,"Han River",4);
+    Room availableRoom = room(2L,"Available",4);
+    when(roomRepository.findAllByOrderByIdAsc()).thenReturn(List.of(occupied,availableRoom));
     when(reservationRepository.findActiveOverlapping(any(),any())).thenReturn(List.of(
-        reservation(1L,occupied,LocalTime.of(9,0),LocalTime.of(10,0),ReservationStatus.RESERVED)));
+        reservation(1L,occupied,LocalTime.of(10,0),LocalTime.of(11,0),ReservationStatus.RESERVED)));
+    RoomAvailabilityService serviceAtTenThirty = new RoomAvailabilityService(roomRepository,
+        reservationRepository,
+        Clock.fixed(Instant.parse("2026-08-10T01:30:00Z"),ZoneId.of("Asia/Seoul")));
 
-    RoomAvailabilityResponse timePriority = service.findAvailability(
-        new RoomAvailabilityQuery(DATE, LocalTime.of(9,0), LocalTime.of(10,0), null, null));
-    RoomAvailabilityResponse statusPriority = service.findAvailability(new RoomAvailabilityQuery(
-        DATE, LocalTime.of(9,0), LocalTime.of(18,0), null, ReservationDisplayStatus.IN_USE));
+    RoomAvailabilityResponse all = serviceAtTenThirty.findAvailability(
+        new RoomAvailabilityQuery(DATE, LocalTime.of(10,0), LocalTime.of(11,0), null, null));
+    RoomAvailabilityResponse available = serviceAtTenThirty
+        .findAvailability(new RoomAvailabilityQuery(DATE, LocalTime.of(10,0), LocalTime.of(11,0),
+            null, RoomAvailabilityStatus.AVAILABLE));
+    RoomAvailabilityResponse reserved = serviceAtTenThirty
+        .findAvailability(new RoomAvailabilityQuery(DATE, LocalTime.of(10,0), LocalTime.of(11,0),
+            null, RoomAvailabilityStatus.RESERVED));
 
-    assertThat(timePriority.rooms()).extracting(room -> room.name()).containsExactly("Available",
-        "Occupied");
-    assertThat(statusPriority.rooms()).extracting(room -> room.name()).containsExactly("Occupied",
+    assertThat(all.rooms()).extracting(room -> room.name()).containsExactly("Han River",
         "Available");
+    assertThat(available.rooms()).extracting(room -> room.name()).containsExactly("Available");
+    assertThat(reserved.rooms()).extracting(room -> room.name()).containsExactly("Han River");
   }
 
   @Test

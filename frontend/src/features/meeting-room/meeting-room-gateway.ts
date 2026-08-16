@@ -2,12 +2,16 @@ export const RESERVATION_DISPLAY_STATUSES = ['UPCOMING', 'IN_USE', 'COMPLETED'] 
 
 export type ReservationDisplayStatus = (typeof RESERVATION_DISPLAY_STATUSES)[number]
 
+export const ROOM_AVAILABILITY_STATUSES = ['AVAILABLE', 'RESERVED'] as const
+
+export type RoomAvailabilityStatus = (typeof ROOM_AVAILABILITY_STATUSES)[number]
+
 export interface RoomAvailabilityQuery {
   date: string
   startTime?: string
   endTime?: string
   minimumCapacity?: number
-  preferredReservationStatus?: ReservationDisplayStatus
+  availabilityStatus?: RoomAvailabilityStatus
 }
 
 export interface RoomReservationSummary {
@@ -124,4 +128,26 @@ export const productionMeetingRoomGateway: MeetingRoomGateway = {
     Promise.reject(new MeetingRoomGatewayError('AUTH_INTEGRATION_PENDING')),
   updateReservation: async () =>
     Promise.reject(new MeetingRoomGatewayError('AUTH_INTEGRATION_PENDING')),
+}
+
+interface ResolveMeetingRoomGatewayOptions {
+  isDevelopment: boolean
+  isTestHarness: boolean
+  developmentGateway?: MeetingRoomGateway
+  injectedGateway?: MeetingRoomGateway
+}
+
+export function resolveMeetingRoomGateway({
+  isDevelopment,
+  isTestHarness,
+  developmentGateway,
+  injectedGateway,
+}: ResolveMeetingRoomGatewayOptions): MeetingRoomGateway {
+  if (isDevelopment && isTestHarness && injectedGateway) {
+    return injectedGateway
+  }
+  if (isDevelopment && developmentGateway) {
+    return developmentGateway
+  }
+  return productionMeetingRoomGateway
 }

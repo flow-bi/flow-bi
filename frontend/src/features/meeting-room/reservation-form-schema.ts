@@ -37,6 +37,9 @@ export function validateReservationForm(
   if (values.startTime < '09:00' || values.endTime > '18:00') {
     errors.endTime = '예약 시간은 09:00부터 18:00 사이여야 합니다.'
   }
+  if (values.attendeeIds.length === 0) {
+    errors.attendeeIds = '참석자를 한 명 이상 추가해 주세요.'
+  }
   if (values.attendeeIds.length > capacity) {
     errors.attendeeIds = `참석자 수가 회의실 수용 인원(${capacity}명)을 초과했습니다.`
   }

@@ -79,6 +79,10 @@ export function ReservationPanel({
   }, [])
 
   function requestClose() {
+    if (isSuccess) {
+      onClose()
+      return
+    }
     if (isDirty) {
       setConfirmDiscard(true)
     } else {

@@ -3,6 +3,7 @@ package com.flowbi.domain.room.service;
 import com.flowbi.domain.room.dto.ReservationDisplayStatus;
 import com.flowbi.domain.room.dto.RoomAvailabilityQuery;
 import com.flowbi.domain.room.dto.RoomAvailabilityResponse;
+import com.flowbi.domain.room.dto.RoomAvailabilityStatus;
 import com.flowbi.domain.room.dto.RoomAvailabilityResponse.ReservationSummary;
 import com.flowbi.domain.room.dto.RoomAvailabilityResponse.RoomSummary;
 import com.flowbi.domain.room.dto.RoomDetailResponse;
@@ -17,7 +18,6 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
-import java.util.Comparator;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -50,12 +50,15 @@ public class RoomAvailabilityService {
 
   public RoomAvailabilityResponse findAvailability(RoomAvailabilityQuery query) {
     ValidatedQuery validated = validate(query);
+    List<Room> registeredRooms = roomRepository.findAllByOrderByIdAsc();
+    if (registeredRooms.isEmpty()) {
+      return new RoomAvailabilityResponse(List.of());
+    }
     List<RoomReservation> reservations = reservationRepository
         .findActiveOverlapping(validated.startAt(),validated.endAt());
-    List<RoomSummary> rooms = roomRepository.findAllByOrderByIdAsc().stream()
+    List<RoomSummary> rooms = registeredRooms.stream()
         .map(room -> toSummary(room,reservations,validated))
-        .sorted(Comparator.comparingInt((RankedRoom ranked) -> ranked.priority()).reversed()
-            .thenComparing(ranked -> ranked.summary().id()))
+        .filter(ranked -> matches(ranked.room(),ranked.reservations(),validated))
         .map(RankedRoom::summary).toList();
     return new RoomAvailabilityResponse(rooms);
   }
@@ -86,8 +89,7 @@ public class RoomAvailabilityService {
     }
     return new ValidatedQuery(LocalDateTime.of(query.date(),startTime),
         LocalDateTime.of(query.date(),endTime), query.minimumCapacity(),
-        query.preferredReservationStatus(),
-        !startTime.equals(BUSINESS_START) || !endTime.equals(BUSINESS_END));
+        query.availabilityStatus());
   }
 
   private RankedRoom toSummary(Room room,List<RoomReservation> reservations,ValidatedQuery query) {
@@ -96,8 +98,7 @@ public class RoomAvailabilityService {
         .filter(reservation -> reservation.getRoom().getId().equals(room.getId()))
         .filter(reservation -> overlaps(reservation,query)).map(this::toReservationSummary)
         .toList();
-    int priority = calculatePriority(room,summaries,query);
-    return new RankedRoom(priority, new RoomSummary(room.getId(), room.getName(),
+    return new RankedRoom(room, summaries, new RoomSummary(room.getId(), room.getName(),
         room.getCapacity(), room.getLocation(), true, summaries));
   }
 
@@ -117,27 +118,24 @@ public class RoomAvailabilityService {
         reservation.getStartAt(), reservation.getEndAt(), displayStatus);
   }
 
-  private int calculatePriority(Room room,List<ReservationSummary> reservations,
-      ValidatedQuery query) {
-    int priority = 0;
-    if (query.minimumCapacity() != null && room.getCapacity() != null
-        && room.getCapacity() >= query.minimumCapacity()) {
-      priority++;
+  private boolean matches(Room room,List<ReservationSummary> reservations,ValidatedQuery query) {
+    if (query.minimumCapacity() != null
+        && (room.getCapacity() == null || room.getCapacity() < query.minimumCapacity())) {
+      return false;
     }
-    if (query.hasExplicitTimeRange() && reservations.isEmpty()) {
-      priority++;
+    if (query.availabilityStatus() == RoomAvailabilityStatus.AVAILABLE) {
+      return reservations.isEmpty();
     }
-    if (query.preferredReservationStatus() != null && reservations.stream().anyMatch(
-        reservation -> reservation.displayStatus() == query.preferredReservationStatus())) {
-      priority++;
+    if (query.availabilityStatus() == RoomAvailabilityStatus.RESERVED) {
+      return !reservations.isEmpty();
     }
-    return priority;
+    return true;
   }
 
   private record ValidatedQuery(LocalDateTime startAt, LocalDateTime endAt, Integer minimumCapacity,
-      ReservationDisplayStatus preferredReservationStatus, boolean hasExplicitTimeRange) {
+      RoomAvailabilityStatus availabilityStatus) {
   }
 
-  private record RankedRoom(int priority, RoomSummary summary) {
+  private record RankedRoom(Room room, List<ReservationSummary> reservations, RoomSummary summary) {
   }
 }

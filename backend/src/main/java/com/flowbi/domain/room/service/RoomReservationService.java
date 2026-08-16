@@ -153,10 +153,10 @@ public class RoomReservationService {
     if (attendeeIds == null || attendeeIds.isEmpty()) {
       throw new RoomReservationApplicationException("ROOM_RESERVATION_INVALID");
     }
-    List<Long> normalized = List.copyOf(new LinkedHashSet<>(attendeeIds));
-    if (normalized.stream().anyMatch(id -> id == null || id < 1)) {
+    if (attendeeIds.stream().anyMatch(id -> id == null || id < 1)) {
       throw new RoomReservationApplicationException("ROOM_RESERVATION_INVALID");
     }
+    List<Long> normalized = List.copyOf(new LinkedHashSet<>(attendeeIds));
     return normalized;
   }
 

@@ -110,6 +110,18 @@ class RoomReservationUpdateServiceTest {
     assertCode(() -> service.update(OWNER,command(List.of(10L))),"ROOM_RESERVATION_CONFLICT");
   }
 
+  @Test
+  void rejectsNullAttendeeWithTheStableValidationError() {
+    RoomReservationService service = service();
+
+    assertCode(
+        () -> service
+            .update(OWNER,
+                new UpdateRoomReservationCommand(100L, 2L, "Updated planning", START, END,
+                    java.util.Arrays.asList(10L,null), "Updated detail")),
+        "ROOM_RESERVATION_INVALID");
+  }
+
   private RoomReservationService service() {
     return new RoomReservationService(roomRepository, reservationRepository,
         participantAccessService, null, scheduleModificationService);

@@ -85,6 +85,24 @@ class RoomReservationServiceTest {
   }
 
   @Test
+  void rejectsReservationsOutsideBusinessHoursBeforeWriting() {
+    RoomReservationService service = service();
+
+    assertThatThrownBy(() -> service.create(ACTOR,
+        new CreateRoomReservationCommand(1L, "Planning", START.withHour(8), START, List.of(10L),
+            "Discuss roadmap")))
+        .isInstanceOf(RoomReservationApplicationException.class)
+        .extracting(error -> ((RoomReservationApplicationException) error).code())
+        .isEqualTo("ROOM_RESERVATION_INVALID");
+    assertThatThrownBy(() -> service.create(ACTOR,
+        new CreateRoomReservationCommand(1L, "Planning", END, END.withHour(19), List.of(10L),
+            "Discuss roadmap")))
+        .isInstanceOf(RoomReservationApplicationException.class)
+        .extracting(error -> ((RoomReservationApplicationException) error).code())
+        .isEqualTo("ROOM_RESERVATION_INVALID");
+  }
+
+  @Test
   void rejectsUnavailableParticipantsAndCapacityOverflow() {
     RoomReservationService service = service();
     when(roomRepository.findByIdForUpdate(1L))
@@ -116,6 +134,31 @@ class RoomReservationServiceTest {
         .isInstanceOf(RoomReservationApplicationException.class)
         .extracting(error -> ((RoomReservationApplicationException) error).code())
         .isEqualTo("ROOM_RESERVATION_CONFLICT");
+  }
+
+  @Test
+  void acceptsBusinessHourBoundariesAndPreservesFirstAttendeeOccurrence() {
+    RoomReservationService service = service();
+    LocalDateTime businessStart = LocalDateTime.of(2026,8,10,9,0);
+    LocalDateTime businessEnd = LocalDateTime.of(2026,8,10,18,0);
+    when(roomRepository.findByIdForUpdate(1L))
+        .thenReturn(Optional.of(Room.of(1L,"Orchid",2L,"3F")));
+    when(reservationRepository.existsReservedOverlap(1L,businessStart,businessEnd))
+        .thenReturn(false);
+    when(participantAccessService.canAttend(ACTOR,11L)).thenReturn(true);
+    when(participantAccessService.canAttend(ACTOR,10L)).thenReturn(true);
+    when(scheduleCreationService.create(any())).thenReturn(new CreatedSchedule(31L));
+    when(reservationRepository.save(any())).thenAnswer(invocation -> RoomReservation.of(21L,
+        invocation.getArgument(0,RoomReservation.class).getRoom(),31L,"Planning",businessStart,
+        businessEnd,com.flowbi.domain.room.entity.ReservationStatus.RESERVED));
+
+    service.create(ACTOR,new CreateRoomReservationCommand(1L, "Planning", businessStart,
+        businessEnd, List.of(11L,10L,11L), "Discuss roadmap"));
+
+    ArgumentCaptor<com.flowbi.domain.schedule.service.CreateScheduleCommand> schedule = ArgumentCaptor
+        .forClass(com.flowbi.domain.schedule.service.CreateScheduleCommand.class);
+    verify(scheduleCreationService).create(schedule.capture());
+    assertThat(schedule.getValue().attendeeIds()).containsExactly(11L,10L);
   }
 
   private RoomReservationService service() {

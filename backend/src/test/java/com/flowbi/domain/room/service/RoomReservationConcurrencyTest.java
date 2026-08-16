@@ -8,6 +8,7 @@ import com.flowbi.domain.room.dto.RoomReservationApplicationException;
 import com.flowbi.domain.room.entity.Room;
 import com.flowbi.domain.room.repository.RoomRepository;
 import com.flowbi.domain.room.repository.RoomReservationRepository;
+import com.flowbi.domain.schedule.repository.ScheduleRepository;
 import com.flowbi.domain.user.entity.User;
 import com.flowbi.domain.user.repository.UserRepository;
 import java.time.LocalDateTime;
@@ -38,6 +39,8 @@ class RoomReservationConcurrencyTest {
   private RoomReservationRepository reservationRepository;
   @Autowired
   private UserRepository userRepository;
+  @Autowired
+  private ScheduleRepository scheduleRepository;
 
   private ExecutorService executor;
 
@@ -69,6 +72,7 @@ class RoomReservationConcurrencyTest {
 
     assertThat(outcomes).containsExactlyInAnyOrder("SUCCESS","ROOM_RESERVATION_CONFLICT");
     assertThat(reservationRepository.count()).isEqualTo(1L);
+    assertThat(scheduleRepository.count()).isEqualTo(1L);
   }
 
   private CompletableFuture<String> requestReservation(CountDownLatch ready,CountDownLatch start) {

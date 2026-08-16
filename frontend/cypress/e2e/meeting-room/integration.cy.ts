@@ -1,7 +1,7 @@
 import { meetingRoomTestGateway } from './test-gateway'
 
 describe('meeting room contract integration', () => {
-  it('keeps search-prioritized rooms accessible while creating and then updating a reservation after each refresh', () => {
+  it('filters matching rooms while creating and then updating a reservation after each refresh', () => {
     cy.viewport(1280, 800)
     cy.visit('/', {
       onBeforeLoad(window) {
@@ -10,18 +10,19 @@ describe('meeting room contract integration', () => {
     })
 
     cy.get('input[type="number"]').type('6')
-    cy.get('select').select('예약 예정')
+    cy.get('select').select('예약중')
     cy.contains('button', '검색 적용').click()
     cy.contains('h2', '한강 회의실').should('be.visible')
-    cy.contains('h2', '남산 회의실').should('be.visible')
+    cy.contains('h2', '남산 회의실').should('not.exist')
 
     cy.contains('button', '한강 회의실 예약하기').click()
     cy.get('[role="dialog"]').within(() => {
       cy.contains('label', '예약 제목').find('input').type('통합 생성 회의')
+      cy.contains('label', '참석자 ID').find('input').type('1')
+      cy.contains('button', '참석자 추가').click()
       cy.contains('button', '예약 및 일정 생성').click()
       cy.contains('예약과 연결 일정이 생성되었습니다.').should('be.visible')
       cy.contains('button', '닫기').click()
-      cy.contains('button', '입력 내용 삭제').click()
     })
     cy.contains('button', '통합 생성 회의 수정').click()
     cy.get('[role="dialog"]').within(() => {
@@ -59,6 +60,19 @@ describe('meeting room contract integration', () => {
     cy.contains('h2', '한강 회의실').should('be.visible')
   })
 
+  it('does not retain a previous date reservation after availability is re-queried', () => {
+    cy.visit('/', {
+      onBeforeLoad(window) {
+        window.__FLOW_BI_MEETING_ROOM_GATEWAY__ = meetingRoomTestGateway()
+      },
+    })
+
+    cy.contains('제품 검토').should('be.visible')
+    cy.get('input[type="date"]').clear().type('2026-08-13')
+    cy.contains('button', '검색 적용').click()
+    cy.contains('제품 검토').should('not.exist')
+  })
+
   it('recovers from create and update conflicts by refreshing availability while preserving edited input', () => {
     cy.visit('/', {
       onBeforeLoad(window) {
@@ -69,6 +83,8 @@ describe('meeting room contract integration', () => {
     cy.contains('button', '한강 회의실 예약하기').click()
     cy.get('[role="dialog"]').within(() => {
       cy.contains('label', '예약 제목').find('input').type('충돌 회의')
+      cy.contains('label', '참석자 ID').find('input').type('1')
+      cy.contains('button', '참석자 추가').click()
       cy.contains('button', '예약 및 일정 생성').click()
       cy.contains('[role="alert"]', '다른 시간대를 선택').should('be.visible')
       cy.contains('button', '예약 현황 다시 조회').click()
@@ -81,7 +97,6 @@ describe('meeting room contract integration', () => {
       cy.contains('예약과 연결 일정이 생성되었습니다.').should('be.visible')
     })
     cy.contains('button', '닫기').click()
-    cy.contains('button', '입력 내용 삭제').click()
     cy.contains('button', '제품 검토 수정').click()
     cy.get('[role="dialog"]').within(() => {
       cy.contains('label', '예약 제목').find('input').clear().type('충돌 회의')
@@ -112,11 +127,12 @@ describe('meeting room contract integration', () => {
     cy.get('[role="dialog"]').within(() => {
       cy.contains('h2', '한강 회의실 예약').should('be.focused')
       cy.contains('label', '예약 제목').find('input').type('모바일 통합 회의')
+      cy.contains('label', '참석자 ID').find('input').type('1')
+      cy.contains('button', '참석자 추가').click()
       cy.contains('button', '예약 및 일정 생성').click()
       cy.contains('예약과 연결 일정이 생성되었습니다.').should('be.visible')
     })
     cy.contains('button', '닫기').click()
-    cy.contains('button', '입력 내용 삭제').click()
     cy.contains('button', '모바일 통합 회의 수정').click()
     cy.get('[role="dialog"]').within(() => {
       cy.contains('h2', '모바일 통합 회의 예약 수정').should('be.focused')

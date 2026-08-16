@@ -2,8 +2,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from 'react'
 
 import {
+  createDevelopmentMeetingRoomGateway,
   MeetingRoomPage,
-  productionMeetingRoomGateway,
+  resolveMeetingRoomGateway,
   type MeetingRoomGateway,
 } from './features/meeting-room'
 
@@ -92,6 +93,10 @@ function MobileSidebar({ children, onClose }: MobileSidebarProps) {
 
 type AppShellProps = { sidebar: ReactNode; children: ReactNode }
 
+function isMeetingRoomTestHarness(): boolean {
+  return import.meta.env.DEV && 'Cypress' in window
+}
+
 function AppShell({ sidebar, children }: AppShellProps) {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const openSidebarButtonRef = useRef<HTMLButtonElement>(null)
@@ -142,7 +147,21 @@ function App() {
   const [queryClient] = useState(
     () => new QueryClient({ defaultOptions: { queries: { retry: false } } }),
   )
-  const meetingRoomGateway = window.__FLOW_BI_MEETING_ROOM_GATEWAY__ ?? productionMeetingRoomGateway
+  const [developmentMeetingRoomGateway] = useState(() =>
+    import.meta.env.DEV ? createDevelopmentMeetingRoomGateway() : undefined,
+  )
+  let isTestHarness = false
+  let injectedGateway: MeetingRoomGateway | undefined
+  if (import.meta.env.DEV) {
+    isTestHarness = isMeetingRoomTestHarness()
+    injectedGateway = isTestHarness ? window.__FLOW_BI_MEETING_ROOM_GATEWAY__ : undefined
+  }
+  const meetingRoomGateway = resolveMeetingRoomGateway({
+    isDevelopment: import.meta.env.DEV,
+    isTestHarness,
+    developmentGateway: developmentMeetingRoomGateway,
+    injectedGateway,
+  })
 
   const [authentication, setAuthentication] = useState<AuthenticationState>({ kind: 'loading' })
   const mainHeadingRef = useRef<HTMLHeadingElement>(null)

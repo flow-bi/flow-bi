@@ -17,15 +17,27 @@ describe('meeting room availability', () => {
     cy.get('img[alt="한강 회의실 기본 이미지"]').should('be.visible')
     cy.get('[aria-label="9시부터 18시까지 예약 시간표"]').should('be.visible')
     cy.contains('제품 검토').should('be.visible')
-    cy.contains('예약 예정').should('be.visible')
+    cy.contains('사용 중').should('be.visible')
   })
 
-  it('keeps a non-matching room available after applying search preferences', () => {
+  it('shows only rooms matching available and reserved statuses', () => {
     visitMeetingRooms()
-    cy.get('input[type="number"]').type('6')
-    cy.get('select').select('예약 예정')
+    cy.get('select option').then(($options) => {
+      expect([...$options].map((option) => option.textContent)).to.deep.equal([
+        '전체',
+        '예약 가능',
+        '예약중',
+      ])
+    })
+    cy.get('input[type="time"]').first().clear().type('10:00')
+    cy.get('input[type="time"]').last().clear().type('11:00')
+    cy.get('select').select('예약중')
     cy.contains('button', '검색 적용').click()
     cy.contains('h2', '한강 회의실').should('be.visible')
+    cy.contains('h2', '남산 회의실').should('not.exist')
+    cy.get('select').select('예약 가능')
+    cy.contains('button', '검색 적용').click()
+    cy.contains('h2', '한강 회의실').should('not.exist')
     cy.contains('h2', '남산 회의실').should('be.visible')
   })
 
@@ -36,6 +48,6 @@ describe('meeting room availability', () => {
     cy.focused().should('have.attr', 'type', 'number')
     cy.get('[aria-label="예약 텍스트 목록"]').should('be.visible')
     cy.contains('예약 팀: 제공되지 않음').should('be.visible')
-    cy.contains('상태: 예약 예정').should('be.visible')
+    cy.contains('상태: 사용 중').should('be.visible')
   })
 })

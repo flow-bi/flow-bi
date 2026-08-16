@@ -4,17 +4,17 @@ import { useRef, useState, type FormEvent } from 'react'
 import {
   type EditableRoomReservation,
   MeetingRoomGatewayError,
-  RESERVATION_DISPLAY_STATUSES,
+  ROOM_AVAILABILITY_STATUSES,
   isMeetingRoomGatewayError,
   type MeetingRoomGateway,
-  type ReservationDisplayStatus,
+  type RoomAvailabilityStatus,
   type RoomAvailabilityQuery,
   type RoomAvailabilityResponse,
   type RoomSummary,
 } from './meeting-room-gateway'
 import { ReservationPanel } from './reservation-panel'
-import { RESERVATION_STATUS_LABELS } from './reservation-status'
 import { ReservationTextList, ReservationTimetable } from './reservation-timetable'
+import { ROOM_AVAILABILITY_STATUS_LABELS } from './room-availability-status'
 
 import type { ReservationFormValues } from './reservation-form-schema'
 
@@ -28,7 +28,7 @@ interface SearchForm {
   date: string
   startTime: string
   endTime: string
-  preferredReservationStatus: '' | ReservationDisplayStatus
+  availabilityStatus: '' | RoomAvailabilityStatus
 }
 
 const defaultImage =
@@ -41,7 +41,7 @@ function initialSearch(date: string): SearchForm {
     date,
     startTime: '09:00',
     endTime: '18:00',
-    preferredReservationStatus: '',
+    availabilityStatus: '',
   }
 }
 
@@ -51,9 +51,7 @@ function toQuery(search: SearchForm): RoomAvailabilityQuery {
     startTime: search.startTime,
     endTime: search.endTime,
     ...(search.minimumCapacity === '' ? {} : { minimumCapacity: Number(search.minimumCapacity) }),
-    ...(search.preferredReservationStatus === ''
-      ? {}
-      : { preferredReservationStatus: search.preferredReservationStatus }),
+    ...(search.availabilityStatus === '' ? {} : { availabilityStatus: search.availabilityStatus }),
   }
 }
 
@@ -207,7 +205,7 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
       <div className="mb-6">
         <h1 className="text-3xl font-bold">회의실 예약 현황</h1>
         <p className="mt-2 text-(--color-text-secondary)">
-          검색 조건에 맞는 회의실이 먼저 표시됩니다. 모든 회의실은 계속 확인할 수 있습니다.
+          선택한 시간대의 예약 가능 여부와 수용 인원에 맞는 회의실을 확인할 수 있습니다.
         </p>
       </div>
       <form
@@ -260,19 +258,18 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
           예약 상태
           <select
             className="mt-1 w-full rounded border border-(--color-border) p-2"
-            value={search.preferredReservationStatus}
+            value={search.availabilityStatus}
             onChange={(event) =>
               setSearch({
                 ...search,
-                preferredReservationStatus: event.target
-                  .value as SearchForm['preferredReservationStatus'],
+                availabilityStatus: event.target.value as SearchForm['availabilityStatus'],
               })
             }
           >
             <option value="">전체</option>
-            {RESERVATION_DISPLAY_STATUSES.map((status) => (
+            {ROOM_AVAILABILITY_STATUSES.map((status) => (
               <option key={status} value={status}>
-                {RESERVATION_STATUS_LABELS[status]}
+                {ROOM_AVAILABILITY_STATUS_LABELS[status]}
               </option>
             ))}
           </select>
@@ -284,7 +281,11 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
           검색 적용
         </button>
       </form>
-      {query.isLoading ? <p role="status">회의실 정보를 불러오는 중입니다.</p> : null}
+      {query.isLoading ? (
+        <p aria-live="polite" role="status">
+          회의실 정보를 불러오는 중입니다.
+        </p>
+      ) : null}
       {pendingAuthentication ? (
         <p role="alert">
           인증 연동이 준비 중입니다. 로그인 연동 후 회의실 정보를 확인할 수 있습니다.
@@ -348,7 +349,10 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
               reservationId: selectedUpdate.reservation.reservationId,
               ...command,
             })
-            await queryClient.invalidateQueries({ queryKey: ['meeting-room'] })
+            await queryClient.invalidateQueries({
+              queryKey: ['meeting-room', submittedSearch],
+              exact: true,
+            })
           }}
           onRefreshAvailability={() => {
             void query.refetch()
@@ -366,7 +370,10 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
               throw new MeetingRoomGatewayError('AUTH_INTEGRATION_PENDING')
             }
             await gateway.createReservation(command)
-            await queryClient.invalidateQueries({ queryKey: ['meeting-room'] })
+            await queryClient.invalidateQueries({
+              queryKey: ['meeting-room', submittedSearch],
+              exact: true,
+            })
           }}
           onRefreshAvailability={() => {
             void query.refetch()
