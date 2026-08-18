@@ -11,10 +11,6 @@ afterEach(() => {
 })
 
 afterEach(() => {
-  delete window.__FLOW_BI_MEETING_ROOM_GATEWAY__
-})
-
-afterEach(() => {
   vi.unstubAllGlobals()
   window.history.replaceState({}, '', '/')
 })
