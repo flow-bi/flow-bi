@@ -7,8 +7,9 @@ import static org.mockito.Mockito.when;
 import com.flowbi.domain.room.dto.RoomReservationApplicationException;
 import com.flowbi.domain.room.entity.RoomReservation;
 import com.flowbi.domain.room.repository.RoomReservationRepository;
-import com.flowbi.domain.schedule.entity.Schedule;
-import jakarta.persistence.EntityManager;
+import com.flowbi.domain.schedule.service.ScheduleModificationService;
+import com.flowbi.domain.schedule.service.ScheduleModificationService.ReservationScheduleDetails;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,12 +18,13 @@ class RoomReservationDetailServiceTest {
 
   private final RoomReservationRepository reservationRepository = mock(
       RoomReservationRepository.class);
-  private final EntityManager entityManager = mock(EntityManager.class);
+  private final ScheduleModificationService scheduleModificationService = mock(
+      ScheduleModificationService.class);
   private RoomReservationDetailService service;
 
   @BeforeEach
   void setUp() {
-    service = new RoomReservationDetailService(reservationRepository, entityManager);
+    service = new RoomReservationDetailService(reservationRepository, scheduleModificationService);
   }
 
   @Test
@@ -32,12 +34,10 @@ class RoomReservationDetailServiceTest {
     assertNotFound(1L);
 
     RoomReservation reservation = mock(RoomReservation.class);
-    Schedule schedule = mock(Schedule.class);
     when(reservationRepository.findById(2L)).thenReturn(Optional.of(reservation));
     when(reservation.getScheduleId()).thenReturn(20L);
-    when(entityManager.find(Schedule.class,20L)).thenReturn(schedule);
-    when(schedule.isRoomReservation()).thenReturn(true);
-    when(schedule.getCreatorId()).thenReturn(99L);
+    when(scheduleModificationService.findReservationScheduleDetails(20L))
+        .thenReturn(Optional.of(new ReservationScheduleDetails(99L, "Plan", List.of(99L))));
 
     assertNotFound(2L);
   }

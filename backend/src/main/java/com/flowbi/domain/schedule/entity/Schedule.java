@@ -210,18 +210,4 @@ public class Schedule {
     cancelledBy = actorId;
   }
 
-  public static Schedule roomReservation(String title,LocalDateTime startAt,LocalDateTime endAt,
-      Long creatorId,ScheduleStatus status) {
-    return new Schedule(title, startAt, endAt, creatorId, status);
-  }
-
-  public boolean isRoomReservation() {
-    return "ROOM_RESERVATION".equals(scheduleType);
-  }
-
-  public void updateRoomReservation(String title,LocalDateTime startAt,LocalDateTime endAt) {
-    this.title = title;
-    this.startAt = startAt;
-    this.endAt = endAt;
-  }
 }

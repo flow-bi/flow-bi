@@ -17,14 +17,17 @@ class RoomHttpExposureTest {
   private RequestMappingHandlerMapping requestMappingHandlerMapping;
 
   @Test
-  void doesNotExposeRoomHttpEndpointsBeforeAuthenticationIsImplemented() {
+  void exposesTheAuthenticatedRoomHttpEndpointsThroughTheRoomController() {
     ClassPathScanningCandidateComponentProvider scanner = new ClassPathScanningCandidateComponentProvider(
         false);
     scanner.addIncludeFilter(new AnnotationTypeFilter(RestController.class));
 
-    assertThat(scanner.findCandidateComponents("com.flowbi.domain.room")).isEmpty();
+    assertThat(scanner.findCandidateComponents("com.flowbi.domain.room"))
+        .extracting(definition -> definition.getBeanClassName())
+        .containsExactly("com.flowbi.domain.room.controller.RoomController");
     assertThat(requestMappingHandlerMapping.getHandlerMethods().keySet().stream()
-        .flatMap(mapping -> mapping.getPatternValues().stream())).noneMatch(
-            path -> path.startsWith("/api/rooms") || path.startsWith("/api/room-reservations"));
+        .flatMap(mapping -> mapping.getPatternValues().stream()))
+        .anyMatch(path -> path.startsWith("/api/rooms"))
+        .anyMatch(path -> path.startsWith("/api/room-reservations"));
   }
 }

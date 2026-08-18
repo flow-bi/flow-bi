@@ -54,6 +54,8 @@ public interface RoomReservationRepository
 
   Optional<RoomReservation> findById(Long reservationId);
 
+  boolean existsByScheduleId(Long scheduleId);
+
   RoomReservation save(RoomReservation reservation);
 
   long count();

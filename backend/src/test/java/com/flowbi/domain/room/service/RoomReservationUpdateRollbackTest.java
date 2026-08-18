@@ -13,13 +13,14 @@ import com.flowbi.domain.room.entity.Room;
 import com.flowbi.domain.room.entity.RoomReservation;
 import com.flowbi.domain.room.repository.RoomRepository;
 import com.flowbi.domain.room.repository.RoomReservationRepository;
+import com.flowbi.domain.position.repository.PositionRepository;
 import com.flowbi.domain.schedule.entity.Schedule;
-import com.flowbi.domain.schedule.entity.ScheduleStatus;
 import com.flowbi.domain.schedule.repository.ScheduleRepository;
 import com.flowbi.domain.schedule.service.ScheduleModificationService;
 import com.flowbi.domain.schedule.service.ScheduleModificationService.ReservationSchedule;
-import com.flowbi.domain.user.entity.User;
+import com.flowbi.domain.team.repository.TeamRepository;
 import com.flowbi.domain.user.repository.UserRepository;
+import com.flowbi.domain.user.service.ReservationParticipantAccessService;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -47,22 +48,33 @@ class RoomReservationUpdateRollbackTest {
   private ScheduleRepository scheduleRepository;
   @Autowired
   private UserRepository userRepository;
+  @Autowired
+  private PositionRepository positionRepository;
+  @Autowired
+  private TeamRepository teamRepository;
   @MockitoBean
   private ScheduleModificationService scheduleModificationService;
+  @MockitoBean
+  private ReservationParticipantAccessService participantAccessService;
 
   private Long reservationId;
   private Long scheduleId;
+  private Long ownerId;
+  private List<Long> attendeeIds;
 
   @BeforeEach
   void setUp() {
     reservationRepository.deleteAll();
     scheduleRepository.deleteAll();
     roomRepository.deleteAll();
-    userRepository.deleteAll();
+    RoomUserFixture.deleteAll(userRepository,positionRepository,teamRepository);
     roomRepository.saveAll(List.of(Room.of(1L,"Orchid",4L,"3F"),Room.of(2L,"Iris",4L,"4F")));
-    userRepository.saveAll(List.of(User.of(10L,"ACTIVE"),User.of(11L,"ACTIVE")));
-    Schedule schedule = scheduleRepository
-        .save(Schedule.roomReservation("Old title",OLD_START,OLD_END,10L,ScheduleStatus.ACTIVE));
+    when(participantAccessService.canAttend(any(),any())).thenReturn(true);
+    attendeeIds = RoomUserFixture.createActiveUsers(userRepository,positionRepository,
+        teamRepository,2);
+    ownerId = attendeeIds.get(0);
+    Schedule schedule = scheduleRepository.save(RoomReservationScheduleFixture.schedule("Old title",
+        OLD_START,OLD_END,ownerId,attendeeIds,"Old detail","Orchid"));
     scheduleId = schedule.getId();
     reservationId = reservationRepository
         .save(RoomReservation.of(null,roomRepository.findById(1L).orElseThrow(),scheduleId,
@@ -73,18 +85,18 @@ class RoomReservationUpdateRollbackTest {
   @Test
   void rollsBackBothReservationAndScheduleWhenScheduleUpdateFails() {
     when(scheduleModificationService.findReservationSchedule(scheduleId))
-        .thenReturn(Optional.of(new ReservationSchedule(scheduleId, 10L)));
+        .thenReturn(Optional.of(new ReservationSchedule(scheduleId, ownerId)));
     doAnswer(invocation -> {
-      scheduleRepository.findById(scheduleId).orElseThrow().updateRoomReservation("Updated title",
-          NEW_START,NEW_END);
+      scheduleRepository.findById(scheduleId).orElseThrow().update(RoomReservationScheduleFixture
+          .update("Updated title",NEW_START,NEW_END,ownerId,attendeeIds,"Updated detail","Iris"));
       throw new IllegalStateException("schedule persistence failed");
     }).when(scheduleModificationService).update(any());
 
     assertThatThrownBy(
         () -> roomReservationService
-            .update(new ReservationActor(10L),
+            .update(new ReservationActor(ownerId),
                 new UpdateRoomReservationCommand(reservationId, 2L, "Updated title", NEW_START,
-                    NEW_END, List.of(10L,11L), "Updated detail")))
+                    NEW_END, attendeeIds, "Updated detail")))
         .isInstanceOf(IllegalStateException.class);
 
     RoomReservation reservation = reservationRepository.findById(reservationId).orElseThrow();
