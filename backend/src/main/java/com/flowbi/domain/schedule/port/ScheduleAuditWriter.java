@@ -1,6 +1,6 @@
 package com.flowbi.domain.schedule.port;
 
-import com.flowbi.domain.schedule.ScheduleAuditEvent;
+import com.flowbi.domain.schedule.audit.ScheduleAuditEvent;
 
 /**
  * Calendar boundary for minimum cancellation audit events; an adapter is

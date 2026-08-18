@@ -1,7 +1,7 @@
 package com.flowbi.domain.schedule.port;
 
-import com.flowbi.domain.schedule.ScheduleCreateCommand;
-import com.flowbi.domain.schedule.ScheduleUpdateCommand;
+import com.flowbi.domain.schedule.dto.ScheduleCreateCommand;
+import com.flowbi.domain.schedule.dto.ScheduleUpdateCommand;
 
 /**
  * Calendar-owned boundary implemented by the organization/project persistence
