@@ -14,6 +14,7 @@ import com.flowbi.domain.room.entity.Room;
 import com.flowbi.domain.room.entity.RoomReservation;
 import com.flowbi.domain.room.repository.RoomRepository;
 import com.flowbi.domain.room.repository.RoomReservationRepository;
+import com.flowbi.domain.schedule.service.ScheduleModificationService;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -33,22 +34,41 @@ public class RoomAvailabilityService {
 
   private final RoomRepository roomRepository;
   private final RoomReservationRepository reservationRepository;
+  private final ScheduleModificationService scheduleModificationService;
   private final Clock clock;
+
+  public RoomAvailabilityService(RoomRepository roomRepository,
+      RoomReservationRepository reservationRepository) {
+    this(roomRepository, reservationRepository, null, Clock.system(KOREA_ZONE));
+  }
 
   @Autowired
   public RoomAvailabilityService(RoomRepository roomRepository,
-      RoomReservationRepository reservationRepository) {
-    this(roomRepository, reservationRepository, Clock.system(KOREA_ZONE));
+      RoomReservationRepository reservationRepository,
+      ScheduleModificationService scheduleModificationService) {
+    this(roomRepository, reservationRepository, scheduleModificationService,
+        Clock.system(KOREA_ZONE));
   }
 
   RoomAvailabilityService(RoomRepository roomRepository,
       RoomReservationRepository reservationRepository, Clock clock) {
+    this(roomRepository, reservationRepository, null, clock);
+  }
+
+  RoomAvailabilityService(RoomRepository roomRepository,
+      RoomReservationRepository reservationRepository,
+      ScheduleModificationService scheduleModificationService, Clock clock) {
     this.roomRepository = roomRepository;
     this.reservationRepository = reservationRepository;
+    this.scheduleModificationService = scheduleModificationService;
     this.clock = clock;
   }
 
   public RoomAvailabilityResponse findAvailability(RoomAvailabilityQuery query) {
+    return findAvailability(query,null);
+  }
+
+  public RoomAvailabilityResponse findAvailability(RoomAvailabilityQuery query,Long userId) {
     ValidatedQuery validated = validate(query);
     List<Room> registeredRooms = roomRepository.findAllByOrderByIdAsc();
     if (registeredRooms.isEmpty()) {
@@ -57,7 +77,7 @@ public class RoomAvailabilityService {
     List<RoomReservation> reservations = reservationRepository
         .findActiveOverlapping(validated.startAt(),validated.endAt());
     List<RoomSummary> rooms = registeredRooms.stream()
-        .map(room -> toSummary(room,reservations,validated))
+        .map(room -> toSummary(room,reservations,validated,userId))
         .filter(ranked -> matches(ranked.room(),ranked.reservations(),validated))
         .map(RankedRoom::summary).toList();
     return new RoomAvailabilityResponse(rooms);
@@ -92,12 +112,13 @@ public class RoomAvailabilityService {
         query.availabilityStatus());
   }
 
-  private RankedRoom toSummary(Room room,List<RoomReservation> reservations,ValidatedQuery query) {
+  private RankedRoom toSummary(Room room,List<RoomReservation> reservations,ValidatedQuery query,
+      Long userId) {
     List<ReservationSummary> summaries = reservations.stream()
         .filter(reservation -> reservation.getStatus() == ReservationStatus.RESERVED)
         .filter(reservation -> reservation.getRoom().getId().equals(room.getId()))
-        .filter(reservation -> overlaps(reservation,query)).map(this::toReservationSummary)
-        .toList();
+        .filter(reservation -> overlaps(reservation,query))
+        .map(reservation -> toReservationSummary(reservation,userId)).toList();
     return new RankedRoom(room, summaries, new RoomSummary(room.getId(), room.getName(),
         room.getCapacity(), room.getLocation(), true, summaries));
   }
@@ -107,7 +128,7 @@ public class RoomAvailabilityService {
         && reservation.getEndAt().isAfter(query.startAt());
   }
 
-  private ReservationSummary toReservationSummary(RoomReservation reservation) {
+  private ReservationSummary toReservationSummary(RoomReservation reservation,Long userId) {
     LocalDateTime now = LocalDateTime.now(clock);
     ReservationDisplayStatus displayStatus = reservation.getStartAt().isAfter(now)
         ? ReservationDisplayStatus.UPCOMING
@@ -115,7 +136,17 @@ public class RoomAvailabilityService {
             ? ReservationDisplayStatus.IN_USE
             : ReservationDisplayStatus.COMPLETED;
     return new ReservationSummary(reservation.getId(), reservation.getTitle(),
-        reservation.getStartAt(), reservation.getEndAt(), displayStatus);
+        reservation.getStartAt(), reservation.getEndAt(), displayStatus,
+        canEdit(reservation,userId));
+  }
+
+  private boolean canEdit(RoomReservation reservation,Long userId) {
+    if (userId == null || userId < 1 || reservation.getStatus() != ReservationStatus.RESERVED
+        || scheduleModificationService == null) {
+      return false;
+    }
+    return scheduleModificationService.findReservationSchedule(reservation.getScheduleId())
+        .map(schedule -> userId.equals(schedule.creatorId())).orElse(false);
   }
 
   private boolean matches(Room room,List<ReservationSummary> reservations,ValidatedQuery query) {

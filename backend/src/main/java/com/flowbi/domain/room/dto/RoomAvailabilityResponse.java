@@ -10,6 +10,6 @@ public record RoomAvailabilityResponse(List<RoomSummary> rooms) {
   }
 
   public record ReservationSummary(Long id, String title, LocalDateTime startAt,
-      LocalDateTime endAt, ReservationDisplayStatus displayStatus) {
+      LocalDateTime endAt, ReservationDisplayStatus displayStatus, boolean canEdit) {
   }
 }

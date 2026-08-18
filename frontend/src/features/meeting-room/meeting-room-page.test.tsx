@@ -56,6 +56,7 @@ function reservationGateway(
 
 describe('MeetingRoomPage', () => {
   it('uses an injected gateway only in a test harness', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 401 })))
     const injectedFindAvailability = vi.fn().mockResolvedValue({ rooms: [] })
     const injectedGateway: MeetingRoomGateway = {
       findAvailability: injectedFindAvailability,
@@ -198,8 +199,8 @@ describe('MeetingRoomPage', () => {
     expect(within(panel).getByLabelText('예약 제목')).toHaveValue('내 입력 유지')
   })
 
-  it('keeps production updates offline and explains that authentication integration is pending', async () => {
-    const fetch = vi.spyOn(globalThis, 'fetch')
+  it('maps the no-authentication production response to the pending integration state', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 401 })))
     await expect(
       productionMeetingRoomGateway.updateReservation?.({
         reservationId: 10,
@@ -211,12 +212,11 @@ describe('MeetingRoomPage', () => {
         description: '',
       }),
     ).rejects.toMatchObject({ code: 'AUTH_INTEGRATION_PENDING' })
-    expect(productionMeetingRoomGateway.isReservationUpdateAvailable).toBe(false)
-    expect(fetch).not.toHaveBeenCalled()
+    expect(productionMeetingRoomGateway.isReservationUpdateAvailable).toBe(true)
   })
 
-  it('keeps the production gateway offline until authentication integration exists', async () => {
-    const fetch = vi.spyOn(globalThis, 'fetch')
+  it('safely rejects unauthenticated production availability and creation requests', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 401 })))
     await expect(
       productionMeetingRoomGateway.findAvailability({ date: '2026-08-07' }),
     ).rejects.toMatchObject({ code: 'AUTH_INTEGRATION_PENDING' })
@@ -230,7 +230,6 @@ describe('MeetingRoomPage', () => {
         description: '',
       }),
     ).rejects.toMatchObject({ code: 'AUTH_INTEGRATION_PENDING' })
-    expect(fetch).not.toHaveBeenCalled()
   })
 
   it('shows an accessible loading state', () => {

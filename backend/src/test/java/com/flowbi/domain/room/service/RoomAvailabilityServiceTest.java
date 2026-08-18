@@ -19,6 +19,7 @@ import com.flowbi.domain.room.entity.Room;
 import com.flowbi.domain.room.entity.RoomReservation;
 import com.flowbi.domain.room.repository.RoomRepository;
 import com.flowbi.domain.room.repository.RoomReservationRepository;
+import com.flowbi.domain.schedule.service.ScheduleModificationService;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -45,11 +46,15 @@ class RoomAvailabilityServiceTest {
   @Mock
   private RoomReservationRepository reservationRepository;
 
+  @Mock
+  private ScheduleModificationService scheduleModificationService;
+
   private RoomAvailabilityService service;
 
   @org.junit.jupiter.api.BeforeEach
   void setUp() {
-    service = new RoomAvailabilityService(roomRepository, reservationRepository, CLOCK);
+    service = new RoomAvailabilityService(roomRepository, reservationRepository,
+        scheduleModificationService, CLOCK);
   }
 
   @Test
@@ -126,6 +131,25 @@ class RoomAvailabilityServiceTest {
         .extracting(reservation -> reservation.displayStatus())
         .containsExactly(ReservationDisplayStatus.COMPLETED,ReservationDisplayStatus.IN_USE,
             ReservationDisplayStatus.UPCOMING);
+  }
+
+  @Test
+  void exposesEditabilityOnlyForTheAuthenticatedOwnersReservedReservation() {
+    Room room = room(1L,"A",4);
+    when(roomRepository.findAllByOrderByIdAsc()).thenReturn(List.of(room));
+    when(reservationRepository.findActiveOverlapping(any(),any())).thenReturn(List.of(
+        reservation(1L,room,LocalTime.of(10,0),LocalTime.of(11,0),ReservationStatus.RESERVED),
+        reservation(2L,room,LocalTime.of(11,0),LocalTime.of(12,0),ReservationStatus.RESERVED)));
+    when(scheduleModificationService.findReservationSchedule(11L))
+        .thenReturn(Optional.of(new ScheduleModificationService.ReservationSchedule(11L, 10L)));
+    when(scheduleModificationService.findReservationSchedule(12L))
+        .thenReturn(Optional.of(new ScheduleModificationService.ReservationSchedule(12L, 20L)));
+
+    RoomAvailabilityResponse response = service.findAvailability(
+        new RoomAvailabilityQuery(DATE, LocalTime.of(9,0), LocalTime.of(18,0), null, null),10L);
+
+    assertThat(response.rooms().get(0).reservations())
+        .extracting(reservation -> reservation.canEdit()).containsExactly(true,false);
   }
 
   @Test

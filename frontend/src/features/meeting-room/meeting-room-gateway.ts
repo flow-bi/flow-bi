@@ -20,7 +20,7 @@ export interface RoomReservationSummary {
   startAt: string
   endAt: string
   displayStatus: ReservationDisplayStatus
-  canEdit?: boolean
+  canEdit: boolean
 }
 
 export interface RoomSummary {
@@ -81,17 +81,19 @@ export interface MeetingRoomGateway {
   updateReservation?(command: UpdateRoomReservationCommand): Promise<UpdateRoomReservationResult>
 }
 
-export class MeetingRoomGatewayError extends Error {
-  public readonly code:
-    | 'AUTH_INTEGRATION_PENDING'
-    | 'ROOM_RESERVATION_CONFLICT'
-    | 'ROOM_RESERVATION_INVALID'
-    | 'RESERVATION_PARTICIPANT_FORBIDDEN'
-    | 'ROOM_CAPACITY_EXCEEDED'
-    | 'ROOM_RESERVATION_NOT_FOUND'
-    | 'ROOM_RESERVATION_NOT_EDITABLE'
+type MeetingRoomGatewayErrorCode =
+  | 'AUTH_INTEGRATION_PENDING'
+  | 'ROOM_RESERVATION_CONFLICT'
+  | 'ROOM_RESERVATION_INVALID'
+  | 'RESERVATION_PARTICIPANT_FORBIDDEN'
+  | 'ROOM_CAPACITY_EXCEEDED'
+  | 'ROOM_RESERVATION_NOT_FOUND'
+  | 'ROOM_RESERVATION_NOT_EDITABLE'
 
-  constructor(code: MeetingRoomGatewayError['code']) {
+export class MeetingRoomGatewayError extends Error {
+  public readonly code: MeetingRoomGatewayErrorCode
+
+  constructor(code: MeetingRoomGatewayErrorCode) {
     super(code)
     this.name = 'MeetingRoomGatewayError'
     this.code = code
@@ -117,17 +119,89 @@ export function isMeetingRoomGatewayError(error: unknown): error is MeetingRoomG
   )
 }
 
+function errorCodeFor(status: number, code: unknown): MeetingRoomGatewayErrorCode {
+  if (status === 401) {
+    return 'AUTH_INTEGRATION_PENDING'
+  }
+  if (
+    typeof code === 'string' &&
+    [
+      'ROOM_RESERVATION_CONFLICT',
+      'ROOM_RESERVATION_INVALID',
+      'RESERVATION_PARTICIPANT_FORBIDDEN',
+      'ROOM_CAPACITY_EXCEEDED',
+      'ROOM_RESERVATION_NOT_FOUND',
+      'ROOM_RESERVATION_NOT_EDITABLE',
+    ].includes(code)
+  ) {
+    return code as MeetingRoomGatewayErrorCode
+  }
+  if (status === 404) {
+    return 'ROOM_RESERVATION_NOT_FOUND'
+  }
+  return 'ROOM_RESERVATION_INVALID'
+}
+
+async function toGatewayError(response: Response): Promise<MeetingRoomGatewayError> {
+  const payload: unknown = await response.json().catch(() => undefined)
+  const code =
+    typeof payload === 'object' && payload !== null && 'code' in payload ? payload.code : undefined
+  return new MeetingRoomGatewayError(errorCodeFor(response.status, code))
+}
+
+async function requestJson<T>(url: string, options?: RequestInit): Promise<T> {
+  const response = await fetch(url, { credentials: 'include', ...options })
+  if (!response.ok) {
+    throw await toGatewayError(response)
+  }
+  return response.json() as Promise<T>
+}
+
+function requestBody(command: CreateRoomReservationCommand): string {
+  return JSON.stringify({
+    roomId: command.roomId,
+    title: command.title,
+    startAt: command.startAt,
+    endAt: command.endAt,
+    attendeeIds: command.attendeeIds,
+    description: command.description,
+  })
+}
+
 export const productionMeetingRoomGateway: MeetingRoomGateway = {
-  isReservationCreationAvailable: false,
-  isReservationUpdateAvailable: false,
-  findAvailability: async () =>
-    Promise.reject(new MeetingRoomGatewayError('AUTH_INTEGRATION_PENDING')),
-  createReservation: async () =>
-    Promise.reject(new MeetingRoomGatewayError('AUTH_INTEGRATION_PENDING')),
-  getReservationForEdit: async () =>
-    Promise.reject(new MeetingRoomGatewayError('AUTH_INTEGRATION_PENDING')),
-  updateReservation: async () =>
-    Promise.reject(new MeetingRoomGatewayError('AUTH_INTEGRATION_PENDING')),
+  isReservationCreationAvailable: true,
+  isReservationUpdateAvailable: true,
+  findAvailability: (query) => {
+    const search = new URLSearchParams()
+    search.set('date', query.date)
+    if (query.startTime !== undefined) {
+      search.set('startTime', query.startTime)
+    }
+    if (query.endTime !== undefined) {
+      search.set('endTime', query.endTime)
+    }
+    if (query.minimumCapacity !== undefined) {
+      search.set('minimumCapacity', String(query.minimumCapacity))
+    }
+    if (query.availabilityStatus !== undefined) {
+      search.set('availabilityStatus', query.availabilityStatus)
+    }
+    return requestJson<RoomAvailabilityResponse>(`/api/rooms?${search.toString()}`)
+  },
+  createReservation: (command) =>
+    requestJson<CreateRoomReservationResult>('/api/room-reservations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: requestBody(command),
+    }),
+  getReservationForEdit: (reservationId) =>
+    requestJson<EditableRoomReservation>(`/api/room-reservations/${reservationId}`),
+  updateReservation: ({ reservationId, ...command }) =>
+    requestJson<UpdateRoomReservationResult>(`/api/room-reservations/${reservationId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: requestBody(command),
+    }),
 }
 
 interface ResolveMeetingRoomGatewayOptions {
