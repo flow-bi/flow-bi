@@ -18,6 +18,11 @@ import {
   toScheduleRequest,
   type ScheduleFormValues,
 } from './scheduleForm'
+import {
+  ConfirmationDialog,
+  confirmationDangerActionClass,
+  confirmationSecondaryActionClass,
+} from '../../shared/ui/ConfirmationDialog'
 
 const fieldClass =
   'w-full rounded-md border border-border bg-surface px-3 py-2 text-text-primary focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:bg-background'
@@ -388,21 +393,26 @@ export function ScheduleCreateModal({
         </form>
       </section>
       {dirtyCloseConfirmation && (
-        <div
-          aria-labelledby="discard-title"
-          aria-modal="true"
-          className="fixed inset-1/2 z-20 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-xl bg-surface p-6 shadow-2xl"
-          role="alertdialog"
-        >
-          <h2 id="discard-title">입력한 내용을 버릴까요?</h2>
-          <p>저장하지 않은 입력은 사라집니다.</p>
-          <button onClick={() => setDirtyCloseConfirmation(false)} type="button">
-            계속 입력
-          </button>
-          <button onClick={close} type="button">
-            입력 취소하고 닫기
-          </button>
-        </div>
+        <ConfirmationDialog
+          description="저장하지 않은 입력은 사라집니다."
+          footer={
+            <>
+              <button
+                className={confirmationSecondaryActionClass}
+                onClick={() => setDirtyCloseConfirmation(false)}
+                type="button"
+              >
+                계속 입력
+              </button>
+              <button className={confirmationDangerActionClass} onClick={close} type="button">
+                입력 취소하고 닫기
+              </button>
+            </>
+          }
+          onDismiss={() => setDirtyCloseConfirmation(false)}
+          title="입력한 내용을 버릴까요?"
+          titleId="discard-title"
+        />
       )}
     </div>
   )

@@ -23,6 +23,11 @@ import {
 } from './scheduleCalendarApi'
 import { getScheduleColorClasses } from './scheduleColor'
 import {
+  ConfirmationDialog,
+  confirmationDangerActionClass,
+  confirmationSecondaryActionClass,
+} from '../../shared/ui/ConfirmationDialog'
+import {
   parseIdList,
   scheduleFormSchema,
   scheduleTypeDefaults,
@@ -38,6 +43,11 @@ const chipBaseClass =
   'mt-1 block w-full overflow-hidden rounded-md border px-2 py-1 text-left text-xs font-medium text-ellipsis whitespace-nowrap focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-1 sm:text-sm'
 const fieldClass =
   'w-full rounded-md border border-border bg-surface px-3 py-2 text-text-primary focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:bg-background'
+const modalCloseButtonClass =
+  'absolute top-4 right-4 rounded p-1 text-text-secondary transition hover:bg-secondary focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50'
+const modalFooterClass = 'mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:flex-wrap sm:justify-end'
+const primaryModalActionClass =
+  'w-full rounded-lg bg-primary px-3 py-2 font-semibold text-white transition hover:bg-primary/90 focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-2 disabled:cursor-wait disabled:opacity-70 sm:w-auto'
 
 export interface ScheduleCalendarProps {
   getSchedules?: (
@@ -265,7 +275,7 @@ function DetailModal({
         </h2>
         <button
           aria-label="닫기"
-          className="absolute top-4 right-4 rounded p-1 text-text-secondary hover:bg-secondary focus-visible:outline-3 focus-visible:outline-focus-ring"
+          className={modalCloseButtonClass}
           onClick={onClose}
           ref={closeRef}
           type="button"
@@ -390,7 +400,7 @@ function EditModal({
         </h2>
         <button
           aria-label="닫기"
-          className="absolute top-4 right-4 rounded p-1 text-text-secondary hover:bg-secondary focus-visible:outline-3 focus-visible:outline-focus-ring"
+          className={modalCloseButtonClass}
           disabled={isSaving}
           onClick={close}
           ref={closeRef}
@@ -538,40 +548,34 @@ function EditModal({
             <textarea {...form.register('content')} />
           </label>
           {error && <p role="alert">{error}</p>}
-          <div className="mt-4 flex flex-wrap justify-end gap-3">
-            <button
-              className="rounded-lg bg-primary px-3 py-2 font-semibold text-white focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-2 disabled:cursor-wait disabled:opacity-70"
-              disabled={isSaving}
-              type="submit"
-            >
+          <div className={modalFooterClass}>
+            <button className={primaryModalActionClass} disabled={isSaving} type="submit">
               {isSaving ? '수정 저장 중' : '수정 저장'}
             </button>
           </div>
         </form>
       </section>
       {confirmClose && (
-        <div
-          aria-labelledby="edit-discard-title"
-          aria-modal="true"
-          className="fixed inset-1/2 z-20 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-xl bg-surface p-6 shadow-2xl"
-          role="alertdialog"
-        >
-          <h2 id="edit-discard-title">수정 내용을 버릴까요?</h2>
-          <button
-            aria-label="닫기"
-            className="absolute top-4 right-4"
-            onClick={() => setConfirmClose(false)}
-            type="button"
-          >
-            ×
-          </button>
-          <button onClick={() => setConfirmClose(false)} type="button">
-            계속 수정
-          </button>
-          <button onClick={onClose} type="button">
-            수정 취소하고 닫기
-          </button>
-        </div>
+        <ConfirmationDialog
+          description="저장하지 않은 수정 내용은 사라집니다."
+          footer={
+            <>
+              <button
+                className={confirmationSecondaryActionClass}
+                onClick={() => setConfirmClose(false)}
+                type="button"
+              >
+                계속 수정
+              </button>
+              <button className={confirmationDangerActionClass} onClick={onClose} type="button">
+                수정 취소하고 닫기
+              </button>
+            </>
+          }
+          onDismiss={() => setConfirmClose(false)}
+          title="수정 내용을 버릴까요?"
+          titleId="edit-discard-title"
+        />
       )}
     </div>
   )
@@ -595,6 +599,7 @@ export function ScheduleCalendar({
   const scheduleTrigger = useRef<HTMLElement | null>(null)
   const selectedDateTrigger = useRef<HTMLButtonElement | null>(null)
   const cancellationFocusFallback = useRef<HTMLButtonElement | null>(null)
+  const cancelCloseRef = useRef<HTMLButtonElement>(null)
   const queryClient = useQueryClient()
   const period = getCalendarPeriod(state.view, state.date)
   const scheduleListQueryKey = ['schedules', period.from, period.to] as const
@@ -923,46 +928,34 @@ export function ScheduleCalendar({
         />
       )}
       {detailQuery.data && cancelConfirmation && (
-        <div
-          className="fixed inset-0 z-20 grid place-items-center bg-slate-950/55 p-4"
-          onClick={(event) => {
-            if (event.target === event.currentTarget) {
-              setCancelConfirmation(false)
-            }
-          }}
-        >
-          <div
-            aria-labelledby="cancel-title"
-            aria-modal="true"
-            className="relative w-full max-w-sm rounded-xl bg-surface p-6 shadow-2xl"
-            role="alertdialog"
-          >
-            <h2 id="cancel-title">{detailQuery.data.title} 취소</h2>
-            <button
-              aria-label="닫기"
-              className="absolute top-4 right-4"
-              onClick={() => setCancelConfirmation(false)}
-              type="button"
-            >
-              ×
-            </button>
-            <p>취소한 일정은 캘린더와 상세에서 사라집니다.</p>
-            <button
-              disabled={cancelMutation.isPending}
-              onClick={() => setCancelConfirmation(false)}
-              type="button"
-            >
-              계속 일정 보기
-            </button>
-            <button
-              disabled={cancelMutation.isPending}
-              onClick={() => cancelMutation.mutate(detailQuery.data.id)}
-              type="button"
-            >
-              {cancelMutation.isPending ? '일정 취소 중' : '일정 취소 확정'}
-            </button>
-          </div>
-        </div>
+        <ConfirmationDialog
+          closeButtonRef={cancelCloseRef}
+          description="취소한 일정은 캘린더와 상세에서 사라집니다."
+          footer={
+            <>
+              <button
+                className={confirmationSecondaryActionClass}
+                disabled={cancelMutation.isPending}
+                onClick={() => setCancelConfirmation(false)}
+                type="button"
+              >
+                계속 일정 보기
+              </button>
+              <button
+                className={confirmationDangerActionClass}
+                disabled={cancelMutation.isPending}
+                onClick={() => cancelMutation.mutate(detailQuery.data.id)}
+                type="button"
+              >
+                {cancelMutation.isPending ? '일정 취소 중' : '일정 취소 확정'}
+              </button>
+            </>
+          }
+          isCloseDisabled={cancelMutation.isPending}
+          onDismiss={() => setCancelConfirmation(false)}
+          title={`${detailQuery.data.title} 취소`}
+          titleId="cancel-title"
+        />
       )}
       {detailQuery.isError && <p role="alert">일정 상세를 불러오지 못했습니다.</p>}
     </main>
