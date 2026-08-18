@@ -49,6 +49,12 @@ auth:
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:}
 
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
 ---
 spring:
   config:
@@ -84,3 +90,11 @@ auth:
     password-change-required:
       employee-number: ${AUTH_TEST_FIXTURES_PASSWORD_CHANGE_EMPLOYEE_NUMBER:}
       password: ${AUTH_TEST_FIXTURES_PASSWORD_CHANGE_PASSWORD:}
+
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html

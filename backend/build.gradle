@@ -28,11 +28,10 @@ dependencies {
 	implementation 'org.flywaydb:flyway-core'
 	implementation 'org.springframework.security:spring-security-crypto'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
-  implementation 'org.springframework.boot:spring-boot-starter-web'
-	implementation 'org.flywaydb:flyway-core'
-	runtimeOnly 'org.postgresql:postgresql'
-	runtimeOnly 'org.flywaydb:flyway-database-postgresql'
-  compileOnly 'org.projectlombok:lombok'
+  	implementation 'org.springframework.boot:spring-boot-starter-web'
+  	//swagger
+	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.17'
+  	compileOnly 'org.projectlombok:lombok'
 	//runtimeOnly 'com.mysql:mysql-connector-j'
 	runtimeOnly 'com.h2database:h2'
 	runtimeOnly 'org.flywaydb:flyway-database-postgresql'
@@ -43,16 +42,20 @@ dependencies {
 	// testImplementation 'org.springframework.boot:spring-boot-starter-data-redis-test'
 	testImplementation 'org.springframework.security:spring-security-test'
 	// testImplementation 'org.springframework.boot:spring-boot-starter-validation-test'
-  testImplementation 'org.springframework.boot:spring-boot-starter-test'
+  	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testImplementation 'org.testcontainers:junit-jupiter'
 	testImplementation 'org.testcontainers:postgresql'
-  testCompileOnly 'org.projectlombok:lombok'
+  	testCompileOnly 'org.projectlombok:lombok'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	testAnnotationProcessor 'org.projectlombok:lombok'
 }
 
 tasks.named('test') {
 	useJUnitPlatform()
+}
+
+springBoot {
+	buildInfo()
 }
 
 //코드 포맷팅 코드
