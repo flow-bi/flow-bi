@@ -1,10 +1,21 @@
 package com.flowbi.domain.schedule.entity;
 
+import com.flowbi.domain.schedule.audit.*;
+import com.flowbi.domain.schedule.controller.*;
+import com.flowbi.domain.schedule.dto.*;
+import com.flowbi.domain.schedule.exception.*;
+import com.flowbi.domain.schedule.repository.*;
+import com.flowbi.domain.schedule.service.*;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
 @Entity
@@ -16,29 +27,60 @@ public class ScheduleTarget {
   @Column(name = "schedule_target_id")
   private Long id;
 
-  @Column(name = "schedule_id", nullable = false)
-  private Long scheduleId;
+  @ManyToOne(optional = false)
+  @JoinColumn(name = "schedule_id", nullable = false)
+  private Schedule schedule;
 
   @Column(name = "user_id")
   private Long userId;
 
-  @Column(name = "target_type", nullable = false)
-  private String targetType;
+  @Column(name = "team_id")
+  private Long teamId;
+
+  @Column(name = "project_id")
+  private Long projectId;
+
+  @Enumerated(EnumType.STRING)
+  @Column(name = "target_type", nullable = false, length = 30)
+  private ScheduleTargetType type;
 
   protected ScheduleTarget() {
   }
 
-  private ScheduleTarget(Long scheduleId, Long userId) {
-    this.scheduleId = scheduleId;
+  private ScheduleTarget(Schedule schedule, ScheduleTargetType type, Long userId, Long teamId,
+      Long projectId) {
+    this.schedule = schedule;
+    this.type = type;
     this.userId = userId;
-    this.targetType = "USER";
+    this.teamId = teamId;
+    this.projectId = projectId;
   }
 
-  public static ScheduleTarget attendee(Long scheduleId,Long userId) {
-    return new ScheduleTarget(scheduleId, userId);
+  static ScheduleTarget user(Schedule schedule,long userId) {
+    return new ScheduleTarget(schedule, ScheduleTargetType.USER, userId, null, null);
+  }
+
+  static ScheduleTarget team(Schedule schedule,long teamId) {
+    return new ScheduleTarget(schedule, ScheduleTargetType.TEAM, null, teamId, null);
+  }
+
+  static ScheduleTarget project(Schedule schedule,long projectId) {
+    return new ScheduleTarget(schedule, ScheduleTargetType.PROJECT, null, null, projectId);
+  }
+
+  public ScheduleTargetType getType() {
+    return type;
   }
 
   public Long getUserId() {
     return userId;
+  }
+
+  public Long getTeamId() {
+    return teamId;
+  }
+
+  public Long getProjectId() {
+    return projectId;
   }
 }

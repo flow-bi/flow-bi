@@ -1,6 +1,8 @@
 package com.flowbi.domain.room.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 
 import com.flowbi.domain.room.dto.CreateRoomReservationCommand;
 import com.flowbi.domain.room.dto.ReservationActor;
@@ -8,9 +10,11 @@ import com.flowbi.domain.room.dto.RoomReservationApplicationException;
 import com.flowbi.domain.room.entity.Room;
 import com.flowbi.domain.room.repository.RoomRepository;
 import com.flowbi.domain.room.repository.RoomReservationRepository;
+import com.flowbi.domain.position.repository.PositionRepository;
 import com.flowbi.domain.schedule.repository.ScheduleRepository;
-import com.flowbi.domain.user.entity.User;
+import com.flowbi.domain.team.repository.TeamRepository;
 import com.flowbi.domain.user.repository.UserRepository;
+import com.flowbi.domain.user.service.ReservationParticipantAccessService;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -23,11 +27,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @SpringBootTest
 class RoomReservationConcurrencyTest {
 
-  private static final ReservationActor ACTOR = new ReservationActor(10L);
   private static final LocalDateTime START = LocalDateTime.of(2026,8,10,10,0);
   private static final LocalDateTime END = LocalDateTime.of(2026,8,10,11,0);
 
@@ -38,19 +42,31 @@ class RoomReservationConcurrencyTest {
   @Autowired
   private RoomReservationRepository reservationRepository;
   @Autowired
+  private ScheduleRepository scheduleRepository;
+  @Autowired
   private UserRepository userRepository;
   @Autowired
-  private ScheduleRepository scheduleRepository;
+  private PositionRepository positionRepository;
+  @Autowired
+  private TeamRepository teamRepository;
+  @MockitoBean
+  private ReservationParticipantAccessService participantAccessService;
 
   private ExecutorService executor;
+  private ReservationActor actor;
+  private List<Long> attendeeIds;
 
   @BeforeEach
   void setUp() {
     reservationRepository.deleteAll();
+    scheduleRepository.deleteAll();
     roomRepository.deleteAll();
-    userRepository.deleteAll();
+    RoomUserFixture.deleteAll(userRepository,positionRepository,teamRepository);
     roomRepository.save(Room.of(1L,"Orchid",4L,"3F"));
-    userRepository.saveAll(List.of(User.of(10L,"ACTIVE"),User.of(11L,"ACTIVE")));
+    attendeeIds = RoomUserFixture.createActiveUsers(userRepository,positionRepository,
+        teamRepository,2);
+    actor = new ReservationActor(attendeeIds.get(0));
+    when(participantAccessService.canAttend(any(),any())).thenReturn(true);
     executor = Executors.newFixedThreadPool(2);
   }
 
@@ -82,8 +98,8 @@ class RoomReservationConcurrencyTest {
         if (!start.await(5,TimeUnit.SECONDS)) {
           return "START_TIMEOUT";
         }
-        roomReservationService.create(ACTOR,new CreateRoomReservationCommand(1L, "Planning", START,
-            END, List.of(10L,11L), "Discuss roadmap"));
+        roomReservationService.create(actor,new CreateRoomReservationCommand(1L, "Planning", START,
+            END, attendeeIds, "Discuss roadmap"));
         return "SUCCESS";
       } catch (RoomReservationApplicationException exception) {
         return exception.code();

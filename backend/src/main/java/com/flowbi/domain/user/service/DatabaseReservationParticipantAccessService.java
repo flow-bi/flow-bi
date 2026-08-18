@@ -21,7 +21,7 @@ public class DatabaseReservationParticipantAccessService
     return actor != null && actor.userId() != null
         && userRepository.findById(actor.userId())
             .filter(user -> user.getStatus() == UserStatus.ACTIVE).isPresent()
-        && userRepository.findById(attendeeId)
-            .filter(user -> user.getStatus() == UserStatus.ACTIVE).isPresent();
+        && userRepository.findById(attendeeId).filter(user -> user.getStatus() == UserStatus.ACTIVE)
+            .isPresent();
   }
 }

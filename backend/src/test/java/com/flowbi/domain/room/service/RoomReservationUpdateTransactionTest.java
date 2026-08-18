@@ -1,6 +1,8 @@
 package com.flowbi.domain.room.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 
 import com.flowbi.domain.room.dto.ReservationActor;
 import com.flowbi.domain.room.dto.RoomAvailabilityQuery;
@@ -10,15 +12,12 @@ import com.flowbi.domain.room.entity.Room;
 import com.flowbi.domain.room.entity.RoomReservation;
 import com.flowbi.domain.room.repository.RoomRepository;
 import com.flowbi.domain.room.repository.RoomReservationRepository;
+import com.flowbi.domain.position.repository.PositionRepository;
 import com.flowbi.domain.schedule.entity.Schedule;
-import com.flowbi.domain.schedule.entity.ScheduleDetail;
-import com.flowbi.domain.schedule.entity.ScheduleStatus;
-import com.flowbi.domain.schedule.entity.ScheduleTarget;
-import com.flowbi.domain.schedule.repository.ScheduleDetailRepository;
 import com.flowbi.domain.schedule.repository.ScheduleRepository;
-import com.flowbi.domain.schedule.repository.ScheduleTargetRepository;
-import com.flowbi.domain.user.entity.User;
+import com.flowbi.domain.team.repository.TeamRepository;
 import com.flowbi.domain.user.repository.UserRepository;
+import com.flowbi.domain.user.service.ReservationParticipantAccessService;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
@@ -26,11 +25,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @SpringBootTest
 class RoomReservationUpdateTransactionTest {
 
-  private static final ReservationActor OWNER = new ReservationActor(10L);
   private static final LocalDateTime OLD_START = LocalDateTime.of(2026,8,10,10,0);
   private static final LocalDateTime OLD_END = LocalDateTime.of(2026,8,10,11,0);
   private static final LocalDateTime NEW_START = LocalDateTime.of(2026,8,10,11,0);
@@ -47,32 +46,36 @@ class RoomReservationUpdateTransactionTest {
   @Autowired
   private ScheduleRepository scheduleRepository;
   @Autowired
-  private ScheduleDetailRepository scheduleDetailRepository;
-  @Autowired
-  private ScheduleTargetRepository scheduleTargetRepository;
-  @Autowired
   private UserRepository userRepository;
+  @Autowired
+  private PositionRepository positionRepository;
+  @Autowired
+  private TeamRepository teamRepository;
+  @MockitoBean
+  private ReservationParticipantAccessService participantAccessService;
 
   private Long reservationId;
   private Long scheduleId;
+  private ReservationActor owner;
+  private List<Long> originalAttendeeIds;
+  private List<Long> updatedAttendeeIds;
 
   @BeforeEach
   void setUp() {
     reservationRepository.deleteAll();
-    scheduleTargetRepository.deleteAll();
-    scheduleDetailRepository.deleteAll();
     scheduleRepository.deleteAll();
     roomRepository.deleteAll();
-    userRepository.deleteAll();
+    RoomUserFixture.deleteAll(userRepository,positionRepository,teamRepository);
     roomRepository.saveAll(List.of(Room.of(1L,"Orchid",4L,"3F"),Room.of(2L,"Iris",4L,"4F")));
-    userRepository
-        .saveAll(List.of(User.of(10L,"ACTIVE"),User.of(11L,"ACTIVE"),User.of(12L,"ACTIVE")));
-    Schedule schedule = scheduleRepository
-        .save(Schedule.roomReservation("Old title",OLD_START,OLD_END,10L,ScheduleStatus.ACTIVE));
+    when(participantAccessService.canAttend(any(),any())).thenReturn(true);
+    List<Long> userIds = RoomUserFixture.createActiveUsers(userRepository,positionRepository,
+        teamRepository,3);
+    owner = new ReservationActor(userIds.get(0));
+    originalAttendeeIds = List.of(userIds.get(0),userIds.get(1));
+    updatedAttendeeIds = List.of(userIds.get(1),userIds.get(2),userIds.get(1));
+    Schedule schedule = scheduleRepository.save(RoomReservationScheduleFixture.schedule("Old title",
+        OLD_START,OLD_END,owner.userId(),originalAttendeeIds,"Old detail","Orchid"));
     scheduleId = schedule.getId();
-    scheduleDetailRepository.save(ScheduleDetail.of(scheduleId,"Old detail","Orchid"));
-    scheduleTargetRepository.saveAll(
-        List.of(ScheduleTarget.attendee(scheduleId,10L),ScheduleTarget.attendee(scheduleId,11L)));
     reservationId = reservationRepository
         .save(RoomReservation.of(null,roomRepository.findById(1L).orElseThrow(),scheduleId,
             "Old title",OLD_START,OLD_END,ReservationStatus.RESERVED))
@@ -81,8 +84,8 @@ class RoomReservationUpdateTransactionTest {
 
   @Test
   void updatesReservationAndScheduleTogetherAndAvailabilityShowsTheNewReservation() {
-    var result = roomReservationService.update(OWNER,new UpdateRoomReservationCommand(reservationId,
-        2L, "Updated title", NEW_START, NEW_END, List.of(11L,12L,11L), "Updated detail"));
+    var result = roomReservationService.update(owner,new UpdateRoomReservationCommand(reservationId,
+        2L, "Updated title", NEW_START, NEW_END, updatedAttendeeIds, "Updated detail"));
 
     assertThat(result.reservationId()).isEqualTo(reservationId);
     assertThat(result.scheduleId()).isEqualTo(scheduleId);
@@ -91,15 +94,14 @@ class RoomReservationUpdateTransactionTest {
     assertThat(reservation.getTitle()).isEqualTo("Updated title");
     assertThat(reservation.getStartAt()).isEqualTo(NEW_START);
     assertThat(reservation.getEndAt()).isEqualTo(NEW_END);
-    Schedule schedule = scheduleRepository.findById(scheduleId).orElseThrow();
+    Schedule schedule = scheduleRepository.findActiveByIdWithAssociations(scheduleId).orElseThrow();
     assertThat(schedule.getTitle()).isEqualTo("Updated title");
-    assertThat(schedule.getStartAt()).isEqualTo(NEW_START);
-    assertThat(schedule.getEndAt()).isEqualTo(NEW_END);
-    ScheduleDetail detail = scheduleDetailRepository.findByScheduleId(scheduleId).orElseThrow();
-    assertThat(detail.getContent()).isEqualTo("Updated detail");
-    assertThat(detail.getLocation()).isEqualTo("Iris");
-    assertThat(scheduleTargetRepository.findAllByScheduleIdOrderByIdAsc(scheduleId))
-        .extracting(ScheduleTarget::getUserId).containsExactly(11L,12L);
+    assertThat(schedule.getStartAt().toLocalDateTime()).isEqualTo(NEW_START);
+    assertThat(schedule.getEndAt().toLocalDateTime()).isEqualTo(NEW_END);
+    assertThat(schedule.getDetail().getContent()).isEqualTo("Updated detail");
+    assertThat(schedule.getDetail().getLocation()).isEqualTo("Iris");
+    assertThat(schedule.getParticipants()).extracting(participant -> participant.getUserId())
+        .containsExactlyInAnyOrder(updatedAttendeeIds.get(0),updatedAttendeeIds.get(1));
     assertThat(roomAvailabilityService
         .findAvailability(new RoomAvailabilityQuery(NEW_START.toLocalDate(), LocalTime.of(9,0),
             LocalTime.of(18,0), null, null))

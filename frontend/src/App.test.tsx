@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -84,11 +84,36 @@ describe('App main screen', () => {
     render(<App />)
     expect(await screen.findByRole('banner')).toHaveTextContent('Flow BI')
     expect(screen.getByRole('main', { name: '콘텐츠' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '콘텐츠' })).toHaveFocus()
+    expect(screen.getByRole('heading', { name: '콘텐츠' })).toBeInTheDocument()
+  })
+
+  it('uses static Tailwind theme and responsive utilities for the global layout', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ authenticated: true, mustChangePassword: false }), {
+          status: 200,
+        }),
+      ),
+    )
+    render(<App />)
+
+    expect(await screen.findByRole('banner')).toHaveClass('bg-surface', 'border-border')
+    expect(screen.getByRole('button', { name: '사이드바 열기' })).toHaveClass('md:hidden')
+    expect(screen.getByRole('main', { name: '콘텐츠' })).toHaveClass('bg-background', 'md:p-8')
+    expect(screen.getByRole('banner').className).not.toContain('app-header')
     expect(screen.getByRole('heading', { name: '회의실 예약 현황' })).toBeInTheDocument()
   })
 
   it('places the meeting-room screen inside the global application shell', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ authenticated: true, mustChangePassword: false }), {
+          status: 200,
+        }),
+      ),
+    )
     const gateway: MeetingRoomGateway = {
       findAvailability: vi.fn().mockResolvedValue({ rooms: [] }),
     }
@@ -96,7 +121,7 @@ describe('App main screen', () => {
 
     render(<App />)
 
-    expect(screen.getByRole('banner')).toHaveTextContent('Flow BI')
+    expect(await screen.findByRole('banner')).toHaveTextContent('Flow BI')
     expect(screen.getByRole('navigation', { name: '주요 탐색' })).toHaveTextContent('회의실')
     expect(await screen.findByRole('heading', { name: '회의실 예약 현황' })).toBeInTheDocument()
     expect(screen.getByRole('main', { name: '콘텐츠' })).toContainElement(
@@ -121,5 +146,87 @@ describe('App main screen', () => {
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('dialog', { name: '주요 탐색' })).not.toBeInTheDocument()
     expect(openButton).toHaveFocus()
+    expect(openButton).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('shows a current calendar navigation link and opens the monthly calendar for an authenticated user', async () => {
+    window.history.replaceState({}, '', '/')
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ authenticated: true, mustChangePassword: false }), {
+            status: 200,
+          }),
+        )
+        .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 })),
+    )
+    const user = userEvent.setup()
+
+    render(<App />)
+
+    await screen.findByText('로그인되었습니다.')
+    const calendarLink = screen.getByRole('link', { name: '캘린더' })
+    await user.click(calendarLink)
+
+    expect(window.location.search).toBe('?view=month')
+    expect(screen.getByRole('link', { name: '캘린더' })).toHaveAttribute('aria-current', 'page')
+    expect(await screen.findByRole('button', { name: '월간 보기' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  })
+
+  it('opens the existing schedule creation modal from the calendar header and restores trigger focus', async () => {
+    window.history.replaceState({}, '', '/')
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ authenticated: true, mustChangePassword: false }), {
+            status: 200,
+          }),
+        )
+        .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 })),
+    )
+    const user = userEvent.setup()
+    render(<App />)
+
+    await screen.findByText('로그인되었습니다.')
+    await user.click(screen.getByRole('link', { name: '캘린더' }))
+    const createTrigger = await screen.findByRole('button', { name: '일정 추가' })
+    await user.click(createTrigger)
+    expect(await screen.findByRole('dialog', { name: '일정 추가' })).toBeVisible()
+
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: '일정 추가' })).not.toBeInTheDocument()
+    expect(createTrigger).toHaveFocus()
+  })
+
+  it('closes the mobile sidebar after calendar navigation', async () => {
+    window.history.replaceState({}, '', '/')
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ authenticated: true, mustChangePassword: false }), {
+            status: 200,
+          }),
+        )
+        .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 })),
+    )
+    const user = userEvent.setup()
+    render(<App />)
+
+    await screen.findByText('로그인되었습니다.')
+    await user.click(screen.getByRole('button', { name: '사이드바 열기' }))
+    const mobileSidebar = within(screen.getByRole('dialog', { name: '주요 탐색' }))
+    await user.click(mobileSidebar.getByRole('link', { name: '캘린더' }))
+
+    expect(screen.queryByRole('dialog', { name: '주요 탐색' })).not.toBeInTheDocument()
+    expect(window.location.search).toBe('?view=month')
   })
 })

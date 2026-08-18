@@ -220,7 +220,9 @@ never contain a session identifier, CSRF token, or authentication credential.
 | `PUT`    | `/api/schedules/{scheduleId}`               | 일정 수정                   |
 | `DELETE` | `/api/schedules/{scheduleId}`               | 일반 일정 취소(Soft Delete) |
 
-일정 생성·수정 요청은 유형을 정확히 하나만 가져야 한다. `TEAM` 일정은 하나 이상의 팀 ID, `PROJECT` 일정은 하나 이상의 프로젝트 ID를 가질 수 있고 모든 유형은 여러 참석자 ID를 가질 수 있다. 유형과 맞지 않는 팀·프로젝트 대상 조합은 `400 Bad Request`로 거부한다.
+일정 생성·수정 요청은 유형을 정확히 하나만 가져야 한다. `TEAM` 일정은 하나 이상의 팀 ID, `PROJECT` 일정은 하나 이상의 프로젝트 ID를 가질 수 있고 모든 유형은 여러 참석자 ID와 명시적 사용자 공유 대상 ID를 가질 수 있다. 유형과 맞지 않는 팀·프로젝트 대상 조합은 `400 Bad Request`로 거부한다.
+
+참석자와 명시적 사용자 공유 대상은 별도 관계로 관리한다. 명시적 사용자 공유 대상은 일정 조회 권한을 갖지만 참석 인원에는 포함하지 않는다. 같은 사용자가 참석자와 공유 대상에 모두 포함되면 조회 권한은 한 번만 판정한다.
 
 일정 참석자 후보 검색은 인증된 사용자가 일정 등록·수정 화면에서 접근 가능한 활성 사내 사용자를 찾는 용도로만 사용한다.
 
@@ -231,13 +233,112 @@ never contain a session identifier, CSRF token, or authentication credential.
 - 인증 주체가 없으면 `401 Unauthorized`, 잘못된 검색어는 `400 Bad Request`를 반환한다.
 - 검색 결과가 없으면 빈 배열을 반환하며, 사용자 존재 여부를 오류 응답으로 구분해 노출하지 않는다.
 
-참석자 ID 목록에 같은 사용자가 반복되면 서버는 최초 등장 순서를 유지해 하나의 참석자로 정규화한다. 중복 ID 자체는 요청 실패 사유가 아니며 참석 인원 계산에도 한 번만 반영한다. 접근할 수 없거나 비활성인 사용자 ID는 중복 여부와 관계없이 `400 Bad Request`로 거부한다.
+참석자 ID 목록에 같은 사용자가 반복되면 `400 Bad Request`와 `DUPLICATE_SCHEDULE_PARTICIPANT`로 거부한다. 접근할 수 없거나 비활성인 사용자 ID는 중복 여부와 관계없이 `400 Bad Request`로 거부한다.
+
+`POST /api/schedules`의 등록자는 요청 Body에서 받지 않는다. 보호 Controller가 검증된 `LoginPrincipal`의
+내부 사용자 ID를 Calendar Core의 `creatorId`로 전달하며, 클라이언트가 임의의 등록자 ID를 지정할 수 없다.
+모든 Calendar Endpoint는 서버 Session Cookie를 사용하고 상태 변경 요청은 CSRF Token을 함께 검증한다.
+
+```json
+{
+  "title": "스프린트 계획",
+  "type": "TEAM",
+  "visibility": "TEAM",
+  "startAt": "2026-08-10T09:00:00+09:00",
+  "endAt": "2026-08-10T10:00:00+09:00",
+  "allDay": false,
+  "colorLabel": "BLUE",
+  "content": "이번 주 목표를 정리합니다.",
+  "location": "회의실 A",
+  "creatorAttends": true,
+  "participantIds": [2, 3],
+  "userTargetIds": [4],
+  "teamTargetIds": [10],
+  "projectTargetIds": []
+}
+```
+
+`startAt`과 `endAt`은 Offset을 포함하는 ISO 8601 시각이며 `[startAt, endAt)` 구간으로 해석한다. `endAt`은 반드시 `startAt` 뒤여야 한다. `PERSONAL`/`PRIVATE`는 팀·프로젝트 대상이 없어야 하고, `TEAM`/`TEAM`은 하나 이상의 팀 대상만, `PROJECT`/`PROJECT`는 하나 이상의 프로젝트 대상만 가져야 한다. 색상은 `RED`, `ORANGE`, `YELLOW`, `GREEN`, `BLUE`, `PURPLE` 중 하나다. 사용자·팀·프로젝트의 존재·활성·접근성은 Calendar Adapter가 실제 원장 데이터를 기준으로 판정하며 실패는 `SCHEDULE_REFERENCE_INVALID` 계약으로 변환한다.
 
 조회 결과는 다음 공개 규칙을 적용한다.
 
-- `PERSONAL`: 작성자와 참석자
-- `TEAM`: 연결된 팀 소속 사용자와 참석자
-- `PROJECT`: 연결된 프로젝트 참여자와 참석자
+- `PERSONAL`: 작성자, 참석자와 명시적 사용자 공유 대상
+- `TEAM`: 연결된 팀 소속 사용자, 참석자와 명시적 사용자 공유 대상
+- `PROJECT`: 연결된 프로젝트 참여자, 참석자와 명시적 사용자 공유 대상
+
+Calendar Core의 조회 경계 DTO는 검증 가능한 Actor ID를 명시적으로 받는다. 이 DTO는 HTTP Request나
+인증 우회 수단이 아니며, 보호 Controller에서는 검증된 Principal만 Actor ID를 제공한다.
+
+`GET /api/schedules?from=&to=`는 다음 Calendar Core 계약을 사용한다.
+
+- `from`, `to`는 Offset을 포함한 ISO 8601 시각이고, 서비스는 `Asia/Seoul` 표시 Offset으로 정규화한다.
+- 범위는 `[from, to)`이며 `from < to`, 최대 31일이다. 범위를 넘거나 형식이 잘못되면 `400 Bad Request`와
+  `INVALID_SCHEDULE_PERIOD`를 반환한다.
+- `ACTIVE` 일정 중 `startAt < to`와 `endAt > from`인 일정만 반환한다. 따라서 범위 시작 또는 종료를 넘는
+  일정은 포함하고, `CANCELED` 일정은 포함하지 않는다.
+- 목록 항목은 `id`, `title`, `startAt`, `endAt`, `allDay`, `type`, `colorLabel`만 반환한다. 상세·위치·참석자
+  등은 목록에 포함하지 않는다.
+- Calendar가 한 번의 기간 Query로 대상·참석자를 함께 읽고, Actor의 팀 소속과 프로젝트 참여는 각각 하나의
+  Port 호출로 묶어 확인한다. 조회 범위 제한과 승인된 기간 Index를 함께 사용해 무제한 조회와 N+1을 피한다.
+
+`GET /api/schedules/{scheduleId}`의 Calendar Core 상세 응답은 다음 필드를 반환한다.
+
+```json
+{
+  "id": 1,
+  "title": "스프린트 계획",
+  "startAt": "2026-08-10T09:00:00+09:00",
+  "endAt": "2026-08-10T10:00:00+09:00",
+  "allDay": false,
+  "type": "TEAM",
+  "visibility": "TEAM",
+  "colorLabel": "BLUE",
+  "content": "이번 주 목표를 정리합니다.",
+  "location": "회의실 A",
+  "creatorAttends": true,
+  "participantIds": [2, 3],
+  "userTargetIds": [4],
+  "teamTargetIds": [10],
+  "projectTargetIds": [],
+  "meetingRoomManaged": false,
+  "canManage": true
+}
+```
+
+`canManage`는 현재 Actor가 Calendar에서 일반 일정을 수정·취소할 수 있는지를 서버가 계산한 UI 계약이다.
+등록자이면서 회의실 예약에서 관리하지 않는 일정에만 `true`이며, 실제 변경 요청은 서버에서 권한과 관리
+상태를 다시 검증한다. 존재하지 않는 일정, `CANCELED` 일정 및 Actor에게 공개되지 않은 일정은 모두
+동일하게 `404 Not Found`와 `SCHEDULE_NOT_FOUND`를 반환하며, 존재 여부·내부 예외·개인정보를 구분해 노출하지 않는다.
+
+`PUT /api/schedules/{scheduleId}`는 일반 일정의 등록자만 호출할 수 있다. Calendar Core는 검증 가능한
+`actorId`를 경계 입력으로 받고, 보호 Controller는 검증된 Principal만 이 값을 제공한다.
+요청 본문은 생성 요청에서 `creatorId`를 제외한 아래 수정 가능 필드를 모두 포함한다. 부분 수정은 제공하지
+않으며, 유형·공개 범위·공유 대상·참석자와 시간 구간은 하나의 트랜잭션으로 함께 재검증한다.
+
+```json
+{
+  "title": "수정된 스프린트 계획",
+  "type": "TEAM",
+  "visibility": "TEAM",
+  "startAt": "2026-08-10T11:00:00+09:00",
+  "endAt": "2026-08-10T12:00:00+09:00",
+  "allDay": false,
+  "colorLabel": "GREEN",
+  "content": "수정된 목표입니다.",
+  "location": "회의실 B",
+  "creatorAttends": true,
+  "participantIds": [2, 3],
+  "userTargetIds": [4],
+  "teamTargetIds": [10],
+  "projectTargetIds": []
+}
+```
+
+성공 시 `200 OK`와 `GET /api/schedules/{scheduleId}`의 상세 응답 형식을 반환한다. 잘못된 유형·대상·시간·색상·중복
+참석자 또는 참조는 생성과 같은 `400 Bad Request` 계약으로 거부한다. 존재하지 않거나 Actor가 등록자가 아닌
+일정, 이미 취소된 일정 및 공개 정책상 노출할 수 없는 일정은 모두 `404 Not Found`와 `SCHEDULE_NOT_FOUND`로
+처리한다. 회의실 예약 연결 일정은 어떤 필드도 직접 수정하지 않으며 `409 Conflict`와
+`ROOM_RESERVATION_MANAGED_SCHEDULE`을 반환한다.
 
 일반 일정 삭제는 다음 계약을 적용한다.
 
@@ -248,6 +349,8 @@ never contain a session identifier, CSRF token, or authentication credential.
 - 회의실 예약 연결 일정은 캘린더에서 직접 취소하지 않고 `409 Conflict`와 `ROOM_RESERVATION_MANAGED_SCHEDULE`을 반환한다.
 - 인증되지 않은 요청은 `401 Unauthorized`, 존재하지 않거나 요청자에게 노출할 수 없는 일정은 동일하게 `404 Not Found`를 반환한다.
 - 성공 응답은 `204 No Content`이며 응답 Body를 포함하지 않는다.
+- 취소 감사 이벤트는 Actor, 취소 시각, 일정 ID와 결과(`CANCELED`, `ALREADY_CANCELED`, `NOT_FOUND`,
+  `ROOM_RESERVATION_MANAGED`)만 포함한다. 제목, 상세, 위치, 참석자와 공유 대상은 감사 이벤트에 포함하지 않는다.
 
 ### 8.5 Rooms and Reservations
 

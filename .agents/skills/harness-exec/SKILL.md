@@ -27,6 +27,11 @@ Harness는 `docs/plans/state/<feature>.json`에 기능별 상태를 한 개의 J
 python .agents/skills/harness-exec/scripts/harness_exec.py '<USER_REQUEST>'
 ```
 
+이미 PASS한 선행 Task를 재실행하지 않고 특정 Task부터 이어서 실행할 때는
+`$harness-exec <plan-id> --from-task <번호> [추가 요청]`을 전달한다. 시작 Task 이전의
+Task는 현재 계약 fingerprint와 일치하는 신뢰 가능한 PASS 실행 기록이 모두 있을 때만
+Worker 및 검증 호출을 생략하고 선행 조건을 충족한 것으로 처리한다.
+
 위 명령을 실행하는 shell 도구의 `timeout_ms`는 반드시 1시간 30분(`5400000`)으로
 설정한다. 더 짧은 값을 임의로 지정하거나 기본 timeout에 맡기지 않는다.
 

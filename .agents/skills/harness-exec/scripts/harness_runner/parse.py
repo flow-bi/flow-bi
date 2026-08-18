@@ -7,6 +7,7 @@ import re
 INVOCATION_PATTERN = re.compile(
     r"^\s*\$harness-exec\s+(?P<plan_id>\S+)(?P<remainder>[\s\S]*)$"
 )
+FROM_TASK_PATTERN = re.compile(r"^--from-task\s+(?P<number>\d+)(?:\s+|$)")
 
 
 def parse_invocation(raw_request: str) -> HarnessRequest:
@@ -17,7 +18,19 @@ def parse_invocation(raw_request: str) -> HarnessRequest:
         )
 
     plan_id = match.group("plan_id")
-    return HarnessRequest(plan_id, match.group("remainder").strip())
+    remainder = match.group("remainder").strip()
+    from_task = FROM_TASK_PATTERN.match(remainder)
+    if from_task is None:
+        return HarnessRequest(plan_id, remainder)
+
+    start_task_number = int(from_task.group("number"))
+    if start_task_number < 1:
+        raise PlanValidationError("--from-task에는 1 이상의 Task 번호가 필요합니다.")
+    return HarnessRequest(
+        plan_id,
+        remainder[from_task.end():].strip(),
+        start_task_number,
+    )
 
 
 
@@ -197,7 +210,6 @@ def parse_plan_text(text: str) -> ParsedPlan:
     return ParsedPlan(common_prompt=common_prompt, tasks=tuple(tasks))
 
 ################ plan-end ###############
-
 
 
 

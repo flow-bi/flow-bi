@@ -21,7 +21,6 @@ def result(score: object) -> object:
     class Result:
         output_error = ""
         output = {
-            "work_summary": "completed",
             "mandatory_gates": {
                 name: {"result": "PASS", "evidence": "evidence"}
                 for name in (
@@ -32,8 +31,6 @@ def result(score: object) -> object:
             "verification": [{"item": "verification", "result": "PASS", "evidence": "proof"}],
             "decision": "PASS",
             "quality_score": score,
-            "remaining_issues": [],
-            "final_status": "PASS",
         }
     return Result()
 

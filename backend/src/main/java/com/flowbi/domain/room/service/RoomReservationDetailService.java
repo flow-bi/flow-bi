@@ -5,11 +5,7 @@ import com.flowbi.domain.room.dto.RoomReservationDetailResponse;
 import com.flowbi.domain.room.entity.ReservationStatus;
 import com.flowbi.domain.room.entity.RoomReservation;
 import com.flowbi.domain.room.repository.RoomReservationRepository;
-import com.flowbi.domain.schedule.entity.Schedule;
-import com.flowbi.domain.schedule.entity.ScheduleDetail;
-import com.flowbi.domain.schedule.entity.ScheduleTarget;
-import jakarta.persistence.EntityManager;
-import java.util.List;
+import com.flowbi.domain.schedule.service.ScheduleModificationService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,12 +14,12 @@ import org.springframework.transaction.annotation.Transactional;
 public class RoomReservationDetailService {
 
   private final RoomReservationRepository reservationRepository;
-  private final EntityManager entityManager;
+  private final ScheduleModificationService scheduleModificationService;
 
   public RoomReservationDetailService(RoomReservationRepository reservationRepository,
-      EntityManager entityManager) {
+      ScheduleModificationService scheduleModificationService) {
     this.reservationRepository = reservationRepository;
-    this.entityManager = entityManager;
+    this.scheduleModificationService = scheduleModificationService;
   }
 
   public RoomReservationDetailResponse findOwnedReservation(Long userId,Long reservationId) {
@@ -32,26 +28,15 @@ public class RoomReservationDetailService {
     }
     RoomReservation reservation = reservationRepository.findById(reservationId)
         .orElseThrow(this::notFound);
-    Schedule schedule = entityManager.find(Schedule.class,reservation.getScheduleId());
-    if (schedule == null || !schedule.isRoomReservation()
-        || !userId.equals(schedule.getCreatorId())) {
+    var schedule = scheduleModificationService
+        .findReservationScheduleDetails(reservation.getScheduleId()).orElseThrow(this::notFound);
+    if (!userId.equals(schedule.creatorId())) {
       throw notFound();
     }
-    String description = entityManager.createQuery("""
-        select detail from ScheduleDetail detail where detail.scheduleId = :scheduleId
-        """,ScheduleDetail.class).setParameter("scheduleId",schedule.getId()).getResultStream()
-        .findFirst().map(ScheduleDetail::getContent).orElse(null);
-    List<Long> attendeeIds = entityManager
-        .createQuery(
-            """
-                select target from ScheduleTarget target where target.scheduleId = :scheduleId order by target.id
-                """,
-            ScheduleTarget.class)
-        .setParameter("scheduleId",schedule.getId()).getResultStream()
-        .map(ScheduleTarget::getUserId).toList();
     return new RoomReservationDetailResponse(reservation.getId(), reservation.getRoom().getId(),
-        reservation.getTitle(), reservation.getStartAt(), reservation.getEndAt(), attendeeIds,
-        description, reservation.getStatus() == ReservationStatus.RESERVED);
+        reservation.getTitle(), reservation.getStartAt(), reservation.getEndAt(),
+        schedule.attendeeIds(), schedule.description(),
+        reservation.getStatus() == ReservationStatus.RESERVED);
   }
 
   private RoomReservationApplicationException notFound() {

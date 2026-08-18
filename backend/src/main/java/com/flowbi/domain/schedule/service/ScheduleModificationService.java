@@ -8,9 +8,14 @@ public interface ScheduleModificationService {
 
   Optional<ReservationSchedule> findReservationSchedule(Long scheduleId);
 
+  Optional<ReservationScheduleDetails> findReservationScheduleDetails(Long scheduleId);
+
   void update(UpdateReservationScheduleCommand command);
 
   record ReservationSchedule(Long scheduleId, Long creatorId) {
+  }
+
+  record ReservationScheduleDetails(Long creatorId, String description, List<Long> attendeeIds) {
   }
 
   record UpdateReservationScheduleCommand(Long scheduleId, String title, LocalDateTime startAt,

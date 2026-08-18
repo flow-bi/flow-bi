@@ -1,10 +1,19 @@
 package com.flowbi.domain.schedule.entity;
 
+import com.flowbi.domain.schedule.audit.*;
+import com.flowbi.domain.schedule.controller.*;
+import com.flowbi.domain.schedule.dto.*;
+import com.flowbi.domain.schedule.exception.*;
+import com.flowbi.domain.schedule.repository.*;
+import com.flowbi.domain.schedule.service.*;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 
 @Entity
@@ -16,27 +25,21 @@ public class ScheduleDetail {
   @Column(name = "schedule_details_id")
   private Long id;
 
-  @Column(name = "schedule_id", nullable = false)
-  private Long scheduleId;
+  @OneToOne(optional = false)
+  @JoinColumn(name = "schedule_id", nullable = false, unique = true)
+  private Schedule schedule;
 
+  @Column(length = 200)
   private String content;
 
+  @Column(length = 30)
   private String location;
 
   protected ScheduleDetail() {
   }
 
-  private ScheduleDetail(Long scheduleId, String content, String location) {
-    this.scheduleId = scheduleId;
-    this.content = content;
-    this.location = location;
-  }
-
-  public static ScheduleDetail of(Long scheduleId,String content,String location) {
-    return new ScheduleDetail(scheduleId, content, location);
-  }
-
-  public void update(String content,String location) {
+  ScheduleDetail(Schedule schedule, String content, String location) {
+    this.schedule = schedule;
     this.content = content;
     this.location = location;
   }
@@ -47,5 +50,10 @@ public class ScheduleDetail {
 
   public String getLocation() {
     return location;
+  }
+
+  void update(String content,String location) {
+    this.content = content;
+    this.location = location;
   }
 }

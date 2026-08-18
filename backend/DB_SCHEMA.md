@@ -214,9 +214,6 @@ Project와 User의 N:M Mapping이다.
 | `room_name`  | `VARCHAR(100)` | NOT NULL    | 회의실명                       |
 | `capacity`   | `BIGINT`       | NULL        | 수용 인원                      |
 | `location`   | `VARCHAR(255)` | NULL        | 위치                           |
-| `Field`      | `VARCHAR(255)` | NULL        | 장비 등 비정형 특성 예비 Field |
-| `created_at` | `DATETIME`     | DEFAULT NOW | 생성일시                       |
-| `updated_at` | `DATETIME`     | DEFAULT NOW | 수정일시                       |
 
 ### 5.2 `rooms_reservations`
 
@@ -228,14 +225,13 @@ Project와 User의 N:M Mapping이다.
 | `room_id`        | `BIGINT`       | FK, NOT NULL | 회의실 ID                |
 | `schedule_id`    | `BIGINT`       | FK, NOT NULL | 일정 ID                  |
 | `title`          | `VARCHAR(200)` | NOT NULL     | 예약 제목                |
-| `start_at`       | `DATETIME`     | NOT NULL     | 시작일시                 |
-| `end_at`         | `DATETIME`     | NOT NULL     | 종료일시                 |
-| `status`         | `VARCHAR(30)`  | NULL         | 대기·완료·취소 등        |
-| `cancelled_at`   | `DATETIME`     | NULL         | 취소일시                 |
-| `count`          | `INT`          | NULL         | 예상 인원                |
-| `Field`          | `VARCHAR(255)` | NULL         | 비고·특이사항 예비 Field |
-| `created_at`     | `DATETIME`     | DEFAULT NOW  | 생성일시                 |
-| `updated_at`     | `DATETIME`     | DEFAULT NOW  | 수정일시                 |
+| `start_at`       | `TIMESTAMP`    | NOT NULL     | 시작일시                 |
+| `end_at`         | `TIMESTAMP`    | NOT NULL     | 종료일시                 |
+| `status`         | `VARCHAR(30)`  | NOT NULL     | `RESERVED`, `CANCELED`   |
+
+`rooms_reservations`의 시간 구간은 `end_at > start_at`이어야 한다. `room_id`, `status`,
+`start_at`, `end_at`의 복합 Index로 활성 예약 중복 조회를 지원하고, `schedule_id` Index로
+연결 일정 여부 조회를 지원한다.
 
 ## 6. 기준선 관계 요약
 
@@ -253,7 +249,18 @@ rooms 1 --- N rooms_reservations
 schedules 1 --- N rooms_reservations
 ```
 
-## 7. 검토 대기 항목
+## 7. 승인된 Calendar Migration Schema
+
+ADR-0001, ADR-0002와 ADR-0003 승인에 따라 Migration은 UTC Timestamp 기반 전역 Version 순서로 적용한다. `V20260812000001_00__auth_create_authentication_tables.sql`이 `users`와 `teams`를 생성하고, `V20260812000002_00__calendar_create_calendar_schema.sql`이 해당 식별자와 Calendar의 임시 `projects` 기준선을 참조해 Calendar 테이블을 생성한다. `V20260812000003_00__calendar_add_creation_constraints.sql`은 Calendar 제약조건과 Index를 추가한다. `V20260812000004_00__project_add_membership_contract.sql`은 Task 7의 실제 프로젝트 참여 판정을 위해 기준선 `projects`에 활성 상태를 추가하고 `projects_members`의 참조·중복 제약과 사용자 조회 Index를 생성한다. `V20260812000005_00__user_align_user_domain_schema.sql`은 기존 사용자에게 충돌하지 않는 전환용 이메일을 부여한 뒤 이메일·연락처·프로필 이미지 계약과 사용자 상태 제약을 적용한다. 사용자·조직 원장은 Authentication이 소유하며 Calendar가 이를 생성하거나 관리하지 않는다. `projects`와 `projects_members` 기준선은 Project 도메인의 영속 계약이 도입될 때 소유권을 이전한다.
+
+- `schedules`: `status (ACTIVE|CANCELED)`, `cancelled_at`, `cancelled_by`, `is_all_day`, `color_label (RED|ORANGE|YELLOW|GREEN|BLUE|PURPLE)`, `creator_attends`를 추가하고 유형·공개 범위, 시간 구간, 취소 감사 조합을 CHECK로 보장한다.
+- `schedules_details.schedule_id`는 UNIQUE인 1:1 관계다.
+- `schedule_participants(schedule_id, user_id)`는 UNIQUE로 중복 참석자를 막고, 참석자와 `schedule_targets.USER`를 분리한다.
+- `schedule_targets`는 `USER`, `TEAM`, `PROJECT`별 해당 FK 하나만 설정되는 CHECK와 각 외부 원장 FK를 가진다.
+- 기간 조회는 `idx_schedules_active_period(status, start_at, end_at)`, 작성자 조회는 `idx_schedules_creator`, 공개 대상 조회는 참석자·사용자·팀·프로젝트별 Index를 사용한다.
+- Migration은 추가 생성만 수행하며 일정 및 관계 데이터를 물리 삭제하거나 기존 Migration을 변경하지 않는다.
+
+## 8. 검토 대기 항목
 
 다음 항목은 기준선에 반영하지 않았으며 전체 문서 작성 후 Schema Review에서 검토한다.
 
@@ -272,7 +279,7 @@ schedules 1 --- N rooms_reservations
 - Index, Foreign Key 삭제 정책과 감사 필드 제약
 - 종일 일정, 색상 Label, 알림 설정과 업무 상태 관련 테이블
 
-### 7.1 확정 정책
+### 8.1 확정 정책
 
 다음 정책은 팀 결정으로 확정됐지만 Initial Baseline ERD에는 아직 반영하지 않는다.
 
@@ -297,7 +304,7 @@ schedules 1 --- N rooms_reservations
 
 ## 7.3 Authentication migration and fixture boundary
 
-- `backend/src/main/resources/db/migration/V1__create_authentication_tables.sql` creates the minimal `positions`, `teams`, `users`, and `user_credentials` tables required by the authentication baseline.
+- `backend/src/main/resources/db/migration/V20260812000001_00__auth_create_authentication_tables.sql` creates the minimal `positions`, `teams`, `users`, and `user_credentials` tables required by the authentication baseline.
 - `users.employee_number` is unique; `user_credentials.user_id` is unique and required; both user reference keys are required foreign keys. `must_change_password` defaults to `TRUE`, and `password_hash` is required with a maximum length of 255.
 - Development account creation is not a migration or a startup fixture. The optional adapter is
   registered only when the `local` or `test` profile and
@@ -314,4 +321,6 @@ schedules 1 --- N rooms_reservations
 5. 승인된 Migration을 작성하고 검증한다.
 
 - 이미 적용된 Migration 파일은 수정하지 않고 새 Migration을 추가한다.
+- 새 Migration Version은 ADR-0003의 `VyyyyMMddHHmmss_NN__domain_description.sql` 규칙을 사용한다.
+- Flyway `outOfOrder`는 기본값 `false`를 유지한다.
 - 파괴적 변경은 데이터 보존·전환·복구 계획과 사람의 승인이 선행되어야 한다.

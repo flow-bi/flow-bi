@@ -1,15 +1,18 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from 'react'
-import { getSession, logout, type LoginResult, type SessionResult } from './features/auth/api'
-import { PasswordChangePage } from './features/auth/PasswordChangePage'
-import { LoginPage } from './features/auth/LoginPage'
 
+import { getSession, logout, type LoginResult, type SessionResult } from './features/auth/api'
+import { LoginPage } from './features/auth/LoginPage'
+import { PasswordChangePage } from './features/auth/PasswordChangePage'
+import { onUnauthenticated } from './features/authenticatedFetch'
 import {
   createDevelopmentMeetingRoomGateway,
   MeetingRoomPage,
   resolveMeetingRoomGateway,
   type MeetingRoomGateway,
 } from './features/meeting-room'
+import { ScheduleCalendar } from './features/schedule-calendar/ScheduleCalendar'
+import { ScheduleCreateModal } from './features/schedule-create/ScheduleCreateModal'
 
 declare global {
   interface Window {
@@ -17,27 +20,49 @@ declare global {
   }
 }
 
+function CalendarStarter() {
+  const [isCreateOpen, setIsCreateOpen] = useState(false)
+
+  return (
+    <>
+      <ScheduleCalendar onCreateSchedule={() => setIsCreateOpen(true)} />
+      {isCreateOpen && <ScheduleCreateModal onClose={() => setIsCreateOpen(false)} />}
+    </>
+  )
+}
+
 type HeaderProps = {
   companyName: string
+  isMobileSidebarOpen: boolean
   userName: string
   onOpenSidebar: () => void
   openSidebarButtonRef: RefObject<HTMLButtonElement | null>
 }
 
-function Header({ companyName, userName, onOpenSidebar, openSidebarButtonRef }: HeaderProps) {
+function Header({
+  companyName,
+  isMobileSidebarOpen,
+  userName,
+  onOpenSidebar,
+  openSidebarButtonRef,
+}: HeaderProps) {
   return (
-    <header className="app-header">
+    <header
+      className="grid min-h-16 grid-cols-[auto_1fr_auto] items-center border-b border-border bg-surface px-4 py-3 md:px-6"
+      data-app-header
+    >
       <button
+        aria-expanded={isMobileSidebarOpen}
         aria-label="사이드바 열기"
-        className="bordered-button sidebar-trigger"
+        className="mr-3 rounded-md border border-border bg-surface px-2.5 py-1.5 text-text-primary md:hidden"
         onClick={onOpenSidebar}
         ref={openSidebarButtonRef}
         type="button"
       >
         메뉴
       </button>
-      <h1 className="company-name">{companyName}</h1>
-      <p className="user-name">{userName}</p>
+      <h1 className="m-0 justify-self-start font-bold">{companyName}</h1>
+      <p className="m-0 justify-self-end text-text-secondary">{userName}</p>
     </header>
   )
 }
@@ -46,9 +71,9 @@ type SidebarProps = { children: ReactNode }
 
 function Sidebar({ children }: SidebarProps) {
   return (
-    <aside className="sidebar">
+    <aside className="hidden border-r border-border bg-surface p-6 md:block" data-desktop-sidebar>
       <nav aria-label="주요 탐색">
-        <h2 className="sidebar-heading">주요 탐색</h2>
+        <h2 className="mt-0 text-base">주요 탐색</h2>
         {children}
       </nav>
     </aside>
@@ -63,11 +88,15 @@ function MobileSidebar({ children, onClose }: MobileSidebarProps) {
     closeButtonRef.current?.focus()
   }, [])
   return (
-    <div className="sidebar-backdrop" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-10 flex bg-text-primary/35 md:hidden"
+      data-mobile-sidebar-backdrop
+      onClick={onClose}
+    >
       <aside
         aria-label="주요 탐색"
         aria-modal="true"
-        className="mobile-sidebar"
+        className="min-h-full w-[min(20rem,85vw)] bg-surface p-5 shadow-[0_0_1.5rem_color-mix(in_srgb,var(--color-text-primary)_20%,transparent)]"
         onClick={(event) => event.stopPropagation()}
         onKeyDown={(event) => {
           if (event.key === 'Escape') {
@@ -76,11 +105,11 @@ function MobileSidebar({ children, onClose }: MobileSidebarProps) {
         }}
         role="dialog"
       >
-        <div className="mobile-sidebar-header">
+        <div className="mb-6 flex items-center justify-between gap-4">
           <h2>주요 탐색</h2>
           <button
             aria-label="사이드바 닫기"
-            className="bordered-button"
+            className="rounded-md border border-border bg-surface px-2.5 py-1.5 text-text-primary"
             onClick={onClose}
             ref={closeButtonRef}
             type="button"
@@ -94,7 +123,10 @@ function MobileSidebar({ children, onClose }: MobileSidebarProps) {
   )
 }
 
-type AppShellProps = { sidebar: ReactNode; children: ReactNode }
+type AppShellProps = {
+  sidebar: (onNavigate: () => void) => ReactNode
+  children: ReactNode
+}
 
 function isMeetingRoomTestHarness(): boolean {
   return import.meta.env.DEV && 'Cypress' in window
@@ -107,22 +139,39 @@ function AppShell({ sidebar, children }: AppShellProps) {
     setIsMobileSidebarOpen(false)
     openSidebarButtonRef.current?.focus()
   }
+
+  const closeMobileSidebarAfterNavigation = () => {
+    setIsMobileSidebarOpen(false)
+  }
+
   return (
-    <div className="app-shell">
+    // todo: 인증인가 이후, 회사명과 사용자명을 props로 전달받도록 수정
+
+    <div className="min-h-screen bg-background text-text-primary">
       <Header
         companyName="Flow BI"
+        isMobileSidebarOpen={isMobileSidebarOpen}
         onOpenSidebar={() => setIsMobileSidebarOpen(true)}
         openSidebarButtonRef={openSidebarButtonRef}
-        userName="김지선"
+        userName="김유선"
       />
-      <div className="app-body">
-        <Sidebar>{sidebar}</Sidebar>
-        <main aria-label="콘텐츠" className="main-content">
+      <div
+        className="min-h-[calc(100vh-4rem)] md:grid md:grid-cols-[16rem_minmax(0,1fr)]"
+        data-app-body
+      >
+        <Sidebar>{sidebar(() => undefined)}</Sidebar>
+        <main
+          aria-label="콘텐츠"
+          className="bg-background p-4 md:p-8 [&>h1]:mt-0 [&>p]:text-text-secondary"
+          tabIndex={-1}
+        >
           {children}
         </main>
       </div>
       {isMobileSidebarOpen ? (
-        <MobileSidebar onClose={closeMobileSidebar}>{sidebar}</MobileSidebar>
+        <MobileSidebar onClose={closeMobileSidebar}>
+          {sidebar(closeMobileSidebarAfterNavigation)}
+        </MobileSidebar>
       ) : null}
     </div>
   )
@@ -146,34 +195,130 @@ function currentPath(): string {
   return window.location.pathname
 }
 
-function App() {
-  const [queryClient] = useState(
-    () => new QueryClient({ defaultOptions: { queries: { retry: false } } }),
-  )
+function navigate(path: AllowedPath, replace = false) {
+  if (currentPath() !== path) {
+    window.history[replace ? 'replaceState' : 'pushState']({}, '', path)
+  }
+}
+
+type AuthenticatedAppProps = {
+  onLoggedOut: () => void
+  queryClient: QueryClient
+}
+
+function AuthenticatedApp({ onLoggedOut, queryClient }: AuthenticatedAppProps) {
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [locationSearch, setLocationSearch] = useState(() => window.location.search)
   const [developmentMeetingRoomGateway] = useState(() =>
     import.meta.env.DEV ? createDevelopmentMeetingRoomGateway() : undefined,
   )
-  let isTestHarness = false
-  let injectedGateway: MeetingRoomGateway | undefined
-  if (import.meta.env.DEV) {
-    isTestHarness = isMeetingRoomTestHarness()
-    injectedGateway = isTestHarness ? window.__FLOW_BI_MEETING_ROOM_GATEWAY__ : undefined
-  }
+  const mainHeadingRef = useRef<HTMLHeadingElement>(null)
+  const isCalendarRoute = new URLSearchParams(locationSearch).has('view')
+  const isTestHarness = isMeetingRoomTestHarness()
   const meetingRoomGateway = resolveMeetingRoomGateway({
     isDevelopment: import.meta.env.DEV,
     isTestHarness,
     developmentGateway: developmentMeetingRoomGateway,
-    injectedGateway,
+    injectedGateway: isTestHarness ? window.__FLOW_BI_MEETING_ROOM_GATEWAY__ : undefined,
   })
 
-  const [authentication, setAuthentication] = useState<AuthenticationState>({ kind: 'loading' })
-  const mainHeadingRef = useRef<HTMLHeadingElement>(null)
+  const navigateToMeetingRoom = () => {
+    window.history.pushState({}, '', window.location.pathname)
+    setLocationSearch('')
+  }
 
-  const navigate = (path: AllowedPath, replace = false) => {
-    if (currentPath() !== path) {
-      window.history[replace ? 'replaceState' : 'pushState']({}, '', path)
+  const navigateToCalendar = () => {
+    const calendarSearch = '?view=month'
+    window.history.pushState({}, '', `${window.location.pathname}${calendarSearch}`)
+    setLocationSearch(calendarSearch)
+  }
+
+  useEffect(() => {
+    mainHeadingRef.current?.focus()
+  }, [])
+
+  useEffect(() => {
+    const updateLocation = () => setLocationSearch(window.location.search)
+    window.addEventListener('popstate', updateLocation)
+    return () => window.removeEventListener('popstate', updateLocation)
+  }, [])
+
+  async function handleLogout() {
+    setIsLoggingOut(true)
+    try {
+      await logout()
+      queryClient.clear()
+      onLoggedOut()
+    } finally {
+      setIsLoggingOut(false)
     }
   }
+
+  const navigationClass = (isCurrent: boolean) =>
+    isCurrent
+      ? 'flex items-center justify-between gap-2 rounded-md border-l-4 border-primary bg-secondary px-3 py-2.5 font-bold text-text-primary no-underline hover:bg-secondary [&>span]:text-xs [&>span]:font-normal [&>span]:text-text-secondary'
+      : 'flex items-center justify-between gap-2 rounded-md px-3 py-2.5 text-text-primary no-underline hover:bg-secondary'
+
+  const sidebar = (onNavigate: () => void) => (
+    <div className="flex flex-col gap-1">
+      <a
+        aria-current={isCalendarRoute ? undefined : 'page'}
+        aria-label="회의실"
+        className={navigationClass(!isCalendarRoute)}
+        href="#meeting-room"
+        onClick={(event) => {
+          event.preventDefault()
+          navigateToMeetingRoom()
+          onNavigate()
+        }}
+      >
+        회의실
+        {!isCalendarRoute && <span aria-hidden="true"/>}
+      </a>
+      <a
+        aria-current={isCalendarRoute ? 'page' : undefined}
+        aria-label="캘린더"
+        className={navigationClass(isCalendarRoute)}
+        href="?view=month"
+        onClick={(event) => {
+          event.preventDefault()
+          navigateToCalendar()
+          onNavigate()
+        }}
+      >
+        캘린더
+        {isCalendarRoute && <span aria-hidden="true"/>}
+      </a>
+    </div>
+  )
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AppShell sidebar={sidebar}>
+        <h1 ref={mainHeadingRef} tabIndex={-1}>
+          콘텐츠
+        </h1>
+        <p>로그인되었습니다.</p>
+        <button disabled={isLoggingOut} onClick={() => void handleLogout()} type="button">
+          {isLoggingOut ? '로그아웃 중' : '로그아웃'}
+        </button>
+        {isCalendarRoute ? <CalendarStarter /> : <MeetingRoomPage gateway={meetingRoomGateway} />}
+      </AppShell>
+    </QueryClientProvider>
+  )
+}
+
+function App() {
+  const [queryClient] = useState(
+    () => new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+  )
+  const [authentication, setAuthentication] = useState<AuthenticationState>({ kind: 'loading' })
+
+  const onSessionExpired = useCallback(() => {
+    queryClient.clear()
+    setAuthentication({ kind: 'anonymous' })
+    navigate('/login', true)
+  }, [queryClient])
 
   const bootstrap = useCallback(async () => {
     setAuthentication({ kind: 'loading' })
@@ -193,11 +338,9 @@ function App() {
   }, [])
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void bootstrap()
-    }, 0)
-    return () => window.clearTimeout(timer)
+    void Promise.resolve().then(bootstrap)
   }, [bootstrap])
+  useEffect(() => onUnauthenticated(onSessionExpired), [onSessionExpired])
   useEffect(() => {
     const onPopState = () => {
       window.setTimeout(() => {
@@ -207,12 +350,6 @@ function App() {
     window.addEventListener('popstate', onPopState)
     return () => window.removeEventListener('popstate', onPopState)
   }, [bootstrap])
-  useEffect(() => {
-    if (authentication.kind === 'authenticated' && !authentication.session.mustChangePassword) {
-      mainHeadingRef.current?.focus()
-    }
-  }, [authentication])
-
   const onAuthenticated = (result: LoginResult) => {
     const session: SessionResult = {
       authenticated: true,
@@ -228,15 +365,6 @@ function App() {
     })
     navigate('/')
   }
-  const onSessionExpired = () => {
-    setAuthentication({ kind: 'anonymous' })
-    navigate('/login', true)
-  }
-  const onLogout = async () => {
-    await logout()
-    onSessionExpired()
-  }
-
   if (authentication.kind === 'loading') {
     return (
       <main aria-busy="true" aria-live="polite" className="auth-status">
@@ -269,26 +397,7 @@ function App() {
     )
   }
 
-  return (
-    <AppShell
-      sidebar={
-        <a aria-current="page" className="sidebar-link" href="#meeting-room">
-          회의실
-        </a>
-      }
-    >
-      <h1 ref={mainHeadingRef} tabIndex={-1}>
-        콘텐츠
-      </h1>
-      <p>현재 화면의 콘텐츠가 이 영역에 표시됩니다.</p>
-      <button className="bordered-button" onClick={() => void onLogout()} type="button">
-        로그아웃
-      </button>
-      <QueryClientProvider client={queryClient}>
-        <MeetingRoomPage gateway={meetingRoomGateway} />
-      </QueryClientProvider>
-    </AppShell>
-  )
+  return <AuthenticatedApp onLoggedOut={onSessionExpired} queryClient={queryClient} />
 }
 
 export default App
