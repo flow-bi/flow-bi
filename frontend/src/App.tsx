@@ -1,8 +1,21 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from 'react'
-
 import { getSession, logout, type LoginResult, type SessionResult } from './features/auth/api'
-import { LoginPage } from './features/auth/LoginPage'
 import { PasswordChangePage } from './features/auth/PasswordChangePage'
+import { LoginPage } from './features/auth/LoginPage'
+
+import {
+  createDevelopmentMeetingRoomGateway,
+  MeetingRoomPage,
+  resolveMeetingRoomGateway,
+  type MeetingRoomGateway,
+} from './features/meeting-room'
+
+declare global {
+  interface Window {
+    __FLOW_BI_MEETING_ROOM_GATEWAY__?: MeetingRoomGateway
+  }
+}
 
 type HeaderProps = {
   companyName: string
@@ -83,6 +96,10 @@ function MobileSidebar({ children, onClose }: MobileSidebarProps) {
 
 type AppShellProps = { sidebar: ReactNode; children: ReactNode }
 
+function isMeetingRoomTestHarness(): boolean {
+  return import.meta.env.DEV && 'Cypress' in window
+}
+
 function AppShell({ sidebar, children }: AppShellProps) {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const openSidebarButtonRef = useRef<HTMLButtonElement>(null)
@@ -130,6 +147,25 @@ function currentPath(): string {
 }
 
 function App() {
+  const [queryClient] = useState(
+    () => new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+  )
+  const [developmentMeetingRoomGateway] = useState(() =>
+    import.meta.env.DEV ? createDevelopmentMeetingRoomGateway() : undefined,
+  )
+  let isTestHarness = false
+  let injectedGateway: MeetingRoomGateway | undefined
+  if (import.meta.env.DEV) {
+    isTestHarness = isMeetingRoomTestHarness()
+    injectedGateway = isTestHarness ? window.__FLOW_BI_MEETING_ROOM_GATEWAY__ : undefined
+  }
+  const meetingRoomGateway = resolveMeetingRoomGateway({
+    isDevelopment: import.meta.env.DEV,
+    isTestHarness,
+    developmentGateway: developmentMeetingRoomGateway,
+    injectedGateway,
+  })
+
   const [authentication, setAuthentication] = useState<AuthenticationState>({ kind: 'loading' })
   const mainHeadingRef = useRef<HTMLHeadingElement>(null)
 
@@ -234,7 +270,13 @@ function App() {
   }
 
   return (
-    <AppShell sidebar={<p className="sidebar-placeholder">메뉴를 준비 중입니다.</p>}>
+    <AppShell
+      sidebar={
+        <a aria-current="page" className="sidebar-link" href="#meeting-room">
+          회의실
+        </a>
+      }
+    >
       <h1 ref={mainHeadingRef} tabIndex={-1}>
         콘텐츠
       </h1>
@@ -242,6 +284,9 @@ function App() {
       <button className="bordered-button" onClick={() => void onLogout()} type="button">
         로그아웃
       </button>
+      <QueryClientProvider client={queryClient}>
+        <MeetingRoomPage gateway={meetingRoomGateway} />
+      </QueryClientProvider>
     </AppShell>
   )
 }

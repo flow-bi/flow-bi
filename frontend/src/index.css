@@ -122,6 +122,21 @@ button:focus-visible {
   color: var(--color-text-secondary);
 }
 
+.sidebar-link {
+  display: block;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  background: var(--color-secondary);
+  color: var(--color-primary);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.sidebar-link:focus-visible {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
 .main-content {
   padding: 2rem;
 }

@@ -4,6 +4,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import App from './App'
 
+import type { MeetingRoomGateway } from './features/meeting-room'
+
+afterEach(() => {
+  delete window.__FLOW_BI_MEETING_ROOM_GATEWAY__
+})
+
 afterEach(() => {
   vi.unstubAllGlobals()
   window.history.replaceState({}, '', '/')
@@ -79,6 +85,23 @@ describe('App main screen', () => {
     expect(await screen.findByRole('banner')).toHaveTextContent('Flow BI')
     expect(screen.getByRole('main', { name: '콘텐츠' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '콘텐츠' })).toHaveFocus()
+    expect(screen.getByRole('heading', { name: '회의실 예약 현황' })).toBeInTheDocument()
+  })
+
+  it('places the meeting-room screen inside the global application shell', async () => {
+    const gateway: MeetingRoomGateway = {
+      findAvailability: vi.fn().mockResolvedValue({ rooms: [] }),
+    }
+    window.__FLOW_BI_MEETING_ROOM_GATEWAY__ = gateway
+
+    render(<App />)
+
+    expect(screen.getByRole('banner')).toHaveTextContent('Flow BI')
+    expect(screen.getByRole('navigation', { name: '주요 탐색' })).toHaveTextContent('회의실')
+    expect(await screen.findByRole('heading', { name: '회의실 예약 현황' })).toBeInTheDocument()
+    expect(screen.getByRole('main', { name: '콘텐츠' })).toContainElement(
+      screen.getByRole('heading', { name: '회의실 예약 현황' }),
+    )
   })
 
   it('opens and closes the mobile sidebar with Escape and restores focus to its trigger', async () => {
