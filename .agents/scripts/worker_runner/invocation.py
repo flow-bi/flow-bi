@@ -25,7 +25,7 @@ DISCOVERY_GUIDANCE = (
 TASK_WORKER_GUIDANCE = (
     "현재 세션은 이미 Harness Task Worker입니다. 전달된 Task를 허용 경로 안에서 "
     "직접 구현하고 검증하십시오. harness-exec, harness-plan 또는 다른 Harness "
-    "Skill과 실행 스크립트를 재호출하지 마십시오."
+    "Skill과 실행 스크립트를 재호출하지 마십시오. 또한  모든 timeout은 90분으로 설정해 확인합니다."
 )
 
 BROWSER_VERIFICATION_GUIDANCE = (

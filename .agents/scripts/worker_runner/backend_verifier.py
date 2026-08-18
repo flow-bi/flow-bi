@@ -107,10 +107,12 @@ class BackendVerifier:
         *,
         runner: SubprocessRunner = subprocess.run,
         timeout: int = DEFAULT_GRADLE_TIMEOUT_SECONDS,
+        os_name: str = os.name,
     ) -> None:
         self._project_root = project_root.resolve()
         self._backend_directory = (self._project_root / "backend").resolve()
-        self._gradlew = self._backend_directory / "gradlew"
+        self._wrapper_name = "gradlew.bat" if os_name == "nt" else "gradlew"
+        self._gradlew = self._backend_directory / self._wrapper_name
         self._runner = runner
         self._timeout = timeout
         self._token = secrets.token_urlsafe(32)
@@ -202,7 +204,7 @@ class BackendVerifier:
                 try:
                     self._create_formatter_workspace(workspace, targets)
                     result = self._runner(
-                        [str(workspace / "gradlew"), "spotlessApply", "--no-daemon"],
+                        [str(workspace / self._wrapper_name), "spotlessApply", "--no-daemon"],
                         cwd=workspace,
                         env=self._subprocess_environment(),
                         timeout=DEFAULT_FORMATTER_TIMEOUT_SECONDS,
@@ -215,8 +217,11 @@ class BackendVerifier:
                     )
                 except subprocess.TimeoutExpired as error:
                     return BackendVerificationResult(124, _output_from_timeout(error), timed_out=True)
-                except (OSError, shutil.Error):
-                    return BackendVerificationResult(1, "Backend Java formatter를 실행할 수 없습니다.")
+                except (OSError, shutil.Error) as error:
+                    return BackendVerificationResult(
+                        1,
+                        self._process_start_failure("Backend Java formatter", error),
+                    )
                 if result.returncode != 0:
                     return BackendVerificationResult(result.returncode, result.stdout or "")
                 try:
@@ -236,7 +241,13 @@ class BackendVerifier:
 
     def _create_formatter_workspace(self, workspace: Path, targets: tuple[Path, ...]) -> None:
         workspace.mkdir(parents=True)
-        for relative in ("gradlew", "settings.gradle", "build.gradle", "gradle", "config"):
+        for relative in (
+            self._wrapper_name,
+            "settings.gradle",
+            "build.gradle",
+            "gradle",
+            "config",
+        ):
             source = self._backend_directory / relative
             destination = workspace / relative
             if source.is_symlink() or not source.exists():
@@ -288,11 +299,19 @@ class BackendVerifier:
                 )
             except subprocess.TimeoutExpired as error:
                 return BackendVerificationResult(124, _output_from_timeout(error), timed_out=True)
-            except OSError:
-                return BackendVerificationResult(1, "Backend Gradle 실행을 시작할 수 없습니다.")
+            except OSError as error:
+                return BackendVerificationResult(
+                    1,
+                    self._process_start_failure("Backend Gradle", error),
+                )
             return BackendVerificationResult(result.returncode, result.stdout or "")
         finally:
             self._execution_lock.release()
+
+    def _process_start_failure(self, operation: str, error: OSError) -> str:
+        error_code = getattr(error, "winerror", None) or error.errno
+        code_detail = f" (OS 오류 {error_code})" if error_code is not None else ""
+        return f"{operation} 실행 파일 {self._wrapper_name}을 시작할 수 없습니다{code_detail}."
 
     def __enter__(self) -> BackendVerifier:
         verifier = self
