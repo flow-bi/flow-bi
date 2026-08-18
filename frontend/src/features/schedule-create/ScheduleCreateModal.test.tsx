@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
@@ -116,6 +116,39 @@ describe('ScheduleCreateModal', () => {
     expect(screen.getByRole('dialog', { name: '일정 추가' })).toBeVisible()
     expect(screen.getByLabelText('제목')).toHaveValue('저장 중인 일정')
     expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('renders the discard confirmation in the shared card with secondary and danger actions', async () => {
+    const user = userEvent.setup()
+    render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <ScheduleCreateModal onClose={vi.fn()} searchAttendees={() => Promise.resolve([])} />
+      </QueryClientProvider>,
+    )
+
+    await user.type(screen.getByLabelText('제목'), '임시 일정')
+    await user.click(screen.getByTestId('schedule-create-backdrop'))
+
+    const dialog = screen.getByRole('alertdialog', { name: '입력한 내용을 버릴까요?' })
+    const card = screen.getByTestId('confirmation-dialog-card')
+    expect(card).toBe(dialog)
+    expect(within(card).getByText('저장하지 않은 입력은 사라집니다.')).toBeVisible()
+    expect(within(card).getByRole('button', { name: '닫기' })).toBeVisible()
+    expect(within(card).getByRole('button', { name: '계속 입력' })).toHaveClass(
+      'border',
+      'sm:w-auto',
+    )
+    expect(within(card).getByRole('button', { name: '입력 취소하고 닫기' })).toHaveClass(
+      'border-red-700',
+      'sm:w-auto',
+    )
+    expect(screen.getByTestId('confirmation-dialog-footer')).toHaveClass(
+      'flex-col-reverse',
+      'sm:flex-row',
+      'sm:justify-end',
+    )
   })
 
   it('connects the required date error to its input', async () => {

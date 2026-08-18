@@ -1,9 +1,28 @@
-function requiredElement(document: Document, selector: string): HTMLElement {
-  const element = document.querySelector<HTMLElement>(selector)
+function requiredElement(root: ParentNode, selector: string): HTMLElement {
+  const element = root.querySelector<HTMLElement>(selector)
   if (!element) {
     throw new Error(`Expected ${selector} to exist`)
   }
   return element
+}
+
+function expectContainedByCard(card: HTMLElement, element: HTMLElement) {
+  const cardRect = card.getBoundingClientRect()
+  const elementRect = element.getBoundingClientRect()
+  expect(elementRect.top).to.be.at.least(cardRect.top)
+  expect(elementRect.right).to.be.at.most(cardRect.right)
+  expect(elementRect.bottom).to.be.at.most(cardRect.bottom)
+  expect(elementRect.left).to.be.at.least(cardRect.left)
+}
+
+function requiredCardButton(card: HTMLElement, name: string): HTMLButtonElement {
+  const button = [...card.querySelectorAll<HTMLButtonElement>('button')].find(
+    (element) => element.textContent?.trim() === name,
+  )
+  if (!button) {
+    throw new Error(`Expected alertdialog button ${name} to exist`)
+  }
+  return button
 }
 
 describe('calendar visual refinement', () => {
@@ -154,5 +173,149 @@ describe('calendar visual refinement', () => {
     cy.focused().should('have.id', 'schedule-title').type('{esc}')
     cy.get('[role="dialog"][aria-labelledby="schedule-create-title"]').should('not.exist')
     cy.get('[data-testid="calendar-create-action"]').should('be.focused')
+  })
+
+  it('keeps the edit-discard confirmation card contents contained on desktop and 390px mobile', () => {
+    const detail = {
+      id: 11,
+      title: '수정할 일정',
+      startAt: '2026-08-10T09:00:00+09:00',
+      endAt: '2026-08-10T10:00:00+09:00',
+      allDay: false,
+      type: 'TEAM',
+      colorLabel: 'BLUE',
+      visibility: 'TEAM',
+      content: '',
+      location: '',
+      creatorAttends: true,
+      participantIds: [],
+      userTargetIds: [],
+      teamTargetIds: [10],
+      projectTargetIds: [],
+      meetingRoomManaged: false,
+      canManage: true,
+    }
+    cy.intercept('GET', '/api/schedules?*', [detail])
+    cy.intercept('GET', '/api/schedules/11', detail)
+    cy.viewport(1280, 800)
+    cy.visit('/?view=month&date=2026-08-10')
+    cy.contains('button', '수정할 일정').click()
+    cy.contains('button', '일정 수정').click()
+    cy.get('#schedule-edit-title-input').type(' 변경')
+    cy.get('[role="dialog"][aria-labelledby="schedule-edit-title"]').click(1, 1)
+    cy.get('[role="alertdialog"]').as('discard')
+    cy.get('@discard').contains('button', '계속 수정').should('have.css', 'border-style', 'solid')
+    cy.get('@discard')
+      .contains('button', '수정 취소하고 닫기')
+      .should('have.css', 'background-color')
+      .and('not.equal', 'rgba(0, 0, 0, 0)')
+    cy.document().then((document) => {
+      const card = requiredElement(document, '[role="alertdialog"]')
+      expectContainedByCard(card, requiredElement(card, '#edit-discard-title'))
+      expectContainedByCard(card, requiredElement(card, 'button[aria-label="닫기"]'))
+      expectContainedByCard(card, requiredCardButton(card, '계속 수정'))
+      expectContainedByCard(card, requiredCardButton(card, '수정 취소하고 닫기'))
+    })
+
+    cy.viewport(390, 844)
+    cy.get('@discard').find('button').should('be.visible')
+    cy.document().then((document) => {
+      expect(document.documentElement.scrollWidth).to.be.at.most(390)
+      const card = requiredElement(document, '[role="alertdialog"]')
+      const safe = requiredCardButton(card, '계속 수정')
+      const danger = requiredCardButton(card, '수정 취소하고 닫기')
+      expectContainedByCard(card, requiredElement(card, '#edit-discard-title'))
+      expectContainedByCard(card, requiredElement(card, 'button[aria-label="닫기"]'))
+      expectContainedByCard(card, safe)
+      expectContainedByCard(card, danger)
+      expect(safe.getBoundingClientRect().bottom).to.be.at.most(danger.getBoundingClientRect().top)
+    })
+
+    cy.get('@discard').contains('button', '계속 수정').click()
+    cy.get('#schedule-edit-title-input').should('have.value', '수정할 일정 변경')
+    cy.get(
+      '[role="dialog"][aria-labelledby="schedule-edit-title"] button[aria-label="닫기"]',
+    ).click()
+    cy.get('@discard').contains('button', '수정 취소하고 닫기').click()
+    cy.get('[role="dialog"][aria-labelledby="schedule-edit-title"]').should('not.exist')
+  })
+
+  it('keeps the create-discard confirmation card contents contained and preserves its draft', () => {
+    cy.viewport(1280, 800)
+    cy.visit('/?view=month&date=2026-08-10')
+    cy.get('[data-testid="calendar-create-action"]').click()
+    cy.get('#schedule-title').type('작성 중인 일정')
+    cy.get('[data-testid="schedule-create-backdrop"]').click(1, 1)
+    cy.get('[role="alertdialog"]').as('createDiscard')
+    cy.get('@createDiscard').contains('p', '저장하지 않은 입력은 사라집니다.').should('be.visible')
+    cy.document().then((document) => {
+      const card = requiredElement(document, '[role="alertdialog"]')
+      expectContainedByCard(card, requiredElement(card, '#discard-title'))
+      expectContainedByCard(card, requiredElement(card, 'button[aria-label="닫기"]'))
+      expectContainedByCard(card, requiredCardButton(card, '계속 입력'))
+      expectContainedByCard(card, requiredCardButton(card, '입력 취소하고 닫기'))
+    })
+
+    cy.viewport(390, 844)
+    cy.document().then((document) => {
+      expect(document.documentElement.scrollWidth).to.be.at.most(390)
+      const card = requiredElement(document, '[role="alertdialog"]')
+      const safe = requiredCardButton(card, '계속 입력')
+      const danger = requiredCardButton(card, '입력 취소하고 닫기')
+      expectContainedByCard(card, safe)
+      expectContainedByCard(card, danger)
+      expect(safe.getBoundingClientRect().bottom).to.be.at.most(danger.getBoundingClientRect().top)
+    })
+    cy.get('@createDiscard').contains('button', '계속 입력').click()
+    cy.get('#schedule-title').should('have.value', '작성 중인 일정')
+  })
+
+  it('keeps the cancellation confirmation card contents contained and returns to detail safely', () => {
+    const detail = {
+      id: 12,
+      title: '취소할 일정',
+      startAt: '2026-08-10T09:00:00+09:00',
+      endAt: '2026-08-10T10:00:00+09:00',
+      allDay: false,
+      type: 'TEAM',
+      colorLabel: 'BLUE',
+      visibility: 'TEAM',
+      content: '',
+      location: '',
+      creatorAttends: true,
+      participantIds: [],
+      userTargetIds: [],
+      teamTargetIds: [10],
+      projectTargetIds: [],
+      meetingRoomManaged: false,
+      canManage: true,
+    }
+    cy.intercept('GET', '/api/schedules?*', [detail])
+    cy.intercept('GET', '/api/schedules/12', detail)
+    cy.viewport(1280, 800)
+    cy.visit('/?view=month&date=2026-08-10')
+    cy.contains('button', '취소할 일정').click()
+    cy.contains('button', '일정 취소').click()
+    cy.get('[role="alertdialog"]').as('cancellation')
+    cy.document().then((document) => {
+      const card = requiredElement(document, '[role="alertdialog"]')
+      expectContainedByCard(card, requiredElement(card, '#cancel-title'))
+      expectContainedByCard(card, requiredElement(card, 'button[aria-label="닫기"]'))
+      expectContainedByCard(card, requiredCardButton(card, '계속 일정 보기'))
+      expectContainedByCard(card, requiredCardButton(card, '일정 취소 확정'))
+    })
+
+    cy.viewport(390, 844)
+    cy.document().then((document) => {
+      expect(document.documentElement.scrollWidth).to.be.at.most(390)
+      const card = requiredElement(document, '[role="alertdialog"]')
+      const safe = requiredCardButton(card, '계속 일정 보기')
+      const danger = requiredCardButton(card, '일정 취소 확정')
+      expectContainedByCard(card, safe)
+      expectContainedByCard(card, danger)
+      expect(safe.getBoundingClientRect().bottom).to.be.at.most(danger.getBoundingClientRect().top)
+    })
+    cy.get('@cancellation').contains('button', '계속 일정 보기').click()
+    cy.get('[role="dialog"][aria-labelledby="schedule-detail-title"]').should('be.visible')
   })
 })

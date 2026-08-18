@@ -516,4 +516,99 @@ describe('ScheduleCalendar', () => {
     expect(within(edit).queryByRole('button', { name: '수정 취소' })).not.toBeInTheDocument()
     expect(within(edit).getByRole('button', { name: '수정 저장' })).toBeVisible()
   })
+
+  it('styles edit and cancellation confirmation actions by intent in responsive modal footers', async () => {
+    window.history.replaceState({}, '', '/?view=month&date=2024-02-29')
+    const user = userEvent.setup()
+    renderCalendar({
+      getSchedules: () => Promise.resolve([{ ...editableDetail }]),
+      getScheduleDetail: () => Promise.resolve(editableDetail),
+    })
+
+    await user.click(await screen.findByRole('button', { name: /수정할 개인 일정/ }))
+    await user.click(screen.getByRole('button', { name: '일정 수정' }))
+    const title = screen.getByLabelText('제목')
+    await user.type(title, ' 변경')
+    await user.click(screen.getByRole('button', { name: '닫기' }))
+
+    const discard = screen.getByRole('alertdialog', { name: '수정 내용을 버릴까요?' })
+    const discardClose = within(discard).getByRole('button', { name: '닫기' })
+    const continueEditing = within(discard).getByRole('button', { name: '계속 수정' })
+    const discardChanges = within(discard).getByRole('button', { name: '수정 취소하고 닫기' })
+    expect(screen.getByTestId('confirmation-dialog-overlay')).toHaveClass(
+      'fixed',
+      'inset-0',
+      'grid',
+      'place-items-center',
+    )
+    expect(discard).toHaveClass('relative', 'w-full', 'max-w-sm')
+    expect(discard).not.toHaveClass('inset-1/2')
+    expect(discardClose).toHaveClass('absolute', 'top-4', 'right-4', 'focus-visible:outline-3')
+    expect(discardClose).toHaveFocus()
+    expect(continueEditing).toHaveClass('border-border', 'bg-surface', 'sm:w-auto')
+    expect(discardChanges).toHaveClass('border-red-700', 'bg-red-700', 'sm:w-auto')
+    expect(continueEditing.parentElement).toHaveClass('sm:justify-end', 'flex-col-reverse')
+    await user.keyboard('{Tab}')
+    expect(continueEditing).toHaveFocus()
+    await user.keyboard('{Escape}')
+    expect(screen.getByRole('dialog', { name: '일정 수정' })).toBeVisible()
+
+    await user.click(screen.getByRole('button', { name: '닫기' }))
+    await user.click(screen.getByRole('button', { name: '수정 취소하고 닫기' }))
+    await user.click(screen.getByRole('button', { name: '일정 취소' }))
+
+    const cancellation = screen.getByRole('alertdialog', { name: '수정할 개인 일정 취소' })
+    const keepViewing = within(cancellation).getByRole('button', { name: '계속 일정 보기' })
+    const confirmCancellation = within(cancellation).getByRole('button', { name: '일정 취소 확정' })
+    const cancelClose = within(cancellation).getByRole('button', { name: '닫기' })
+    expect(cancelClose).toHaveClass('absolute', 'top-4', 'right-4', 'focus-visible:outline-3')
+    expect(cancelClose).toHaveFocus()
+    expect(keepViewing).toHaveClass('border-border', 'bg-surface', 'sm:w-auto')
+    expect(confirmCancellation).toHaveClass('border-red-700', 'bg-red-700', 'sm:w-auto')
+    expect(keepViewing.parentElement).toHaveClass('sm:justify-end', 'flex-col-reverse')
+    await user.keyboard('{Tab}')
+    expect(keepViewing).toHaveFocus()
+    await user.click(keepViewing)
+    expect(screen.getByRole('dialog', { name: '수정할 개인 일정' })).toBeVisible()
+  })
+
+  it('prevents duplicate save and cancellation requests while their modal actions are pending', async () => {
+    window.history.replaceState({}, '', '/?view=month&date=2024-02-29')
+    let resolveUpdate: ((detail: ScheduleDetail) => void) | undefined
+    let resolveCancellation: (() => void) | undefined
+    const updateSchedule = vi.fn(
+      () => new Promise<ScheduleDetail>((resolve) => (resolveUpdate = resolve)),
+    )
+    const cancelSchedule = vi.fn(
+      () => new Promise<void>((resolve) => (resolveCancellation = resolve)),
+    )
+    const user = userEvent.setup()
+    renderCalendar({
+      getSchedules: () => Promise.resolve([{ ...editableDetail }]),
+      getScheduleDetail: () => Promise.resolve(editableDetail),
+      updateSchedule,
+      cancelSchedule,
+    })
+
+    await user.click(await screen.findByRole('button', { name: /수정할 개인 일정/ }))
+    await user.click(screen.getByRole('button', { name: '일정 수정' }))
+    const save = screen.getByRole('button', { name: '수정 저장' })
+    await user.click(save)
+    expect(save).toBeDisabled()
+    expect(save).toHaveClass('disabled:opacity-70')
+    await user.click(save)
+    expect(updateSchedule).toHaveBeenCalledTimes(1)
+    resolveUpdate?.(editableDetail)
+    await screen.findByRole('dialog', { name: '수정할 개인 일정' })
+
+    await user.click(screen.getByRole('button', { name: '일정 취소' }))
+    const confirm = screen.getByRole('button', { name: '일정 취소 확정' })
+    await user.click(confirm)
+    expect(confirm).toBeDisabled()
+    expect(confirm).toHaveClass('disabled:opacity-70')
+    await user.click(confirm)
+    expect(cancelSchedule).toHaveBeenCalledTimes(1)
+    resolveCancellation?.()
+    expect(await screen.findByText('일정이 취소되었습니다.')).toBeVisible()
+  })
 })
