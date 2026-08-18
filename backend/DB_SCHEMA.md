@@ -214,9 +214,6 @@ Project와 User의 N:M Mapping이다.
 | `room_name`  | `VARCHAR(100)` | NOT NULL    | 회의실명                       |
 | `capacity`   | `BIGINT`       | NULL        | 수용 인원                      |
 | `location`   | `VARCHAR(255)` | NULL        | 위치                           |
-| `Field`      | `VARCHAR(255)` | NULL        | 장비 등 비정형 특성 예비 Field |
-| `created_at` | `DATETIME`     | DEFAULT NOW | 생성일시                       |
-| `updated_at` | `DATETIME`     | DEFAULT NOW | 수정일시                       |
 
 ### 5.2 `rooms_reservations`
 
@@ -228,14 +225,13 @@ Project와 User의 N:M Mapping이다.
 | `room_id`        | `BIGINT`       | FK, NOT NULL | 회의실 ID                |
 | `schedule_id`    | `BIGINT`       | FK, NOT NULL | 일정 ID                  |
 | `title`          | `VARCHAR(200)` | NOT NULL     | 예약 제목                |
-| `start_at`       | `DATETIME`     | NOT NULL     | 시작일시                 |
-| `end_at`         | `DATETIME`     | NOT NULL     | 종료일시                 |
-| `status`         | `VARCHAR(30)`  | NULL         | 대기·완료·취소 등        |
-| `cancelled_at`   | `DATETIME`     | NULL         | 취소일시                 |
-| `count`          | `INT`          | NULL         | 예상 인원                |
-| `Field`          | `VARCHAR(255)` | NULL         | 비고·특이사항 예비 Field |
-| `created_at`     | `DATETIME`     | DEFAULT NOW  | 생성일시                 |
-| `updated_at`     | `DATETIME`     | DEFAULT NOW  | 수정일시                 |
+| `start_at`       | `TIMESTAMP`    | NOT NULL     | 시작일시                 |
+| `end_at`         | `TIMESTAMP`    | NOT NULL     | 종료일시                 |
+| `status`         | `VARCHAR(30)`  | NOT NULL     | `RESERVED`, `CANCELED`   |
+
+`rooms_reservations`의 시간 구간은 `end_at > start_at`이어야 한다. `room_id`, `status`,
+`start_at`, `end_at`의 복합 Index로 활성 예약 중복 조회를 지원하고, `schedule_id` Index로
+연결 일정 여부 조회를 지원한다.
 
 ## 6. 기준선 관계 요약
 
