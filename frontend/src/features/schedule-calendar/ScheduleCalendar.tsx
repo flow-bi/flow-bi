@@ -33,7 +33,7 @@ import {
 const controlButtonClass =
   'rounded-lg border border-border bg-surface px-3 py-2 font-semibold text-text-primary transition hover:border-primary hover:bg-secondary focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-2'
 const activeControlButtonClass =
-  'rounded-lg border border-primary bg-primary px-3 py-2 font-semibold text-white transition focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-2'
+  'rounded-lg border border-primary bg-secondary px-3 py-2 font-semibold text-text-primary transition focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-2'
 const chipBaseClass =
   'mt-1 block w-full overflow-hidden rounded-md border px-2 py-1 text-left text-xs font-medium text-ellipsis whitespace-nowrap focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-1 sm:text-sm'
 const fieldClass =
@@ -707,25 +707,16 @@ export function ScheduleCalendar({
           </h1>
         </div>
         <div
-          className="flex flex-wrap items-center gap-2 sm:justify-end"
+          className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end"
           data-testid="calendar-header-actions"
         >
-          {onCreateSchedule && (
-            <button
-              className="rounded-lg bg-primary px-4 py-2 font-semibold text-white shadow-sm transition hover:bg-primary/90 focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-2"
-              onClick={onCreateSchedule}
-              type="button"
-            >
-              일정 추가
-            </button>
-          )}
           <div
-            aria-label="캘린더 보기 제어"
-            className="flex flex-wrap items-center gap-2 sm:justify-end"
-            data-testid="calendar-view-controls"
+            aria-label="기간 이동"
+            className="flex items-center gap-2"
+            data-testid="calendar-period-controls"
+            role="group"
           >
             <button
-              aria-label="이전 기간"
               onClick={() =>
                 setUrlState({ ...state, date: navigateDate(state.view, state.date, -1) })
               }
@@ -734,6 +725,29 @@ export function ScheduleCalendar({
             >
               이전
             </button>
+            <button
+              className={controlButtonClass}
+              onClick={() => setUrlState({ ...state, date: dateValue(now()) })}
+              type="button"
+            >
+              오늘
+            </button>
+            <button
+              onClick={() =>
+                setUrlState({ ...state, date: navigateDate(state.view, state.date, 1) })
+              }
+              className={controlButtonClass}
+              type="button"
+            >
+              다음
+            </button>
+          </div>
+          <div
+            aria-label="보기 선택"
+            className="flex flex-wrap items-center gap-2"
+            data-testid="calendar-view-controls"
+            role="group"
+          >
             {(['month', 'week', 'day'] as const).map((view) => (
               <button
                 aria-pressed={state.view === view}
@@ -745,17 +759,17 @@ export function ScheduleCalendar({
                 {view === 'month' ? '월간 보기' : view === 'week' ? '주간 보기' : '일간 보기'}
               </button>
             ))}
+          </div>
+          {onCreateSchedule && (
             <button
-              aria-label="다음 기간"
-              onClick={() =>
-                setUrlState({ ...state, date: navigateDate(state.view, state.date, 1) })
-              }
-              className={controlButtonClass}
+              className="ml-auto rounded-lg bg-primary px-4 py-2 font-semibold text-white shadow-sm transition hover:bg-primary/90 focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-2"
+              data-testid="calendar-create-action"
+              onClick={onCreateSchedule}
               type="button"
             >
-              다음
+              일정 추가
             </button>
-          </div>
+          )}
         </div>
       </header>
       {schedulesQuery.isLoading && (
