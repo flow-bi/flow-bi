@@ -1,4 +1,11 @@
-package com.flowbi.domain.schedule;
+package com.flowbi.domain.schedule.controller;
+
+import com.flowbi.domain.schedule.audit.*;
+import com.flowbi.domain.schedule.dto.*;
+import com.flowbi.domain.schedule.entity.*;
+import com.flowbi.domain.schedule.exception.*;
+import com.flowbi.domain.schedule.repository.*;
+import com.flowbi.domain.schedule.service.*;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
