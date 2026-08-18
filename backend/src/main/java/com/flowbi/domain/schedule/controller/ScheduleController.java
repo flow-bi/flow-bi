@@ -8,6 +8,7 @@ import com.flowbi.domain.schedule.repository.*;
 import com.flowbi.domain.schedule.service.*;
 
 import com.flowbi.domain.auth.security.LoginPrincipal;
+import io.swagger.v3.oas.annotations.Operation;
 import java.net.URI;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -45,6 +46,7 @@ class ScheduleController {
     this.identityService = identityService;
   }
 
+  @Operation(summary = "기간별 일정 조회")
   @GetMapping
   List<ScheduleListItem> list(@RequestParam OffsetDateTime from,@RequestParam OffsetDateTime to,
       Authentication authentication) {
@@ -52,17 +54,20 @@ class ScheduleController {
     return queryService.query(ScheduleQuery.of(actorId,from,to));
   }
 
+  @Operation(summary = "일정 상세 조회")
   @GetMapping("/{scheduleId}")
   ScheduleDetailResponse detail(@PathVariable long scheduleId,Authentication authentication) {
     return detailService.find(actorId(authentication),scheduleId);
   }
 
+  @Operation(summary = "일정 참석자 후보 검색")
   @GetMapping("/attendee-candidates")
   AttendeeCandidates attendees(@RequestParam String query,Authentication authentication) {
     actorId(authentication);
     return new AttendeeCandidates(identityService.searchActiveUsers(query));
   }
 
+  @Operation(summary = "일정 생성")
   @PostMapping
   ResponseEntity<ScheduleDetailResponse> create(@RequestBody ScheduleWriteRequest request,
       Authentication authentication) {
@@ -72,6 +77,7 @@ class ScheduleController {
         .body(detailService.find(actorId,schedule.getId()));
   }
 
+  @Operation(summary = "일정 수정")
   @PutMapping("/{scheduleId}")
   ScheduleDetailResponse update(@PathVariable long scheduleId,
       @RequestBody ScheduleWriteRequest request,Authentication authentication) {
@@ -80,6 +86,7 @@ class ScheduleController {
     return detailService.find(actorId,scheduleId);
   }
 
+  @Operation(summary = "일정 취소")
   @DeleteMapping("/{scheduleId}")
   ResponseEntity<Void> cancel(@PathVariable long scheduleId,Authentication authentication) {
     cancelService.cancel(actorId(authentication),scheduleId);
