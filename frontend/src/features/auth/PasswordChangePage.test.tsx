@@ -79,4 +79,52 @@ describe('PasswordChangePage', () => {
     expect(onSessionExpired).toHaveBeenCalledOnce()
     expect(screen.getByLabelText('새 비밀번호')).toHaveValue('')
   })
+
+  it('logs out from the forced password-change screen and clears sensitive inputs', async () => {
+    const logout = vi.fn().mockResolvedValue(undefined)
+    const onLoggedOut = vi.fn()
+    const user = userEvent.setup()
+    render(
+      <PasswordChangePage
+        changePassword={vi.fn()}
+        logout={logout}
+        onCompleted={vi.fn()}
+        onLoggedOut={onLoggedOut}
+      />,
+    )
+
+    await user.type(screen.getByLabelText('새 비밀번호'), validPassword)
+    await user.tab()
+    await user.tab()
+    await user.tab()
+    expect(screen.getByRole('button', { name: '로그아웃' })).toHaveFocus()
+    await user.keyboard('{Enter}')
+
+    expect(logout).toHaveBeenCalledOnce()
+    expect(onLoggedOut).toHaveBeenCalledOnce()
+    expect(screen.getByLabelText('새 비밀번호')).toHaveValue('')
+  })
+
+  it('prevents duplicate logout requests and focuses a recoverable logout error', async () => {
+    let rejectLogout: ((error: LoginApiError) => void) | undefined
+    const logout = vi.fn(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectLogout = reject
+        }),
+    )
+    const user = userEvent.setup()
+    render(<PasswordChangePage changePassword={vi.fn()} logout={logout} onCompleted={vi.fn()} />)
+
+    await user.dblClick(screen.getByRole('button', { name: '로그아웃' }))
+
+    expect(logout).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: '로그아웃 중' })).toBeDisabled()
+    rejectLogout?.(new LoginApiError(503))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('로그아웃할 수 없습니다. 잠시 후 다시 시도해 주세요.')
+    expect(alert).toHaveFocus()
+    expect(screen.getByRole('button', { name: '로그아웃' })).toBeEnabled()
+  })
 })

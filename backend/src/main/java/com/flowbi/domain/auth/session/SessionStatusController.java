@@ -1,6 +1,6 @@
 package com.flowbi.domain.auth.session;
 
-import com.flowbi.domain.auth.login.LoginPrincipal;
+import com.flowbi.domain.auth.security.LoginPrincipal;
 import java.util.Map;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;

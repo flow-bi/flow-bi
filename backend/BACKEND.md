@@ -109,7 +109,7 @@ backend/src/
 - Spring Boot 3.5.7 WebMVC의 OpenAPI 문서는 `springdoc-openapi-starter-webmvc-ui:2.8.17`로 자동 생성한다.
 - 공통 metadata의 API 제목은 `Flow BI API`, 버전은 애플리케이션 빌드 버전을 사용한다.
 - 기본 프로필에서는 OpenAPI JSON과 Swagger UI를 비활성화한다.
-- `local`·`harness` 프로필에서만 `/v3/api-docs`와 `/swagger-ui.html`을 활성화한다.
+- `local`·`harness` 프로필에서만 `/v3/api-docs`와 `/swagger-ui.html`을 활성화하고 인증 없이 접근하도록 허용한다.
 - OpenAPI JSON 형식과 공통 metadata, Swagger UI 진입점 및 기본 프로필 비노출 정책은 MockMvc 계약 테스트로 검증한다.
 
 ## 8. Redis와 외부 시스템

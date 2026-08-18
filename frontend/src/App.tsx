@@ -1,14 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { type ReactNode, type RefObject, useEffect, useRef, useState } from 'react'
+import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from 'react'
 
-import { LoginApiError, getSession, logout } from './features/auth/api'
+import { getSession, logout, type LoginResult, type SessionResult } from './features/auth/api'
 import { LoginPage } from './features/auth/LoginPage'
 import { PasswordChangePage } from './features/auth/PasswordChangePage'
 import { onUnauthenticated } from './features/authenticatedFetch'
 import { ScheduleCalendar } from './features/schedule-calendar/ScheduleCalendar'
 import { ScheduleCreateModal } from './features/schedule-create/ScheduleCreateModal'
-
-type Destination = 'login' | 'password-change' | 'home' | 'session-unavailable'
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
 
@@ -53,15 +51,13 @@ function Header({
       >
         메뉴
       </button>
-      <p className="m-0 justify-self-start font-bold">{companyName}</p>
+      <h1 className="m-0 justify-self-start font-bold">{companyName}</h1>
       <p className="m-0 justify-self-end text-text-secondary">{userName}</p>
     </header>
   )
 }
 
-type SidebarProps = {
-  children: ReactNode
-}
+type SidebarProps = { children: ReactNode }
 
 function Sidebar({ children }: SidebarProps) {
   return (
@@ -74,17 +70,13 @@ function Sidebar({ children }: SidebarProps) {
   )
 }
 
-type MobileSidebarProps = SidebarProps & {
-  onClose: () => void
-}
+type MobileSidebarProps = SidebarProps & { onClose: () => void }
 
 function MobileSidebar({ children, onClose }: MobileSidebarProps) {
   const closeButtonRef = useRef<HTMLButtonElement>(null)
-
   useEffect(() => {
     closeButtonRef.current?.focus()
   }, [])
-
   return (
     <div
       className="fixed inset-0 z-10 flex bg-text-primary/35 md:hidden"
@@ -129,7 +121,6 @@ type AppShellProps = {
 function AppShell({ sidebar, children }: AppShellProps) {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const openSidebarButtonRef = useRef<HTMLButtonElement>(null)
-
   const closeMobileSidebar = () => {
     setIsMobileSidebarOpen(false)
     openSidebarButtonRef.current?.focus()
@@ -172,10 +163,38 @@ function AppShell({ sidebar, children }: AppShellProps) {
   )
 }
 
-function App() {
-  const [destination, setDestination] = useState<Destination>()
+type AuthenticationState =
+  | { kind: 'loading' }
+  | { kind: 'error' }
+  | { kind: 'anonymous' }
+  | { kind: 'authenticated'; session: SessionResult }
+type AllowedPath = '/' | '/login' | '/password-change'
+
+function allowedPath(session: SessionResult | undefined): AllowedPath {
+  if (session === undefined) {
+    return '/login'
+  }
+  return session.mustChangePassword ? '/password-change' : '/'
+}
+
+function currentPath(): string {
+  return window.location.pathname
+}
+
+function navigate(path: AllowedPath, replace = false) {
+  if (currentPath() !== path) {
+    window.history[replace ? 'replaceState' : 'pushState']({}, '', path)
+  }
+}
+
+type AuthenticatedAppProps = {
+  onLoggedOut: () => void
+}
+
+function AuthenticatedApp({ onLoggedOut }: AuthenticatedAppProps) {
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [locationSearch, setLocationSearch] = useState(() => window.location.search)
+  const mainHeadingRef = useRef<HTMLHeadingElement>(null)
   const isCalendarRoute = new URLSearchParams(locationSearch).has('view')
 
   const navigateToCalendar = () => {
@@ -185,10 +204,7 @@ function App() {
   }
 
   useEffect(() => {
-    return onUnauthenticated(() => {
-      queryClient.clear()
-      setDestination('login')
-    })
+    mainHeadingRef.current?.focus()
   }, [])
 
   useEffect(() => {
@@ -197,96 +213,141 @@ function App() {
     return () => window.removeEventListener('popstate', updateLocation)
   }, [])
 
-  useEffect(() => {
-    void getSession()
-      .then(({ mustChangePassword }) =>
-        setDestination(mustChangePassword ? 'password-change' : 'home'),
-      )
-      .catch((error: unknown) =>
-        setDestination(
-          error instanceof LoginApiError && error.status === 503 ? 'session-unavailable' : 'login',
-        ),
-      )
-  }, [])
-
   async function handleLogout() {
     setIsLoggingOut(true)
     try {
       await logout()
+      queryClient.clear()
+      onLoggedOut()
     } finally {
-      setDestination('login')
       setIsLoggingOut(false)
     }
   }
 
-  let content: ReactNode
-  if (destination === undefined) {
-    content = <p aria-busy="true">인증 상태를 확인하고 있습니다.</p>
-  } else if (destination === 'password-change') {
-    content = (
-      <PasswordChangePage
-        onCompleted={() => setDestination('home')}
-        onSessionExpired={() => setDestination('login')}
-      />
-    )
-  } else if (destination === 'home') {
-    content = (
-      <QueryClientProvider client={queryClient}>
-        <h1>Flow BI</h1>
+  const sidebar = (onNavigate: () => void) => (
+    <a
+      aria-current={isCalendarRoute ? 'page' : undefined}
+      aria-label="캘린더"
+      className={
+        isCalendarRoute
+          ? 'flex items-center justify-between gap-2 rounded-md border-l-4 border-primary bg-secondary px-3 py-2.5 font-bold text-text-primary no-underline hover:bg-secondary [&>span]:text-xs [&>span]:font-normal [&>span]:text-text-secondary'
+          : 'flex items-center justify-between gap-2 rounded-md px-3 py-2.5 text-text-primary no-underline hover:bg-secondary'
+      }
+      href="?view=month"
+      onClick={(event) => {
+        event.preventDefault()
+        navigateToCalendar()
+        onNavigate()
+      }}
+    >
+      캘린더
+      {isCalendarRoute && <span aria-hidden="true">현재 위치</span>}
+    </a>
+  )
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AppShell sidebar={sidebar}>
+        <h1 ref={mainHeadingRef} tabIndex={-1}>
+          콘텐츠
+        </h1>
         <p>로그인되었습니다.</p>
         <button disabled={isLoggingOut} onClick={() => void handleLogout()} type="button">
           {isLoggingOut ? '로그아웃 중' : '로그아웃'}
         </button>
         {isCalendarRoute && <CalendarStarter />}
-      </QueryClientProvider>
+      </AppShell>
+    </QueryClientProvider>
+  )
+}
+
+function App() {
+  const [authentication, setAuthentication] = useState<AuthenticationState>({ kind: 'loading' })
+
+  const onSessionExpired = useCallback(() => {
+    queryClient.clear()
+    setAuthentication({ kind: 'anonymous' })
+    navigate('/login', true)
+  }, [])
+
+  const bootstrap = useCallback(async () => {
+    setAuthentication({ kind: 'loading' })
+    try {
+      const session = await getSession()
+      setAuthentication({ kind: 'authenticated', session })
+      navigate(allowedPath(session), true)
+    } catch (error: unknown) {
+      const status = error instanceof Error && 'status' in error ? error.status : undefined
+      if (status === 401) {
+        setAuthentication({ kind: 'anonymous' })
+        navigate('/login', true)
+        return
+      }
+      setAuthentication({ kind: 'error' })
+    }
+  }, [])
+
+  useEffect(() => {
+    void Promise.resolve().then(bootstrap)
+  }, [bootstrap])
+  useEffect(() => onUnauthenticated(onSessionExpired), [onSessionExpired])
+  useEffect(() => {
+    const onPopState = () => {
+      window.setTimeout(() => {
+        void bootstrap()
+      }, 0)
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [bootstrap])
+  const onAuthenticated = (result: LoginResult) => {
+    const session: SessionResult = {
+      authenticated: true,
+      mustChangePassword: result.mustChangePassword,
+    }
+    setAuthentication({ kind: 'authenticated', session })
+    navigate(allowedPath(session))
+  }
+  const onPasswordCompleted = () => {
+    setAuthentication({
+      kind: 'authenticated',
+      session: { authenticated: true, mustChangePassword: false },
+    })
+    navigate('/')
+  }
+  if (authentication.kind === 'loading') {
+    return (
+      <main aria-busy="true" aria-live="polite" className="auth-status">
+        <h1 tabIndex={-1}>인증 상태를 확인하는 중입니다</h1>
+      </main>
     )
-  } else if (destination === 'session-unavailable') {
-    content = (
-      <>
-        <h1>인증 상태를 확인할 수 없습니다</h1>
-        <p>잠시 후 페이지를 새로고침해 주세요.</p>
-      </>
+  }
+  if (authentication.kind === 'error') {
+    return (
+      <main aria-live="assertive" className="auth-status">
+        <h1 tabIndex={-1}>인증 상태를 확인할 수 없습니다</h1>
+        <p>잠시 후 다시 시도해 주세요.</p>
+        <button autoFocus onClick={() => void bootstrap()} type="button">
+          다시 시도
+        </button>
+      </main>
     )
-  } else {
-    content = (
-      <LoginPage
-        onAuthenticated={({ mustChangePassword }) =>
-          setDestination(mustChangePassword ? 'password-change' : 'home')
-        }
+  }
+  if (authentication.kind === 'anonymous') {
+    return <LoginPage onAuthenticated={onAuthenticated} />
+  }
+  if (authentication.session.mustChangePassword) {
+    return (
+      <PasswordChangePage
+        logout={logout}
+        onCompleted={onPasswordCompleted}
+        onLoggedOut={onSessionExpired}
+        onSessionExpired={onSessionExpired}
       />
     )
   }
 
-  const sidebar = (onNavigate: () => void) =>
-    destination === 'home' ? (
-      <a
-        aria-current={isCalendarRoute ? 'page' : undefined}
-        aria-label="캘린더"
-        className={
-          isCalendarRoute
-            ? 'flex items-center justify-between gap-2 rounded-md border-l-4 border-primary bg-secondary px-3 py-2.5 font-bold text-text-primary no-underline hover:bg-secondary [&>span]:text-xs [&>span]:font-normal [&>span]:text-text-secondary'
-            : 'flex items-center justify-between gap-2 rounded-md px-3 py-2.5 text-text-primary no-underline hover:bg-secondary'
-        }
-        href="?view=month"
-        onClick={(event) => {
-          event.preventDefault()
-          navigateToCalendar()
-          onNavigate()
-        }}
-      >
-        캘린더
-        {isCalendarRoute && <span aria-hidden="true">현재 위치</span>}
-      </a>
-    ) : (
-      <p className="text-text-secondary">메뉴는 준비 중입니다.</p>
-    )
-
-  return (
-    <AppShell sidebar={sidebar}>
-      <h1>콘텐츠</h1>
-      {content}
-    </AppShell>
-  )
+  return <AuthenticatedApp onLoggedOut={onSessionExpired} />
 }
 
 export default App

@@ -1,7 +1,7 @@
 package com.flowbi.domain.auth.password;
 
+import com.flowbi.domain.auth.security.LoginPrincipal;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.flowbi.domain.auth.login.LoginPrincipal;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -19,6 +19,11 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 @Component
 public class MustChangePasswordFilter extends OncePerRequestFilter {
+
+  private static final String CSRF_PATH = "/api/auth/csrf";
+  private static final String SESSION_PATH = "/api/auth/session";
+  private static final String PASSWORD_PATH = "/api/auth/password";
+  private static final String LOGOUT_PATH = "/api/auth/logout";
 
   private final ObjectMapper objectMapper;
 
@@ -44,8 +49,12 @@ public class MustChangePasswordFilter extends OncePerRequestFilter {
   private boolean isAllowed(HttpServletRequest request) {
     String method = request.getMethod();
     String requestUri = request.getRequestURI();
-    return HttpMethod.GET.matches(method) && "/api/auth/session".equals(requestUri)
-        || HttpMethod.PUT.matches(method) && "/api/auth/password".equals(requestUri)
-        || HttpMethod.POST.matches(method) && "/api/auth/logout".equals(requestUri);
+    if (HttpMethod.GET.matches(method)) {
+      return CSRF_PATH.equals(requestUri) || SESSION_PATH.equals(requestUri);
+    }
+    if (HttpMethod.PUT.matches(method)) {
+      return PASSWORD_PATH.equals(requestUri);
+    }
+    return HttpMethod.POST.matches(method) && LOGOUT_PATH.equals(requestUri);
   }
 }

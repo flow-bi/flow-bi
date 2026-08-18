@@ -1,10 +1,12 @@
 package com.flowbi.domain.auth.login;
 
-import com.flowbi.domain.auth.persistence.entity.AuthUser;
-import com.flowbi.domain.auth.persistence.entity.UserCredential;
-import com.flowbi.domain.auth.persistence.repository.AuthUserRepository;
-import com.flowbi.domain.auth.persistence.repository.UserCredentialRepository;
+import com.flowbi.domain.auth.credential.UserCredential;
+import com.flowbi.domain.auth.audit.LoginAuditLogger;
+import com.flowbi.domain.auth.login.ratelimit.LoginRateLimiter;
 import com.flowbi.domain.auth.session.SessionGenerationService;
+import com.flowbi.domain.auth.credential.UserCredentialRepository;
+import com.flowbi.domain.user.service.UserAuthentication;
+import com.flowbi.domain.user.service.UserService;
 import java.util.Optional;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -12,14 +14,14 @@ import org.springframework.stereotype.Service;
 @Service
 public class LoginAuthenticationService {
   private static final String DUMMY_HASH = "$2a$10$7EqJtq98hPqEX7fNZaFWoO6SIbA.mTWR9DYLlf4rU0nAHBSpglkVG";
-  private final AuthUserRepository users;
+  private final UserService users;
   private final UserCredentialRepository credentials;
   private final PasswordEncoder passwordEncoder;
   private final LoginRateLimiter rateLimiter;
   private final LoginAuditLogger audit;
   private final SessionGenerationService generations;
 
-  public LoginAuthenticationService(AuthUserRepository users, UserCredentialRepository credentials,
+  public LoginAuthenticationService(UserService users, UserCredentialRepository credentials,
       PasswordEncoder passwordEncoder, LoginRateLimiter rateLimiter, LoginAuditLogger audit,
       SessionGenerationService generations) {
     this.users = users;
@@ -38,27 +40,44 @@ public class LoginAuthenticationService {
         audit.rateLimited(masked,null);
         return LoginResult.rateLimited();
       }
-      Optional<AuthUser> user = users.findByEmployeeNumber(employeeNumber);
+
+      Optional<UserAuthentication> user = users.findAuthenticationByEmployeeNumber(employeeNumber);
       Optional<UserCredential> credential = user
-          .flatMap(value -> credentials.findByUserUserId(value.getUserId()));
-      boolean valid = passwordEncoder.matches(password,
-          credential.map(UserCredential::getPasswordHash).orElse(DUMMY_HASH));
-      if (user.isEmpty() || credential.isEmpty() || !valid
-          || !"ACTIVE".equals(user.get().getStatus())) {
+          .flatMap(value -> credentials.findByUserUserId(value.userId()));
+      String passwordHash = credential.map(UserCredential::getPasswordHash).orElse(DUMMY_HASH);
+
+      boolean passwordMatches = matchesPassword(password,passwordHash);
+
+      if (user.isEmpty() || credential.isEmpty() || !passwordMatches
+          || !isActive(user.orElseThrow())) {
         rateLimiter.recordFailure(employeeNumber,source);
         audit.failure(masked,null);
         return LoginResult.invalidCredentials();
       }
+
+      UserAuthentication authenticatedUser = user.orElseThrow();
+      UserCredential authenticatedCredential = credential.orElseThrow();
+      String userId = String.valueOf(authenticatedUser.userId());
+
       rateLimiter.reset(employeeNumber,source);
-      long generation = generations.generationForNewSession(String.valueOf(user.get().getUserId()),
-          hasExistingSessions);
+
+      long generation = generations.resolveGenerationForNewSession(userId,hasExistingSessions);
       audit.success(masked,null);
-      return LoginResult.success(new AuthenticatedLogin(String.valueOf(user.get().getUserId()),
-          credential.get().isMustChangePassword(), generation));
+
+      return LoginResult.success(new AuthenticatedLogin(userId,
+          authenticatedCredential.isMustChangePassword(), generation));
     } catch (RuntimeException exception) {
       audit.dependencyUnavailable(masked,null);
       throw new AuthenticationDependencyUnavailableException(exception);
     }
+  }
+
+  private boolean matchesPassword(String password,String passwordHash) {
+    return passwordEncoder.matches(password,passwordHash);
+  }
+
+  private boolean isActive(UserAuthentication user) {
+    return "ACTIVE".equals(user.status());
   }
 
   private String mask(String employeeNumber) {

@@ -1,7 +1,8 @@
 package com.flowbi.domain.auth.password;
 
-import com.flowbi.domain.auth.persistence.entity.UserCredential;
-import com.flowbi.domain.auth.persistence.repository.UserCredentialRepository;
+import com.flowbi.domain.auth.credential.UserCredential;
+import com.flowbi.domain.auth.audit.PasswordChangeAuditLogger;
+import com.flowbi.domain.auth.credential.UserCredentialRepository;
 import com.flowbi.domain.auth.session.SessionGenerationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;

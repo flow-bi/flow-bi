@@ -1,4 +1,11 @@
 describe('global application layout', () => {
+  beforeEach(() => {
+    cy.intercept('GET', '/api/auth/session', {
+      body: { authenticated: true, mustChangePassword: false },
+      statusCode: 200,
+    })
+  })
+
   function interceptAuthenticatedCalendar() {
     cy.intercept('GET', '/api/auth/session', { authenticated: true, mustChangePassword: false }).as(
       'session',

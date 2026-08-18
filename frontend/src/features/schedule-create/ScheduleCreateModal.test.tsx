@@ -145,7 +145,7 @@ describe('ScheduleCreateModal', () => {
       'sm:w-auto',
     )
     expect(screen.getByTestId('confirmation-dialog-footer')).toHaveClass(
-      'flex-col-reverse',
+      'flex-col',
       'sm:flex-row',
       'sm:justify-end',
     )

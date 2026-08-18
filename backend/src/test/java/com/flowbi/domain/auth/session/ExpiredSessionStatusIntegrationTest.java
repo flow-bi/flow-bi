@@ -6,8 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.flowbi.domain.auth.login.LoginPrincipal;
-import com.flowbi.domain.auth.security.AbsoluteSessionTimeoutFilter;
+import com.flowbi.domain.auth.security.LoginPrincipal;
 import com.flowbi.domain.auth.security.CsrfTokenController;
 import com.flowbi.domain.auth.security.SecurityConfiguration;
 import org.junit.jupiter.api.Test;

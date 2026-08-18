@@ -1,4 +1,5 @@
 package com.flowbi.domain.auth.password;
+import com.flowbi.domain.auth.security.LoginPrincipal;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -8,10 +9,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 
-import com.flowbi.domain.auth.login.LoginPrincipal;
-import com.flowbi.domain.auth.security.SecurityConfiguration;
-import com.flowbi.domain.auth.security.AbsoluteSessionTimeoutFilter;
 import com.flowbi.domain.auth.security.CsrfTokenController;
+import com.flowbi.domain.auth.security.SecurityConfiguration;
+import com.flowbi.domain.auth.session.AbsoluteSessionTimeoutFilter;
 import com.flowbi.domain.auth.session.SessionGenerationService;
 import com.flowbi.domain.auth.session.SessionGenerationValidationFilter;
 import org.junit.jupiter.api.Test;
@@ -34,18 +34,35 @@ class MustChangePasswordFilterTest {
   private SessionGenerationService generations;
 
   @Test
-  void blocksGeneralEndpointsButAllowsPasswordChangeAndLogoutForTemporaryPasswordUsers()
-      throws Exception {
+  void allowsOnlyPasswordChangeFlowEndpointsForTemporaryPasswordUsers() throws Exception {
     LoginPrincipal principal = new LoginPrincipal("42", true);
     MockHttpSession session = new MockHttpSession();
     session.setAttribute(SessionGenerationService.AUTH_GENERATION_ATTRIBUTE,0L);
 
+    mockMvc.perform(get("/api/password-test/general")).andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
     mockMvc.perform(get("/api/password-test/general").with(user(principal)).session(session))
         .andExpect(status().isForbidden())
         .andExpect(jsonPath("$.code").value("PASSWORD_CHANGE_REQUIRED"));
+    mockMvc.perform(get("/api/auth/csrf").with(user(principal)).session(session))
+        .andExpect(status().isOk());
+    mockMvc.perform(get("/api/auth/session").with(user(principal)).session(session))
+        .andExpect(status().isNotFound());
     mockMvc.perform(put("/api/auth/password").with(user(principal)).session(session).with(csrf()))
         .andExpect(status().isNotFound());
     mockMvc.perform(post("/api/auth/logout").with(user(principal)).session(session).with(csrf()))
         .andExpect(status().isNotFound());
+    mockMvc.perform(post("/api/auth/csrf").with(user(principal)).session(session).with(csrf()))
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.code").value("PASSWORD_CHANGE_REQUIRED"));
+    mockMvc.perform(put("/api/auth/session").with(user(principal)).session(session).with(csrf()))
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.code").value("PASSWORD_CHANGE_REQUIRED"));
+    mockMvc.perform(post("/api/auth/password").with(user(principal)).session(session).with(csrf()))
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.code").value("PASSWORD_CHANGE_REQUIRED"));
+    mockMvc.perform(get("/api/auth/logout").with(user(principal)).session(session))
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.code").value("PASSWORD_CHANGE_REQUIRED"));
   }
 }

@@ -1,7 +1,7 @@
 package com.flowbi.domain.auth.password;
 
-import com.flowbi.domain.auth.login.LoginPrincipal;
 import com.flowbi.domain.auth.session.SessionGenerationService;
+import com.flowbi.domain.auth.security.LoginPrincipal;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
@@ -44,6 +44,7 @@ public class InitialPasswordChangeController {
     if (session == null) {
       throw new PasswordChangeDependencyUnavailableException(new IllegalStateException());
     }
+
     long generation = passwordChangeService.change(principal.userId(),session.getId(),
         request.newPassword(),request.confirmation());
     session.setAttribute(SessionGenerationService.AUTH_GENERATION_ATTRIBUTE,generation);
@@ -54,6 +55,7 @@ public class InitialPasswordChangeController {
     SecurityContextHolder.setContext(context);
     contextRepository.saveContext(context,servletRequest,response);
     passwordChangeService.complete(principal.userId(),session.getId());
+
     return ResponseEntity.ok(Map.of("mustChangePassword",false));
   }
 

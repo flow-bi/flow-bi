@@ -28,6 +28,7 @@ describe('Calendar session boundary', () => {
     ).toBeInTheDocument()
     unmount()
 
+    window.history.replaceState({}, '', '/?view=month&date=2026-08-10')
     fetchMock
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ authenticated: true, mustChangePassword: false }), {

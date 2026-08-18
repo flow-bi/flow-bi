@@ -1,10 +1,11 @@
 package com.flowbi.domain.auth.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.flowbi.domain.auth.logout.LogoutHandler;
-import com.flowbi.domain.auth.logout.LogoutSuccessHandler;
-import com.flowbi.domain.auth.session.SessionGenerationValidationFilter;
 import com.flowbi.domain.auth.password.MustChangePasswordFilter;
+import com.flowbi.domain.auth.session.AbsoluteSessionTimeoutFilter;
+import com.flowbi.domain.auth.session.LogoutHandler;
+import com.flowbi.domain.auth.session.LogoutSuccessHandler;
+import com.flowbi.domain.auth.session.SessionGenerationValidationFilter;
 import java.util.List;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.beans.factory.ObjectProvider;
@@ -15,6 +16,8 @@ import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
@@ -32,12 +35,18 @@ public class SecurityConfiguration {
   private static final String CSRF_HEADER_NAME = "X-XSRF-TOKEN";
 
   @Bean
+  PasswordEncoder passwordEncoder() {
+    return new BCryptPasswordEncoder();
+  }
+
+  @Bean
   SecurityFilterChain securityFilterChain(HttpSecurity http,ObjectMapper objectMapper,
       AbsoluteSessionTimeoutFilter absoluteSessionTimeoutFilter,
       ObjectProvider<SessionGenerationValidationFilter> sessionGenerationValidationFilter,
       ObjectProvider<MustChangePasswordFilter> mustChangePasswordFilter,
       ObjectProvider<LogoutHandler> logoutHandlerProvider,
       ObjectProvider<LogoutSuccessHandler> logoutSuccessHandlerProvider) throws Exception {
+
     CookieCsrfTokenRepository csrfTokenRepository = CookieCsrfTokenRepository.withHttpOnlyFalse();
     csrfTokenRepository.setCookieName(CSRF_COOKIE_NAME);
     csrfTokenRepository.setHeaderName(CSRF_HEADER_NAME);
@@ -52,10 +61,16 @@ public class SecurityConfiguration {
         .sessionManagement(
             session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
                 .sessionFixation(fixation -> fixation.changeSessionId()))
-        .authorizeHttpRequests(
-            authorize -> authorize.requestMatchers(HttpMethod.POST,"/api/auth/login").permitAll()
-                .requestMatchers(HttpMethod.GET,"/api/auth/csrf").permitAll().anyRequest()
-                .authenticated())
+        .authorizeHttpRequests(authorize -> authorize
+            .requestMatchers(HttpMethod.POST,"/api/auth/login","/api/dev/auth/employee-accounts")
+            .permitAll()
+
+            .requestMatchers(HttpMethod.GET,"/api/auth/csrf",
+                "/api/dev/auth/employee-account-options")
+            .permitAll()
+            .requestMatchers(HttpMethod.GET,"/v3/api-docs/**","/swagger-ui.html","/swagger-ui/**")
+            .permitAll().anyRequest().authenticated())
+
         .exceptionHandling(exception -> exception
             .authenticationEntryPoint(new JsonAuthenticationEntryPoint(objectMapper))
             .accessDeniedHandler(new JsonAccessDeniedHandler(objectMapper)))

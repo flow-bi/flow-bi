@@ -42,8 +42,8 @@ public class SessionGenerationValidationFilter extends OncePerRequestFilter {
     }
 
     try {
-      sessionGenerationService.verify(authentication.getName(),((Number) generation).longValue(),
-          session.getId());
+      sessionGenerationService.verifySession(authentication.getName(),
+          ((Number) generation).longValue(),session.getId());
     } catch (SessionGenerationValidationException exception) {
       SecurityContextHolder.clearContext();
       rejectUnauthenticated(response);

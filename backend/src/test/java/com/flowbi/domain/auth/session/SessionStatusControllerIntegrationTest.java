@@ -9,10 +9,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.flowbi.domain.auth.login.LoginPrincipal;
-import com.flowbi.domain.auth.password.MustChangePasswordFilter;
-import com.flowbi.domain.auth.security.AbsoluteSessionTimeoutFilter;
+import com.flowbi.domain.auth.security.LoginPrincipal;
 import com.flowbi.domain.auth.security.CsrfTokenController;
+import com.flowbi.domain.auth.password.MustChangePasswordFilter;
 import com.flowbi.domain.auth.security.SecurityConfiguration;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -64,7 +63,7 @@ class SessionStatusControllerIntegrationTest {
   @Test
   void rejectsGenerationMismatchAsUnauthenticated() throws Exception {
     doThrow(new SessionGenerationValidationException()).when(sessionGenerationService)
-        .verify(eq("42"),eq(0L),anyString());
+        .verifySession(eq("42"),eq(0L),anyString());
 
     mockMvc.perform(authenticatedSession(new LoginPrincipal("42", false)))
         .andExpect(status().isUnauthorized()).andExpect(header().string("Cache-Control","no-store"))
@@ -74,7 +73,7 @@ class SessionStatusControllerIntegrationTest {
   @Test
   void failsClosedWhenTheSessionStoreIsUnavailable() throws Exception {
     doThrow(new SessionGenerationStoreUnavailableException("unavailable", null))
-        .when(sessionGenerationService).verify(eq("42"),eq(0L),anyString());
+        .when(sessionGenerationService).verifySession(eq("42"),eq(0L),anyString());
 
     mockMvc.perform(authenticatedSession(new LoginPrincipal("42", false)))
         .andExpect(status().isServiceUnavailable())

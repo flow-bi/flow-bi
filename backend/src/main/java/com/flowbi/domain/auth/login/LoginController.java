@@ -1,6 +1,7 @@
 package com.flowbi.domain.auth.login;
 
 import com.flowbi.domain.auth.session.SessionGenerationService;
+import com.flowbi.domain.auth.security.LoginPrincipal;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
@@ -34,24 +35,31 @@ public class LoginController {
       HttpServletResponse response) {
     LoginResult result = authenticationService.authenticate(login.employeeNumber(),login.password(),
         source(request),false);
+
     if (result.status() == LoginResult.Status.RATE_LIMITED)
       return error(HttpStatus.TOO_MANY_REQUESTS,"LOGIN_RATE_LIMITED",
           "Login is temporarily unavailable.");
+
     if (result.status() == LoginResult.Status.INVALID_CREDENTIALS)
       return error(HttpStatus.UNAUTHORIZED,"INVALID_CREDENTIALS",
           "Invalid employee number or password.");
+
     HttpSession session = request.getSession(true);
     request.changeSessionId();
+
     AuthenticatedLogin authenticated = result.authenticatedLogin();
     LoginPrincipal principal = new LoginPrincipal(authenticated.userId(),
         authenticated.mustChangePassword());
+
     UsernamePasswordAuthenticationToken token = new UsernamePasswordAuthenticationToken(principal,
         null, principal.getAuthorities());
+
     SecurityContext context = SecurityContextHolder.createEmptyContext();
     context.setAuthentication(token);
     SecurityContextHolder.setContext(context);
     session.setAttribute(SessionGenerationService.AUTH_GENERATION_ATTRIBUTE,
         authenticated.generation());
+
     contextRepository.saveContext(context,request,response);
     return ResponseEntity.ok(Map.of("mustChangePassword",authenticated.mustChangePassword()));
   }
