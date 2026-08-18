@@ -27,7 +27,7 @@ public class ScheduleDetail {
 
   @OneToOne(optional = false)
   @JoinColumn(name = "schedule_id", nullable = false, unique = true)
-  private Schedule schedule;
+  private Schedule scheduleId;
 
   @Column(length = 200)
   private String content;
@@ -38,8 +38,8 @@ public class ScheduleDetail {
   protected ScheduleDetail() {
   }
 
-  ScheduleDetail(Schedule schedule, String content, String location) {
-    this.schedule = schedule;
+  private ScheduleDetail(Schedule scheduleId, String content, String location) {
+    this.scheduleId = scheduleId;
     this.content = content;
     this.location = location;
   }

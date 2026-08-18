@@ -354,16 +354,114 @@ Calendar Core의 조회 경계 DTO는 검증 가능한 Actor ID를 명시적으�
 
 ### 8.5 Rooms and Reservations
 
-| Method   | Path                                     | 목적                    |
-| -------- | ---------------------------------------- | ----------------------- |
-| `GET`    | `/api/rooms`                             | 회의실 목록·검색        |
-| `GET`    | `/api/rooms/{roomId}`                    | 회의실 상세             |
-| `GET`    | `/api/room-reservations?from=&to=`       | 예약 현황 조회          |
-| `POST`   | `/api/room-reservations`                 | 회의실 예약과 일정 생성 |
-| `PUT`    | `/api/room-reservations/{reservationId}` | 예약 수정               |
-| `DELETE` | `/api/room-reservations/{reservationId}` | 예약 취소               |
+| Method | Path | 목적 |
+| --- | --- | --- |
+| `GET` | `/api/rooms` | 인증 사용자 회의실 목록·예약 현황 조회 |
+| `GET` | `/api/rooms/{roomId}` | 인증 사용자 회의실 상세 |
+| `GET` | `/api/room-reservations/{reservationId}` | 인증 사용자가 소유한 예약 수정 상세 |
+| `GET` | `/api/room-reservations?from=&to=` | 예약 현황 조회 |
+| `POST` | `/api/room-reservations` | 회의실 예약과 일정 생성 |
+| `PUT` | `/api/room-reservations/{reservationId}` | 예약 수정 |
+| `DELETE` | `/api/room-reservations/{reservationId}` | 예약 취소 후보(일정 도메인 경계 확정 후 구현) |
 
 중복 예약은 `409 Conflict`와 안정적인 Error Code로 반환한다.
+
+#### 구현된 조회 계약
+
+`GET /api/rooms`는 `date`(필수, `YYYY-MM-DD`), `startTime`, `endTime`(선택,
+`HH:mm[:ss]`), `minimumCapacity`(선택, 양의 정수), `availabilityStatus`(선택,
+`AVAILABLE` 또는 `RESERVED`)를 받는다. 시간 조건이 없으면 해당 날짜의 영업 시간
+`09:00`~`18:00`을 조회한다. 성공 시 회의실별 `id`, `name`, `capacity`, `location`,
+`usesDefaultImage`와 해당 시간대 예약 요약을 반환한다. 예약 요약은 `id`, `title`,
+`startAt`, `endAt`, `displayStatus`, `canEdit`만 포함한다. `canEdit`은 현재 인증 사용자가
+예약 소유자이고 예약 상태가 `RESERVED`일 때만 `true`이며, 소유자 ID와 인증 사용자 ID는
+목록 응답에 노출하지 않는다.
+
+`GET /api/rooms/{roomId}`는 `id`, `name`, `capacity`, `location`,
+`usesDefaultImage`만 반환한다.
+
+`GET /api/room-reservations/{reservationId}`는 예약 수정 화면에 필요한
+`reservationId`, `roomId`, `title`, `startAt`, `endAt`, `attendeeIds`, `description`,
+`editable`만 반환한다. 연결 일정 ID, 예약 Entity, 인증 사용자 정보 및 참석자 이외의
+개인정보는 반환하지 않는다.
+
+세 Endpoint 모두 인증된 사용자 경계를 요구한다. 현재 실제 인증 Adapter가 없으므로
+인증 사용자 공급 없이 실행되는 요청은 Use Case를 호출하지 않고 `401 Unauthorized`와
+`AUTHENTICATION_REQUIRED`을 반환한다. 사용자 ID는 Query, Path, Body 또는 임시 Header로
+받지 않는다.
+
+예약 상세는 예약 소유자만 조회할 수 있다. 존재하지 않는 예약과 소유하지 않은 예약은
+동일하게 `404 Not Found`와 `ROOM_RESERVATION_NOT_FOUND`를 반환하여 IDOR로 인한 존재 여부
+노출을 막는다. 잘못된 조회 조건은 `400`과 `ROOM_QUERY_INVALID`, 존재하지 않는 회의실은
+`404`와 `ROOM_NOT_FOUND`를 반환한다.
+
+#### 구현된 예약 생성 계약
+
+`POST /api/room-reservations`는 인증된 사용자만 호출할 수 있으며, 요청 본문은 다음과 같다.
+
+```json
+{
+  "roomId": 1,
+  "title": "분기 계획 회의",
+  "startAt": "2026-08-10T10:00:00",
+  "endAt": "2026-08-10T11:00:00",
+  "attendeeIds": [10, 11],
+  "description": "분기 계획을 논의합니다."
+}
+```
+
+성공하면 `201 Created`와 연결된 예약 및 일정 식별자만 반환한다.
+
+```json
+{
+  "reservationId": 5,
+  "scheduleId": 9
+}
+```
+
+`userId`, `role` 또는 그 밖의 인증 정보는 요청·응답에 포함하지 않는다. 서버는 인증 경계가
+제공한 현재 사용자 ID만 예약 생성자로 사용한다. 실제 인증 Adapter가 없는 실행에서 인증
+속성이 제공되지 않으면 Service를 호출하지 않고 `401 Unauthorized`와
+`AUTHENTICATION_REQUIRED`를 반환한다.
+
+입력 검증 오류는 `400`과 `ROOM_RESERVATION_INVALID`, 참석자 접근 권한 부족은 `403`과
+`RESERVATION_PARTICIPANT_FORBIDDEN`, 존재하지 않는 회의실은 `404`와 `ROOM_NOT_FOUND`로
+반환한다. 수용 인원 초과는 `409`와 `ROOM_CAPACITY_EXCEEDED`, 동일 회의실의 시간 충돌은
+`409`와 `ROOM_RESERVATION_CONFLICT`로 반환한다.
+
+#### 구현된 예약 수정 계약
+
+`PUT /api/room-reservations/{reservationId}`는 인증된 예약 소유자만 호출할 수 있으며,
+경로의 `reservationId`와 다음 요청 본문을 수정 Command로 변환한다. 본문에는 `reservationId`,
+`userId`, `role`을 받지 않으며, 예약 Actor는 인증 경계의 `AuthenticatedUser.userId`만 사용한다.
+
+```json
+{
+  "roomId": 1,
+  "title": "분기 계획 회의",
+  "startAt": "2026-08-10T10:00:00",
+  "endAt": "2026-08-10T11:00:00",
+  "attendeeIds": [10, 11],
+  "description": "분기 계획을 논의합니다."
+}
+```
+
+성공 시 `200 OK`와 다음을 반환한다.
+
+```json
+{
+  "reservationId": 5,
+  "scheduleId": 9
+}
+```
+
+인증 정보가 없으면 Service 호출 전에 `401 Unauthorized`와 `AUTHENTICATION_REQUIRED`를
+반환한다. 입력 오류는 `400`과 `ROOM_RESERVATION_INVALID`, 참석자 접근 권한 부족은 `403`과
+`RESERVATION_PARTICIPANT_FORBIDDEN`, 회의실 없음은 `404`와 `ROOM_NOT_FOUND`로 반환한다.
+존재하지 않는 예약과 소유하지 않은 예약은 모두 `404 Not Found`와
+`ROOM_RESERVATION_NOT_FOUND`를 반환해 IDOR에 따른 존재 여부 노출을 막는다. 수정 불가 상태는
+`409`와 `ROOM_RESERVATION_NOT_EDITABLE`, 수용 인원 초과는 `409`와
+`ROOM_CAPACITY_EXCEEDED`, 시간 충돌은 `409`와 `ROOM_RESERVATION_CONFLICT`를 반환한다.
 
 ### 8.6 Roles and Permissions
 

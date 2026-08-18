@@ -5,10 +5,20 @@ import { getSession, logout, type LoginResult, type SessionResult } from './feat
 import { LoginPage } from './features/auth/LoginPage'
 import { PasswordChangePage } from './features/auth/PasswordChangePage'
 import { onUnauthenticated } from './features/authenticatedFetch'
+import {
+  createDevelopmentMeetingRoomGateway,
+  MeetingRoomPage,
+  resolveMeetingRoomGateway,
+  type MeetingRoomGateway,
+} from './features/meeting-room'
 import { ScheduleCalendar } from './features/schedule-calendar/ScheduleCalendar'
 import { ScheduleCreateModal } from './features/schedule-create/ScheduleCreateModal'
 
-const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+declare global {
+  interface Window {
+    __FLOW_BI_MEETING_ROOM_GATEWAY__?: MeetingRoomGateway
+  }
+}
 
 function CalendarStarter() {
   const [isCreateOpen, setIsCreateOpen] = useState(false)
@@ -118,6 +128,10 @@ type AppShellProps = {
   children: ReactNode
 }
 
+function isMeetingRoomTestHarness(): boolean {
+  return import.meta.env.DEV && 'Cypress' in window
+}
+
 function AppShell({ sidebar, children }: AppShellProps) {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const openSidebarButtonRef = useRef<HTMLButtonElement>(null)
@@ -189,13 +203,29 @@ function navigate(path: AllowedPath, replace = false) {
 
 type AuthenticatedAppProps = {
   onLoggedOut: () => void
+  queryClient: QueryClient
 }
 
-function AuthenticatedApp({ onLoggedOut }: AuthenticatedAppProps) {
+function AuthenticatedApp({ onLoggedOut, queryClient }: AuthenticatedAppProps) {
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [locationSearch, setLocationSearch] = useState(() => window.location.search)
+  const [developmentMeetingRoomGateway] = useState(() =>
+    import.meta.env.DEV ? createDevelopmentMeetingRoomGateway() : undefined,
+  )
   const mainHeadingRef = useRef<HTMLHeadingElement>(null)
   const isCalendarRoute = new URLSearchParams(locationSearch).has('view')
+  const isTestHarness = isMeetingRoomTestHarness()
+  const meetingRoomGateway = resolveMeetingRoomGateway({
+    isDevelopment: import.meta.env.DEV,
+    isTestHarness,
+    developmentGateway: developmentMeetingRoomGateway,
+    injectedGateway: isTestHarness ? window.__FLOW_BI_MEETING_ROOM_GATEWAY__ : undefined,
+  })
+
+  const navigateToMeetingRoom = () => {
+    window.history.pushState({}, '', window.location.pathname)
+    setLocationSearch('')
+  }
 
   const navigateToCalendar = () => {
     const calendarSearch = '?view=month'
@@ -224,25 +254,42 @@ function AuthenticatedApp({ onLoggedOut }: AuthenticatedAppProps) {
     }
   }
 
+  const navigationClass = (isCurrent: boolean) =>
+    isCurrent
+      ? 'flex items-center justify-between gap-2 rounded-md border-l-4 border-primary bg-secondary px-3 py-2.5 font-bold text-text-primary no-underline hover:bg-secondary [&>span]:text-xs [&>span]:font-normal [&>span]:text-text-secondary'
+      : 'flex items-center justify-between gap-2 rounded-md px-3 py-2.5 text-text-primary no-underline hover:bg-secondary'
+
   const sidebar = (onNavigate: () => void) => (
-    <a
-      aria-current={isCalendarRoute ? 'page' : undefined}
-      aria-label="캘린더"
-      className={
-        isCalendarRoute
-          ? 'flex items-center justify-between gap-2 rounded-md border-l-4 border-primary bg-secondary px-3 py-2.5 font-bold text-text-primary no-underline hover:bg-secondary [&>span]:text-xs [&>span]:font-normal [&>span]:text-text-secondary'
-          : 'flex items-center justify-between gap-2 rounded-md px-3 py-2.5 text-text-primary no-underline hover:bg-secondary'
-      }
-      href="?view=month"
-      onClick={(event) => {
-        event.preventDefault()
-        navigateToCalendar()
-        onNavigate()
-      }}
-    >
-      캘린더
-      {isCalendarRoute && <span aria-hidden="true">현재 위치</span>}
-    </a>
+    <div className="flex flex-col gap-1">
+      <a
+        aria-current={isCalendarRoute ? undefined : 'page'}
+        aria-label="회의실"
+        className={navigationClass(!isCalendarRoute)}
+        href="#meeting-room"
+        onClick={(event) => {
+          event.preventDefault()
+          navigateToMeetingRoom()
+          onNavigate()
+        }}
+      >
+        회의실
+        {!isCalendarRoute && <span aria-hidden="true"/>}
+      </a>
+      <a
+        aria-current={isCalendarRoute ? 'page' : undefined}
+        aria-label="캘린더"
+        className={navigationClass(isCalendarRoute)}
+        href="?view=month"
+        onClick={(event) => {
+          event.preventDefault()
+          navigateToCalendar()
+          onNavigate()
+        }}
+      >
+        캘린더
+        {isCalendarRoute && <span aria-hidden="true"/>}
+      </a>
+    </div>
   )
 
   return (
@@ -255,20 +302,23 @@ function AuthenticatedApp({ onLoggedOut }: AuthenticatedAppProps) {
         <button disabled={isLoggingOut} onClick={() => void handleLogout()} type="button">
           {isLoggingOut ? '로그아웃 중' : '로그아웃'}
         </button>
-        {isCalendarRoute && <CalendarStarter />}
+        {isCalendarRoute ? <CalendarStarter /> : <MeetingRoomPage gateway={meetingRoomGateway} />}
       </AppShell>
     </QueryClientProvider>
   )
 }
 
 function App() {
+  const [queryClient] = useState(
+    () => new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+  )
   const [authentication, setAuthentication] = useState<AuthenticationState>({ kind: 'loading' })
 
   const onSessionExpired = useCallback(() => {
     queryClient.clear()
     setAuthentication({ kind: 'anonymous' })
     navigate('/login', true)
-  }, [])
+  }, [queryClient])
 
   const bootstrap = useCallback(async () => {
     setAuthentication({ kind: 'loading' })
@@ -347,7 +397,7 @@ function App() {
     )
   }
 
-  return <AuthenticatedApp onLoggedOut={onSessionExpired} />
+  return <AuthenticatedApp onLoggedOut={onSessionExpired} queryClient={queryClient} />
 }
 
 export default App

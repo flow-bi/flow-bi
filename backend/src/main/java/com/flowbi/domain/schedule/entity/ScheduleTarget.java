@@ -42,7 +42,7 @@ public class ScheduleTarget {
 
   @Enumerated(EnumType.STRING)
   @Column(name = "target_type", nullable = false, length = 30)
-  private ScheduleTargetType type;
+  private ScheduleTargetType targetType;
 
   protected ScheduleTarget() {
   }
