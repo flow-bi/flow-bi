@@ -7,7 +7,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.flowbi.domain.auth.login.LoginPrincipal;
+import com.flowbi.domain.auth.security.LoginPrincipal;
 import com.flowbi.domain.auth.session.SessionGenerationValidationFilter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletRequest;
@@ -63,8 +63,9 @@ class ScheduleControllerTest {
     jdbcTemplate.update("INSERT INTO teams (team_id, team_name) VALUES (?, ?)",teamId,
         "Team " + teamId);
     jdbcTemplate.update("""
-        INSERT INTO users (user_id, position_id, team_id, employee_number, name, status)
-        VALUES (?, ?, ?, ?, ?, 'ACTIVE')
-        """,userId,userId,teamId,"controller-" + userId,"User " + userId);
+        INSERT INTO users (user_id, position_id, team_id, employee_number, email, name, status)
+        VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE')
+        """,userId,userId,teamId,"controller-" + userId,"controller-" + userId + "@example.test",
+        "User " + userId);
   }
 }

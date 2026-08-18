@@ -34,11 +34,11 @@ class ScheduleCreateTransactionTest {
     jdbcTemplate
         .update("INSERT INTO positions (position_id, position_name) VALUES (100, 'Fixture')");
     jdbcTemplate.update("INSERT INTO teams (team_id, team_name) VALUES (10, 'Fixture')");
-    jdbcTemplate
-        .update("INSERT INTO users (user_id, position_id, team_id, employee_number, name) VALUES "
-            + "(1, 100, 10, 'schedule-1', 'Schedule One'), "
-            + "(2, 100, 10, 'schedule-2', 'Schedule Two'), "
-            + "(3, 100, 10, 'schedule-3', 'Schedule Three')");
+    jdbcTemplate.update(
+        "INSERT INTO users (user_id, position_id, team_id, employee_number, email, name, status) VALUES "
+            + "(1, 100, 10, 'schedule-1', 'schedule-1@example.test', 'Schedule One', 'ACTIVE'), "
+            + "(2, 100, 10, 'schedule-2', 'schedule-2@example.test', 'Schedule Two', 'ACTIVE'), "
+            + "(3, 100, 10, 'schedule-3', 'schedule-3@example.test', 'Schedule Three', 'ACTIVE')");
 
     Schedule schedule = scheduleCreateService.create(ScheduleCreateCommand.of(1L,"Planning",
         ScheduleType.TEAM,ScheduleVisibility.TEAM,OffsetDateTime.parse("2026-08-10T09:00:00+09:00"),
@@ -57,8 +57,9 @@ class ScheduleCreateTransactionTest {
     jdbcTemplate
         .update("INSERT INTO positions (position_id, position_name) VALUES (200, 'Fixture')");
     jdbcTemplate.update("INSERT INTO teams (team_id, team_name) VALUES (30, 'Fixture')");
-    jdbcTemplate.update("INSERT INTO users (user_id, position_id, team_id, employee_number, name) "
-        + "VALUES (20, 200, 30, 'schedule-20', 'Schedule Twenty')");
+    jdbcTemplate.update(
+        "INSERT INTO users (user_id, position_id, team_id, employee_number, email, name, status) "
+            + "VALUES (20, 200, 30, 'schedule-20', 'schedule-20@example.test', 'Schedule Twenty', 'ACTIVE')");
 
     assertThatThrownBy(() -> scheduleCreateService.create(ScheduleCreateCommand.of(20L,"Failing",
         ScheduleType.TEAM,ScheduleVisibility.TEAM,OffsetDateTime.parse("2026-08-11T09:00:00+09:00"),

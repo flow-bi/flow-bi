@@ -51,8 +51,9 @@ class ScheduleUserIntegrationTest {
     jdbcTemplate.update("INSERT INTO teams (team_id, team_name) VALUES (?, ?)",teamId,
         "Team " + teamId);
     jdbcTemplate.update("""
-        INSERT INTO users (user_id, position_id, team_id, employee_number, name, status)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,userId,userId,teamId,"user-integration-" + userId,"User " + userId,status);
+        INSERT INTO users (user_id, position_id, team_id, employee_number, email, name, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,userId,userId,teamId,"user-integration-" + userId,
+        "user-integration-" + userId + "@example.test","User " + userId,status);
   }
 }

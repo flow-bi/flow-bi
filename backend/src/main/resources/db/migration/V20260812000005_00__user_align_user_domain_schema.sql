@@ -7,6 +7,14 @@ ALTER TABLE users
 ALTER TABLE users
     ADD COLUMN profile_image_url VARCHAR(512);
 
+UPDATE users
+    SET email = employee_number || '@migration.invalid'
+    WHERE email IS NULL;
+
+UPDATE users
+    SET status = 'ACTIVE'
+    WHERE status IS NULL;
+
 ALTER TABLE users
     ALTER COLUMN email SET NOT NULL;
 

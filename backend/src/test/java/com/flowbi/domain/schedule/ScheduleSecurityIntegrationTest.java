@@ -9,7 +9,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.flowbi.domain.auth.login.LoginPrincipal;
+import com.flowbi.domain.auth.security.LoginPrincipal;
 import com.flowbi.domain.auth.session.SessionGenerationValidationFilter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletRequest;
@@ -106,8 +106,9 @@ class ScheduleSecurityIntegrationTest {
     jdbcTemplate.update("INSERT INTO teams (team_id, team_name) VALUES (?, ?)",teamId,
         "Team " + teamId);
     jdbcTemplate.update("""
-        INSERT INTO users (user_id, position_id, team_id, employee_number, name, status)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,userId,userId,teamId,employeeNumber,"User " + userId,status);
+        INSERT INTO users (user_id, position_id, team_id, employee_number, email, name, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,userId,userId,teamId,employeeNumber,employeeNumber + "@example.test","User " + userId,
+        status);
   }
 }

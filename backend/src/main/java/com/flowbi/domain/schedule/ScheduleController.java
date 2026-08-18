@@ -1,6 +1,6 @@
 package com.flowbi.domain.schedule;
 
-import com.flowbi.domain.auth.login.LoginPrincipal;
+import com.flowbi.domain.auth.security.LoginPrincipal;
 import java.net.URI;
 import java.time.OffsetDateTime;
 import java.util.List;

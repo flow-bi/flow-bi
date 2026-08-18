@@ -131,9 +131,10 @@ class ScheduleCancelConcurrencyTest {
         "Fixture " + teamId);
     for (long userId : userIds) {
       jdbcTemplate.update("""
-          INSERT INTO users (user_id, position_id, team_id, employee_number, name)
-          VALUES (?, ?, ?, ?, ?)
-          """,userId,teamId,teamId,"fixture-" + userId,"Fixture " + userId);
+          INSERT INTO users (user_id, position_id, team_id, employee_number, email, name, status)
+          VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE')
+          """,userId,teamId,teamId,"fixture-" + userId,"fixture-" + userId + "@example.test",
+          "Fixture " + userId);
     }
   }
 

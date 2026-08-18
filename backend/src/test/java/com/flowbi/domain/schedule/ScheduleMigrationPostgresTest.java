@@ -28,7 +28,7 @@ class ScheduleMigrationPostgresTest {
 
     try (Connection connection = DriverManager.getConnection(jdbcUrl,POSTGRES.getUsername(),
         POSTGRES.getPassword())) {
-      insertAuthenticationReferences(connection);
+      insertAuthenticationReferences(connection,true);
       connection.createStatement().execute("INSERT INTO projects (project_id) VALUES (20)");
       connection.createStatement().execute(
           "INSERT INTO schedules (title, schedule_type, visibility, start_at, end_at, creator_id, is_all_day, color_label, creator_attends) "
@@ -55,7 +55,7 @@ class ScheduleMigrationPostgresTest {
 
     try (Connection connection = DriverManager.getConnection(jdbcUrl,POSTGRES.getUsername(),
         POSTGRES.getPassword())) {
-      insertAuthenticationReferences(connection);
+      insertAuthenticationReferences(connection,false);
       connection.createStatement().execute(
           "INSERT INTO schedules (title, schedule_type, visibility, start_at, end_at, creator_id) "
               + "VALUES ('baseline', 'PERSONAL', 'PRIVATE', '2026-08-10T00:00:00Z', "
@@ -78,6 +78,14 @@ class ScheduleMigrationPostgresTest {
       assertThat(connection.createStatement()
           .executeQuery("SELECT content FROM schedules_details WHERE schedule_id = 1").next())
           .isTrue();
+      var migratedUsers = connection.createStatement()
+          .executeQuery("SELECT email, status FROM users ORDER BY user_id");
+      assertThat(migratedUsers.next()).isTrue();
+      assertThat(migratedUsers.getString("email")).isEqualTo("fixture-1@migration.invalid");
+      assertThat(migratedUsers.getString("status")).isEqualTo("ACTIVE");
+      assertThat(migratedUsers.next()).isTrue();
+      assertThat(migratedUsers.getString("email")).isEqualTo("fixture-2@migration.invalid");
+      assertThat(migratedUsers.getString("status")).isEqualTo("ACTIVE");
     }
   }
 
@@ -85,15 +93,19 @@ class ScheduleMigrationPostgresTest {
     return Flyway.configure().dataSource(jdbcUrl,POSTGRES.getUsername(),POSTGRES.getPassword());
   }
 
-  private static void insertAuthenticationReferences(Connection connection) throws SQLException {
+  private static void insertAuthenticationReferences(Connection connection,boolean emailRequired)
+      throws SQLException {
     connection.createStatement()
         .execute("INSERT INTO positions (position_id, position_name) VALUES (1, 'Fixture')");
     connection.createStatement()
         .execute("INSERT INTO teams (team_id, team_name) VALUES (10, 'Fixture')");
-    connection.createStatement()
-        .execute("INSERT INTO users (user_id, position_id, team_id, employee_number, name) VALUES "
-            + "(1, 1, 10, 'fixture-1', 'Fixture One'), "
-            + "(2, 1, 10, 'fixture-2', 'Fixture Two')");
+    String users = emailRequired
+        ? "INSERT INTO users (user_id, position_id, team_id, employee_number, email, name, status) VALUES "
+            + "(1, 1, 10, 'fixture-1', 'fixture-1@example.test', 'Fixture One', 'ACTIVE'), "
+            + "(2, 1, 10, 'fixture-2', 'fixture-2@example.test', 'Fixture Two', 'ACTIVE')"
+        : "INSERT INTO users (user_id, position_id, team_id, employee_number, name) VALUES "
+            + "(1, 1, 10, 'fixture-1', 'Fixture One'), " + "(2, 1, 10, 'fixture-2', 'Fixture Two')";
+    connection.createStatement().execute(users);
   }
 
   private static String jdbcUrlFor(String schema) throws SQLException {

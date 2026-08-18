@@ -63,8 +63,9 @@ class ScheduleQueryPostgresPerformanceTest {
     jdbcTemplate.update("INSERT INTO teams (team_id, team_name) VALUES (10, 'Fixture Team')");
     jdbcTemplate.update("INSERT INTO positions (position_id, position_name) VALUES (1, 'Fixture')");
     jdbcTemplate.update("""
-        INSERT INTO users (user_id, position_id, team_id, employee_number, name)
-        VALUES (1, 1, 10, 'performance-fixture', 'Performance Fixture')
+        INSERT INTO users (user_id, position_id, team_id, employee_number, email, name, status)
+        VALUES (1, 1, 10, 'performance-fixture', 'performance-fixture@example.test',
+          'Performance Fixture', 'ACTIVE')
         """);
     jdbcTemplate.batchUpdate("""
         INSERT INTO schedules (title, schedule_type, visibility, start_at, end_at, creator_id,

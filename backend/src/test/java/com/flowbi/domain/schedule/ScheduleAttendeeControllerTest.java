@@ -7,7 +7,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 
-import com.flowbi.domain.auth.login.LoginPrincipal;
+import com.flowbi.domain.auth.security.LoginPrincipal;
 import com.flowbi.domain.auth.session.SessionGenerationValidationFilter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletRequest;
@@ -90,8 +90,8 @@ class ScheduleAttendeeControllerTest {
     jdbcTemplate.update("INSERT INTO teams (team_id, team_name) VALUES (?, ?)",teamId,
         "Team " + teamId);
     jdbcTemplate.update("""
-        INSERT INTO users (user_id, position_id, team_id, employee_number, name, status)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,userId,userId,teamId,employeeNumber,name,status);
+        INSERT INTO users (user_id, position_id, team_id, employee_number, email, name, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,userId,userId,teamId,employeeNumber,employeeNumber + "@example.test",name,status);
   }
 }
