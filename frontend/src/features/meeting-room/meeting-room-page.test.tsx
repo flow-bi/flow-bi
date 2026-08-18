@@ -82,25 +82,29 @@ describe('MeetingRoomPage', () => {
   it('loads owned reservation values, updates its connected schedule, and refreshes only room availability', async () => {
     const updateReservation = vi.fn().mockResolvedValue({ reservationId: 10, scheduleId: 40 })
     const findAvailability = vi.fn().mockResolvedValue({ rooms })
+    const getReservationForEdit = vi.fn().mockResolvedValue({
+      reservationId: 10,
+      roomId: 1,
+      title: '제품 검토',
+      startAt: '2026-08-07T09:00:00',
+      endAt: '2026-08-07T10:00:00',
+      attendeeIds: [1],
+      description: '초기 설명',
+      canEdit: true,
+    })
     const user = userEvent.setup()
     renderPage({
       isReservationCreationAvailable: true,
       isReservationUpdateAvailable: true,
       findAvailability,
       createReservation: vi.fn(),
-      getReservationForEdit: vi.fn().mockResolvedValue({
-        reservationId: 10,
-        roomId: 1,
-        title: '제품 검토',
-        startAt: '2026-08-07T09:00:00',
-        endAt: '2026-08-07T10:00:00',
-        attendeeIds: [1],
-        description: '초기 설명',
-        canEdit: true,
-      }),
+      getReservationForEdit,
       updateReservation,
     })
-    await user.click(await screen.findByRole('button', { name: '제품 검토 수정' }))
+    const editButton = await screen.findByRole('button', { name: '예약 수정: 제품 검토' })
+    expect(editButton).toHaveTextContent('예약 수정')
+    await user.click(editButton)
+    expect(getReservationForEdit).toHaveBeenCalledWith(10)
     const panel = screen.getByRole('dialog', { name: '제품 검토 예약 수정' })
     expect(within(panel).getByLabelText('예약 제목')).toHaveValue('제품 검토')
     expect(within(panel).getByLabelText('상세 설명')).toHaveValue('초기 설명')
@@ -134,7 +138,7 @@ describe('MeetingRoomPage', () => {
       updateReservation: vi.fn().mockResolvedValue({ reservationId: 10, scheduleId: 40 }),
     })
 
-    await user.click(await screen.findByRole('button', { name: '제품 검토 수정' }))
+    await user.click(await screen.findByRole('button', { name: '예약 수정: 제품 검토' }))
     await user.type(screen.getByLabelText('참석자 ID'), '1')
     await user.click(screen.getByRole('button', { name: '참석자 추가' }))
     await user.click(screen.getByRole('button', { name: '예약 및 일정 수정' }))
@@ -166,7 +170,7 @@ describe('MeetingRoomPage', () => {
       createReservation: vi.fn(),
     })
     await screen.findByRole('heading', { name: '한강 회의실' })
-    expect(screen.queryByRole('button', { name: '제품 검토 수정' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /예약 수정/ })).not.toBeInTheDocument()
   })
 
   it('preserves edited input after an update conflict and offers reselection guidance', async () => {
@@ -188,7 +192,7 @@ describe('MeetingRoomPage', () => {
         .fn()
         .mockRejectedValue(new MeetingRoomGatewayError('ROOM_RESERVATION_CONFLICT')),
     })
-    await user.click(await screen.findByRole('button', { name: '제품 검토 수정' }))
+    await user.click(await screen.findByRole('button', { name: '예약 수정: 제품 검토' }))
     const panel = screen.getByRole('dialog', { name: '제품 검토 예약 수정' })
     await user.clear(within(panel).getByLabelText('예약 제목'))
     await user.type(within(panel).getByLabelText('예약 제목'), '내 입력 유지')
@@ -285,6 +289,126 @@ describe('MeetingRoomPage', () => {
     expect(screen.queryByRole('heading', { name: '남산 회의실' })).not.toBeInTheDocument()
   })
 
+  it('blocks non-ten-minute search times and applies valid keyboard-entered times', async () => {
+    const findAvailability = vi.fn().mockResolvedValue({ rooms })
+    const user = userEvent.setup()
+    renderPage({ findAvailability })
+    await screen.findByRole('heading', { name: '한강 회의실' })
+
+    const startTime = screen.getByLabelText('시작 시간')
+    expect(startTime).toHaveAttribute('step', '600')
+    await user.clear(startTime)
+    await user.type(startTime, '10:03')
+    await user.click(screen.getByRole('button', { name: '검색 적용' }))
+
+    expect(findAvailability).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '시간은 10분 단위로 입력해 주세요. 예: 10:10',
+    )
+    expect(startTime).toHaveAttribute('aria-invalid', 'true')
+    expect(startTime).toHaveAttribute('aria-describedby', 'search-start-time-error')
+
+    await user.clear(startTime)
+    await user.type(startTime, '10:10')
+    await user.click(screen.getByRole('button', { name: '검색 적용' }))
+
+    expect(findAvailability).toHaveBeenLastCalledWith({
+      date: '2026-08-07',
+      startTime: '10:10',
+      endTime: '18:00',
+    })
+  })
+
+  it('starts a new reservation from the last applied search date and times', async () => {
+    const createReservation = vi.fn().mockResolvedValue({ reservationId: 30, scheduleId: 40 })
+    const user = userEvent.setup()
+    renderPage(reservationGateway(createReservation))
+    await screen.findByRole('heading', { name: '한강 회의실' })
+
+    await user.clear(screen.getByLabelText('날짜'))
+    await user.type(screen.getByLabelText('날짜'), '2026-08-12')
+    await user.clear(screen.getByLabelText('시작 시간'))
+    await user.type(screen.getByLabelText('시작 시간'), '10:10')
+    await user.clear(screen.getByLabelText('종료 시간'))
+    await user.type(screen.getByLabelText('종료 시간'), '11:20')
+    await user.click(screen.getByRole('button', { name: '검색 적용' }))
+    await waitFor(() => expect(createReservation).not.toHaveBeenCalled())
+
+    await user.click(screen.getByRole('button', { name: '한강 회의실 예약하기' }))
+    const panel = within(screen.getByRole('dialog', { name: '한강 회의실 예약' }))
+    expect(panel.getByLabelText('날짜')).toHaveValue('2026-08-12')
+    expect(panel.getByLabelText('시작 시간')).toHaveValue('10:10')
+    expect(panel.getByLabelText('종료 시간')).toHaveValue('11:20')
+    await user.type(panel.getByLabelText('예약 제목'), '검색 조건 회의')
+    await user.type(panel.getByLabelText('참석자 ID'), '1')
+    await user.click(panel.getByRole('button', { name: '참석자 추가' }))
+    await user.click(panel.getByRole('button', { name: '예약 및 일정 생성' }))
+
+    await waitFor(() =>
+      expect(createReservation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          startAt: '2026-08-12T10:10:00',
+          endAt: '2026-08-12T11:20:00',
+        }),
+      ),
+    )
+  })
+
+  it('does not mix unapplied search or discarded panel values into the next reservation defaults', async () => {
+    const findAvailability = vi.fn().mockResolvedValue({ rooms })
+    const user = userEvent.setup()
+    renderPage({
+      isReservationCreationAvailable: true,
+      findAvailability,
+      createReservation: vi.fn(),
+    })
+    await screen.findByRole('heading', { name: '한강 회의실' })
+
+    await user.clear(screen.getByLabelText('시작 시간'))
+    await user.type(screen.getByLabelText('시작 시간'), '10:10')
+    await user.clear(screen.getByLabelText('종료 시간'))
+    await user.type(screen.getByLabelText('종료 시간'), '11:20')
+    await user.click(screen.getByRole('button', { name: '검색 적용' }))
+    await waitFor(() => expect(findAvailability).toHaveBeenCalledTimes(2))
+    await user.click(screen.getByRole('button', { name: '한강 회의실 예약하기' }))
+    const firstPanel = within(screen.getByRole('dialog', { name: '한강 회의실 예약' }))
+    await user.clear(firstPanel.getByLabelText('시작 시간'))
+    await user.type(firstPanel.getByLabelText('시작 시간'), '12:30')
+    await user.click(screen.getByTestId('reservation-panel-overlay'))
+    await user.click(screen.getByRole('button', { name: '입력 내용 삭제' }))
+
+    await user.clear(screen.getByLabelText('시작 시간'))
+    await user.type(screen.getByLabelText('시작 시간'), '13:40')
+    await user.click(screen.getByRole('button', { name: '한강 회의실 예약하기' }))
+    const panel = within(screen.getByRole('dialog', { name: '한강 회의실 예약' }))
+    expect(panel.getByLabelText('시작 시간')).toHaveValue('10:10')
+    expect(panel.getByLabelText('종료 시간')).toHaveValue('11:20')
+
+    const searchSubmit = screen.getByRole('button', { name: '검색 적용' })
+    const searchForm = searchSubmit.closest('form')
+    if (!searchForm) {
+      throw new Error('검색 폼을 찾을 수 없습니다.')
+    }
+    await user.clear(within(searchForm).getByLabelText('종료 시간'))
+    await user.type(within(searchForm).getByLabelText('종료 시간'), '14:40')
+    await user.click(searchSubmit)
+    await waitFor(() =>
+      expect(findAvailability).toHaveBeenLastCalledWith({
+        date: '2026-08-07',
+        startTime: '13:40',
+        endTime: '14:40',
+      }),
+    )
+    expect(panel.getByLabelText('시작 시간')).toHaveValue('10:10')
+    expect(panel.getByLabelText('종료 시간')).toHaveValue('11:20')
+    await user.click(screen.getByTestId('reservation-panel-overlay'))
+
+    await user.click(screen.getByRole('button', { name: '한강 회의실 예약하기' }))
+    const reappliedPanel = within(screen.getByRole('dialog', { name: '한강 회의실 예약' }))
+    expect(reappliedPanel.getByLabelText('시작 시간')).toHaveValue('13:40')
+    expect(reappliedPanel.getByLabelText('종료 시간')).toHaveValue('14:40')
+  })
+
   it('keeps valid rooms visible and offers retry after a request failure', async () => {
     const findAvailability = vi
       .fn()
@@ -329,10 +453,65 @@ describe('MeetingRoomPage', () => {
     )
   })
 
+  it('closes a clean create panel only when its overlay is clicked and restores the reserve trigger focus', async () => {
+    const user = userEvent.setup()
+    renderPage(reservationGateway())
+    const reserveButton = await screen.findByRole('button', { name: '한강 회의실 예약하기' })
+    await user.click(reserveButton)
+
+    const panel = screen.getByRole('dialog', { name: '한강 회의실 예약' })
+    await user.click(within(panel).getByLabelText('예약 제목'))
+    expect(panel).toBeInTheDocument()
+
+    await user.click(screen.getByTestId('reservation-panel-overlay'))
+    expect(screen.queryByRole('dialog', { name: '한강 회의실 예약' })).not.toBeInTheDocument()
+    await waitFor(() => expect(reserveButton).toHaveFocus())
+  })
+
+  it('protects changed create and update panel input when their overlays are clicked', async () => {
+    const user = userEvent.setup()
+    renderPage({
+      ...reservationGateway(),
+      isReservationUpdateAvailable: true,
+      getReservationForEdit: vi.fn().mockResolvedValue({
+        reservationId: 10,
+        roomId: 1,
+        title: '제품 검토',
+        startAt: '2026-08-07T09:00:00',
+        endAt: '2026-08-07T10:00:00',
+        attendeeIds: [],
+        description: '',
+        canEdit: true,
+      }),
+      updateReservation: vi.fn(),
+    })
+
+    await user.click(await screen.findByRole('button', { name: '한강 회의실 예약하기' }))
+    await user.type(screen.getByLabelText('예약 제목'), '생성 입력')
+    await user.click(screen.getByTestId('reservation-panel-overlay'))
+    expect(screen.getByRole('alertdialog', { name: '입력 내용 삭제 확인' })).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: '한강 회의실 예약' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '입력 내용 삭제' }))
+
+    const editButton = await screen.findByRole('button', { name: '예약 수정: 제품 검토' })
+    await user.click(editButton)
+    await user.clear(screen.getByLabelText('예약 제목'))
+    await user.type(screen.getByLabelText('예약 제목'), '수정 입력')
+    await user.click(screen.getByTestId('reservation-panel-overlay'))
+    expect(screen.getByRole('alertdialog', { name: '입력 내용 삭제 확인' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '입력 내용 삭제' }))
+    await waitFor(() => expect(editButton).toHaveFocus())
+  })
+
   it('closes immediately after a successful reservation and shows the refreshed timetable', async () => {
     const user = userEvent.setup()
     renderPage(createDevelopmentMeetingRoomGateway())
 
+    await user.clear(screen.getByLabelText('시작 시간'))
+    await user.type(screen.getByLabelText('시작 시간'), '11:00')
+    await user.clear(screen.getByLabelText('종료 시간'))
+    await user.type(screen.getByLabelText('종료 시간'), '12:00')
+    await user.click(screen.getByRole('button', { name: '검색 적용' }))
     await user.click(await screen.findByRole('button', { name: '한강 회의실 예약하기' }))
     const panel = screen.getByRole('dialog', { name: '한강 회의실 예약' })
     await user.type(within(panel).getByLabelText('예약 제목'), '완료 후 표시 회의')
@@ -341,7 +520,7 @@ describe('MeetingRoomPage', () => {
     await user.click(within(panel).getByRole('button', { name: '예약 및 일정 생성' }))
     expect(await within(panel).findByText('예약과 연결 일정이 생성되었습니다.')).toBeVisible()
 
-    await user.click(within(panel).getByRole('button', { name: '닫기' }))
+    await user.click(screen.getByTestId('reservation-panel-overlay'))
 
     expect(screen.queryByRole('dialog', { name: '한강 회의실 예약' })).not.toBeInTheDocument()
     expect(
@@ -389,6 +568,38 @@ describe('MeetingRoomPage', () => {
         title: '주간 회의',
         attendeeIds: [1, 2, 3, 4, 5, 6, 7, 8],
       } satisfies Partial<CreateRoomReservationCommand>),
+    )
+  })
+
+  it('blocks non-ten-minute reservation times and creates with valid keyboard-entered times', async () => {
+    const createReservation = vi.fn().mockResolvedValue({ reservationId: 30, scheduleId: 40 })
+    const user = userEvent.setup()
+    renderPage(reservationGateway(createReservation))
+    await user.click(await screen.findByRole('button', { name: '한강 회의실 예약하기' }))
+    const panel = within(screen.getByRole('dialog'))
+    await user.type(panel.getByLabelText('예약 제목'), '주간 회의')
+    await user.type(panel.getByLabelText('참석자 ID'), '1')
+    await user.click(panel.getByRole('button', { name: '참석자 추가' }))
+    const startTime = panel.getByLabelText('시작 시간')
+    expect(startTime).toHaveAttribute('step', '600')
+    await user.clear(panel.getByLabelText('종료 시간'))
+    await user.type(panel.getByLabelText('종료 시간'), '10:20')
+    await user.clear(startTime)
+    await user.type(startTime, '10:03')
+    await user.click(panel.getByRole('button', { name: '예약 및 일정 생성' }))
+
+    expect(createReservation).not.toHaveBeenCalled()
+    expect(screen.getByText('시간은 10분 단위로 입력해 주세요. 예: 10:10')).toBeInTheDocument()
+    expect(startTime).toHaveAttribute('aria-invalid', 'true')
+    expect(startTime).toHaveAttribute('aria-describedby', 'reservation-start-time-error')
+
+    await user.clear(startTime)
+    await user.type(startTime, '10:10')
+    await user.click(panel.getByRole('button', { name: '예약 및 일정 생성' }))
+
+    await waitFor(() => expect(createReservation).toHaveBeenCalledTimes(1))
+    expect(createReservation).toHaveBeenCalledWith(
+      expect.objectContaining({ startAt: '2026-08-07T10:10:00' }),
     )
   })
 

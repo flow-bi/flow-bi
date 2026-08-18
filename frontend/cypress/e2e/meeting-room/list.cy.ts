@@ -41,6 +41,20 @@ describe('meeting room availability', () => {
     cy.contains('h2', '남산 회의실').should('be.visible')
   })
 
+  it('blocks keyboard-entered non-ten-minute search times and applies valid times', () => {
+    visitMeetingRooms()
+    cy.get('input[type="time"]').first().should('have.attr', 'step', '600')
+    cy.get('input[type="time"]').first().clear().type('10:03')
+    cy.contains('button', '검색 적용').click()
+    cy.contains('시간은 10분 단위로 입력해 주세요. 예: 10:10').should('be.visible')
+    cy.get('input[type="time"]').first().should('have.attr', 'aria-invalid', 'true')
+
+    cy.get('input[type="time"]').first().clear().type('10:10')
+    cy.contains('button', '검색 적용').click()
+    cy.contains('시간은 10분 단위로 입력해 주세요. 예: 10:10').should('not.exist')
+    cy.get('input[type="time"]').first().should('have.value', '10:10')
+  })
+
   it('provides keyboard-accessible controls and a text reservation list on mobile', () => {
     cy.viewport('iphone-6')
     visitMeetingRooms()

@@ -1,3 +1,5 @@
+import { validateMeetingTimes } from './meeting-time'
+
 import type {
   CreateRoomReservationCommand,
   UpdateRoomReservationCommand,
@@ -14,6 +16,21 @@ export interface ReservationFormValues {
 
 export type ReservationFormErrors = Partial<Record<keyof ReservationFormValues, string>>
 
+export function initialReservationValuesFromSearch({
+  date,
+  startTime,
+  endTime,
+}: Pick<ReservationFormValues, 'date' | 'startTime' | 'endTime'>): ReservationFormValues {
+  return {
+    title: '',
+    date,
+    startTime,
+    endTime,
+    attendeeIds: [],
+    description: '',
+  }
+}
+
 export function validateReservationForm(
   values: ReservationFormValues,
   capacity: number,
@@ -25,18 +42,7 @@ export function validateReservationForm(
   if (!values.date) {
     errors.date = '예약 날짜를 선택해 주세요.'
   }
-  if (!values.startTime) {
-    errors.startTime = '시작 시간을 선택해 주세요.'
-  }
-  if (!values.endTime) {
-    errors.endTime = '종료 시간을 선택해 주세요.'
-  }
-  if (values.startTime && values.endTime && values.startTime >= values.endTime) {
-    errors.endTime = '종료 시간은 시작 시간보다 늦어야 합니다.'
-  }
-  if (values.startTime < '09:00' || values.endTime > '18:00') {
-    errors.endTime = '예약 시간은 09:00부터 18:00 사이여야 합니다.'
-  }
+  Object.assign(errors, validateMeetingTimes(values.startTime, values.endTime))
   if (values.attendeeIds.length === 0) {
     errors.attendeeIds = '참석자를 한 명 이상 추가해 주세요.'
   }

@@ -9,7 +9,7 @@ function visitMeetingRooms() {
 }
 
 function openUpdate() {
-  cy.contains('button', '제품 검토 수정').click()
+  cy.get('button[aria-label="예약 수정: 제품 검토"]').click()
   cy.get('[role="dialog"]').should('be.visible').and('have.attr', 'aria-modal', 'true')
 }
 
@@ -29,13 +29,13 @@ describe('meeting room reservation update', () => {
       cy.contains('button', '예약 및 일정 수정').click()
       cy.contains('예약과 연결 일정이 수정되었습니다.').should('be.visible')
     })
-    cy.contains('button', '수정된 제품 검토 수정').should('be.visible')
+    cy.get('button[aria-label="예약 수정: 수정된 제품 검토"]').should('be.visible')
   })
 
   it('does not expose an update action for a reservation owned by another user', () => {
     visitMeetingRooms()
     cy.contains('내 것이 아닌 예약').should('be.visible')
-    cy.contains('button', '내 것이 아닌 예약 수정').should('not.exist')
+    cy.get('button[aria-label="예약 수정: 내 것이 아닌 예약"]').should('not.exist')
   })
 
   it('preserves edits after a conflict and asks the user to select another time', () => {
@@ -50,6 +50,22 @@ describe('meeting room reservation update', () => {
       cy.contains('label', '예약 제목').find('input').should('have.value', '충돌 회의')
       cy.contains('예약 현황 다시 조회').click()
     })
+  })
+
+  it('protects changed update input when the overlay is clicked and restores the update trigger focus', () => {
+    visitMeetingRooms()
+    openUpdate()
+    cy.get('[role="dialog"]').within(() => {
+      cy.contains('label', '예약 제목').find('input').clear().type('수정 보호 입력')
+    })
+    cy.get('[data-testid="reservation-panel-overlay"]').click('topLeft')
+    cy.get('[role="alertdialog"]')
+      .should('be.visible')
+      .within(() => {
+        cy.contains('button', '입력 내용 삭제').click()
+      })
+    cy.get('[role="dialog"]').should('not.exist')
+    cy.get('button[aria-label="예약 수정: 제품 검토"]').should('be.focused')
   })
 
   it('provides the full-width, keyboard-focused update flow on mobile', () => {

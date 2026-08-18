@@ -1,6 +1,36 @@
 import { meetingRoomTestGateway } from './test-gateway'
 
 describe('meeting room contract integration', () => {
+  it('starts a reservation from applied search filters without mixing later input, then closes and edits an owned reservation', () => {
+    cy.viewport(1280, 800)
+    cy.visit('/', {
+      onBeforeLoad(window) {
+        window.__FLOW_BI_MEETING_ROOM_GATEWAY__ = meetingRoomTestGateway()
+      },
+    })
+
+    cy.get('input[type="date"]')
+      .invoke('val')
+      .then((appliedDate) => {
+        cy.contains('label', '시작 시간').find('input').clear().type('10:10')
+        cy.contains('label', '종료 시간').find('input').clear().type('11:20')
+        cy.contains('button', '검색 적용').click()
+        cy.contains('label', '시작 시간').find('input').clear().type('13:40')
+        cy.contains('button', '한강 회의실 예약하기').click()
+        cy.get('[role="dialog"]').within(() => {
+          cy.contains('label', '날짜').find('input').should('have.value', appliedDate)
+          cy.contains('label', '시작 시간').find('input').should('have.value', '10:10')
+          cy.contains('label', '종료 시간').find('input').should('have.value', '11:20')
+        })
+      })
+    cy.get('[data-testid="reservation-panel-overlay"]').click('topLeft')
+    cy.get('[role="dialog"]').should('not.exist')
+    cy.get('button[aria-label="예약 수정: 제품 검토"]').click()
+    cy.get('[role="dialog"]').within(() => {
+      cy.contains('h2', '제품 검토 예약 수정').should('be.focused')
+    })
+  })
+
   it('filters matching rooms while creating and then updating a reservation after each refresh', () => {
     cy.viewport(1280, 800)
     cy.visit('/', {
@@ -97,7 +127,7 @@ describe('meeting room contract integration', () => {
       cy.contains('예약과 연결 일정이 생성되었습니다.').should('be.visible')
     })
     cy.contains('button', '닫기').click()
-    cy.contains('button', '제품 검토 수정').click()
+    cy.get('button[aria-label="예약 수정: 제품 검토"]').click()
     cy.get('[role="dialog"]').within(() => {
       cy.contains('label', '예약 제목').find('input').clear().type('충돌 회의')
       cy.contains('button', '예약 및 일정 수정').click()

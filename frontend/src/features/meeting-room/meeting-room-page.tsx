@@ -12,11 +12,14 @@ import {
   type RoomAvailabilityResponse,
   type RoomSummary,
 } from './meeting-room-gateway'
+import { TIME_INPUT_STEP_SECONDS, validateMeetingTimes } from './meeting-time'
+import {
+  initialReservationValuesFromSearch,
+  type ReservationFormValues,
+} from './reservation-form-schema'
 import { ReservationPanel } from './reservation-panel'
 import { ReservationTextList, ReservationTimetable } from './reservation-timetable'
 import { ROOM_AVAILABILITY_STATUS_LABELS } from './room-availability-status'
-
-import type { ReservationFormValues } from './reservation-form-schema'
 
 interface MeetingRoomPageProps {
   gateway: MeetingRoomGateway
@@ -30,6 +33,8 @@ interface SearchForm {
   endTime: string
   availabilityStatus: '' | RoomAvailabilityStatus
 }
+
+type SearchFormErrors = Partial<Pick<SearchForm, 'startTime' | 'endTime'>>
 
 const defaultImage =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='180' viewBox='0 0 320 180'%3E%3Crect width='320' height='180' fill='%23e5e7eb'/%3E%3Cpath d='M70 130h180V80H70zM95 80V50h130v30' fill='%239ca3af'/%3E%3C/svg%3E"
@@ -105,9 +110,10 @@ function RoomCard({
                 key={reservation.id}
                 className="mt-3 mr-3 rounded border border-(--color-border) px-4 py-2"
                 type="button"
+                aria-label={`예약 수정: ${reservation.title}`}
                 onClick={(event) => onEdit(room, reservation, event.currentTarget)}
               >
-                {reservation.title} 수정
+                예약 수정
               </button>
             ))
         : null}
@@ -126,10 +132,12 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
   const date = initialDate ?? defaultDate
   const [search, setSearch] = useState<SearchForm>(() => initialSearch(date))
   const [submittedSearch, setSubmittedSearch] = useState<SearchForm>(() => initialSearch(date))
+  const [searchErrors, setSearchErrors] = useState<SearchFormErrors>({})
   const [lastValidResponse, setLastValidResponse] = useState<RoomAvailabilityResponse | undefined>(
     undefined,
   )
   const [selectedRoom, setSelectedRoom] = useState<RoomSummary>()
+  const [reservationPanelInstance, setReservationPanelInstance] = useState(0)
   const [selectedUpdate, setSelectedUpdate] = useState<{
     room: RoomSummary
     reservation: EditableRoomReservation
@@ -153,6 +161,11 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    const validationErrors = validateMeetingTimes(search.startTime, search.endTime)
+    setSearchErrors(validationErrors)
+    if (Object.keys(validationErrors).length > 0) {
+      return
+    }
     setSubmittedSearch(search)
   }
 
@@ -211,6 +224,7 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
       <form
         className="mb-6 grid gap-3 rounded-xl bg-(--color-surface) p-4 shadow-sm sm:grid-cols-5"
         onSubmit={submit}
+        noValidate
       >
         <label>
           수용 인원
@@ -239,10 +253,18 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
             type="time"
             min="09:00"
             max="18:00"
+            step={TIME_INPUT_STEP_SECONDS}
             value={search.startTime}
             onChange={(event) => setSearch({ ...search, startTime: event.target.value })}
+            aria-invalid={Boolean(searchErrors.startTime)}
+            aria-describedby={searchErrors.startTime ? 'search-start-time-error' : undefined}
           />
         </label>
+        {searchErrors.startTime ? (
+          <p id="search-start-time-error" role="alert">
+            {searchErrors.startTime}
+          </p>
+        ) : null}
         <label>
           종료 시간
           <input
@@ -250,10 +272,18 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
             type="time"
             min="09:00"
             max="18:00"
+            step={TIME_INPUT_STEP_SECONDS}
             value={search.endTime}
             onChange={(event) => setSearch({ ...search, endTime: event.target.value })}
+            aria-invalid={Boolean(searchErrors.endTime)}
+            aria-describedby={searchErrors.endTime ? 'search-end-time-error' : undefined}
           />
         </label>
+        {searchErrors.endTime ? (
+          <p id="search-end-time-error" role="alert">
+            {searchErrors.endTime}
+          </p>
+        ) : null}
         <label>
           예약 상태
           <select
@@ -323,6 +353,7 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
               isUpdateAvailable={gateway.isReservationUpdateAvailable === true}
               onReserve={(selected, trigger) => {
                 reserveTriggerRef.current = trigger
+                setReservationPanelInstance((instance) => instance + 1)
                 setSelectedRoom(selected)
               }}
               onEdit={(room, reservation, trigger) => {
@@ -361,8 +392,10 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
       ) : null}
       {selectedRoom ? (
         <ReservationPanel
+          key={reservationPanelInstance}
           room={selectedRoom}
           initialDate={submittedSearch.date}
+          initialValues={initialReservationValuesFromSearch(submittedSearch)}
           isSubmissionAvailable={gateway.isReservationCreationAvailable === true}
           onClose={closeReservationPanel}
           onSubmit={async (command) => {

@@ -5,7 +5,9 @@ import {
   type CreateRoomReservationCommand,
   type RoomSummary,
 } from './meeting-room-gateway'
+import { TIME_INPUT_STEP_SECONDS } from './meeting-time'
 import {
+  initialReservationValuesFromSearch,
   toReservationCommand,
   validateReservationForm,
   type ReservationFormErrors,
@@ -25,15 +27,6 @@ interface ReservationPanelProps {
 }
 
 const inputClassName = 'mt-1 w-full rounded border border-(--color-border) p-2'
-const initialValuesForDate = (date: string): ReservationFormValues => ({
-  title: '',
-  date,
-  startTime: '09:00',
-  endTime: '10:00',
-  attendeeIds: [],
-  description: '',
-})
-
 function messageFor(error: unknown): string {
   const code = isMeetingRoomGatewayError(error) ? error.code : undefined
   if (code === 'ROOM_RESERVATION_CONFLICT') {
@@ -62,7 +55,9 @@ export function ReservationPanel({
   onSubmit,
   onRefreshAvailability,
 }: ReservationPanelProps) {
-  const defaultValues = initialValues ?? initialValuesForDate(initialDate)
+  const defaultValues =
+    initialValues ??
+    initialReservationValuesFromSearch({ date: initialDate, startTime: '09:00', endTime: '10:00' })
   const [values, setValues] = useState(defaultValues)
   const [errors, setErrors] = useState<ReservationFormErrors>({})
   const [attendeeInput, setAttendeeInput] = useState('')
@@ -126,7 +121,16 @@ export function ReservationPanel({
   }
 
   return (
-    <div className="fixed inset-0 z-10 flex justify-end bg-black/30" role="presentation">
+    <div
+      className="fixed inset-0 z-10 flex justify-end bg-black/30"
+      role="presentation"
+      data-testid="reservation-panel-overlay"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) {
+          requestClose()
+        }
+      }}
+    >
       <section
         className="h-full w-full overflow-y-auto bg-(--color-surface) p-5 shadow-xl sm:max-w-md"
         role="dialog"
@@ -225,6 +229,7 @@ export function ReservationPanel({
                 type="time"
                 min="09:00"
                 max="18:00"
+                step={TIME_INPUT_STEP_SECONDS}
                 value={values.startTime}
                 onChange={(event) => setValues({ ...values, startTime: event.target.value })}
                 aria-invalid={Boolean(errors.startTime)}
@@ -238,6 +243,7 @@ export function ReservationPanel({
                 type="time"
                 min="09:00"
                 max="18:00"
+                step={TIME_INPUT_STEP_SECONDS}
                 value={values.endTime}
                 onChange={(event) => setValues({ ...values, endTime: event.target.value })}
                 aria-invalid={Boolean(errors.endTime)}
