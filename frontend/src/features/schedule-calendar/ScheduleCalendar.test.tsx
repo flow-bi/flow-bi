@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -231,6 +231,86 @@ describe('ScheduleCalendar', () => {
     await user.click(screen.getByRole('button', { name: '일간 보기' }))
     expect(window.location.search).toContain('view=day')
     expect(await screen.findByRole('heading', { name: '2024년 2월 15일' })).toBeVisible()
+  })
+
+  it.each([
+    [
+      'month',
+      '2024-02-15',
+      '2024년 2월',
+      '2024년 12월',
+      { from: '2024-12-01T00:00:00+09:00', to: '2025-01-01T00:00:00+09:00' },
+    ],
+    [
+      'week',
+      '2024-02-11',
+      '2024년 2월 11일 주',
+      '2024년 12월 29일 주',
+      { from: '2024-12-29T00:00:00+09:00', to: '2025-01-05T00:00:00+09:00' },
+    ],
+    [
+      'day',
+      '2024-02-15',
+      '2024년 2월 15일',
+      '2024년 12월 31일',
+      { from: '2024-12-31T00:00:00+09:00', to: '2025-01-01T00:00:00+09:00' },
+    ],
+  ] as const)(
+    'keeps the %s view and updates its date URL to the injected local today date',
+    async (view, initialDate, initialHeading, expectedHeading, expectedPeriod) => {
+      window.history.replaceState({}, '', `/?view=${view}&date=${initialDate}`)
+      const user = userEvent.setup()
+      const now = vi.fn(() => new Date('2024-12-31T12:00:00+09:00'))
+      const getSchedules = vi.fn(() => Promise.resolve(schedules))
+      renderCalendar({ getSchedules, now })
+
+      await screen.findByRole('heading', { name: initialHeading })
+      await user.click(screen.getByRole('button', { name: '오늘' }))
+
+      expect(now).toHaveBeenCalled()
+      expect(window.location.search).toBe(`?view=${view}&date=2024-12-31`)
+      expect(await screen.findByRole('heading', { name: expectedHeading })).toBeVisible()
+      await waitFor(() =>
+        expect(getSchedules).toHaveBeenLastCalledWith(expectedPeriod, expect.any(AbortSignal)),
+      )
+    },
+  )
+
+  it('groups header actions semantically and keeps schedule creation last in keyboard order', async () => {
+    window.history.replaceState({}, '', '/?view=month&date=2024-02-15')
+    renderCalendar({ onCreateSchedule: vi.fn() })
+
+    const headerActions = await screen.findByTestId('calendar-header-actions')
+    const periodControls = within(headerActions).getByRole('group', { name: '기간 이동' })
+    const viewControls = within(headerActions).getByRole('group', { name: '보기 선택' })
+    expect(within(periodControls).getByRole('button', { name: '이전' })).toBeVisible()
+    expect(within(periodControls).getByRole('button', { name: '오늘' })).toBeVisible()
+    expect(within(periodControls).getByRole('button', { name: '다음' })).toBeVisible()
+    expect(within(viewControls).getByRole('button', { name: '월간 보기' })).toBeVisible()
+    expect(within(viewControls).getByRole('button', { name: '주간 보기' })).toBeVisible()
+    expect(within(viewControls).getByRole('button', { name: '일간 보기' })).toBeVisible()
+    expect(within(headerActions).getByRole('button', { name: '일정 추가' }).parentElement).toBe(
+      headerActions,
+    )
+    expect(
+      Array.from(headerActions.querySelectorAll('button')).map((button) => button.textContent),
+    ).toEqual(['이전', '오늘', '다음', '월간 보기', '주간 보기', '일간 보기', '일정 추가'])
+  })
+
+  it('uses neutral, selected, and primary-filled styles to distinguish header action purposes', async () => {
+    window.history.replaceState({}, '', '/?view=month&date=2024-02-15')
+    renderCalendar({ onCreateSchedule: vi.fn() })
+
+    const periodControls = await screen.findByRole('group', { name: '기간 이동' })
+    const viewControls = screen.getByRole('group', { name: '보기 선택' })
+    const previous = within(periodControls).getByRole('button', { name: '이전' })
+    const selectedView = within(viewControls).getByRole('button', { name: '월간 보기' })
+    const create = screen.getByRole('button', { name: '일정 추가' })
+    expect(previous).toHaveClass('border-border', 'bg-surface')
+    expect(previous).not.toHaveClass('bg-primary')
+    expect(selectedView).toHaveClass('border-primary', 'bg-secondary')
+    expect(selectedView).not.toHaveClass('bg-primary')
+    expect(create).toHaveClass('bg-primary', 'text-white')
   })
 
   it('closes detail only from its backdrop and restores focus to its original schedule trigger', async () => {

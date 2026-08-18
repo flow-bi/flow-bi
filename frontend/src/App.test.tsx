@@ -80,6 +80,33 @@ describe('App', () => {
     )
   })
 
+  it('opens the existing schedule creation modal from the calendar header and restores trigger focus', async () => {
+    window.history.replaceState({}, '', '/')
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ authenticated: true, mustChangePassword: false }), {
+            status: 200,
+          }),
+        )
+        .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 })),
+    )
+    const user = userEvent.setup()
+    render(<App />)
+
+    await screen.findByText('로그인되었습니다.')
+    await user.click(screen.getByRole('link', { name: '캘린더' }))
+    const createTrigger = await screen.findByRole('button', { name: '일정 추가' })
+    await user.click(createTrigger)
+    expect(await screen.findByRole('dialog', { name: '일정 추가' })).toBeVisible()
+
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: '일정 추가' })).not.toBeInTheDocument()
+    expect(createTrigger).toHaveFocus()
+  })
+
   it('closes the mobile sidebar after calendar navigation', async () => {
     window.history.replaceState({}, '', '/')
     vi.stubGlobal(
