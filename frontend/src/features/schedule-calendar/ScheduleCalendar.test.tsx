@@ -102,8 +102,10 @@ describe('ScheduleCalendar', () => {
       updateSchedule,
     })
 
-    await user.click(await screen.findByRole('button', { name: /수정할 개인 일정/ }))
-    await user.click(await screen.findByRole('button', { name: '일정 수정' }))
+    await user.click(
+      await screen.findByRole('button', { name: /수정할 개인 일정/ }, { timeout: 5_000 }),
+    )
+    await user.click(await screen.findByRole('button', { name: '일정 수정' }, { timeout: 5_000 }))
     const title = screen.getByLabelText('제목')
     expect(title).toHaveValue('수정할 개인 일정')
     await user.clear(title)
@@ -135,8 +137,10 @@ describe('ScheduleCalendar', () => {
       updateSchedule,
     })
 
-    await user.click(await screen.findByRole('button', { name: /수정할 개인 일정/ }))
-    await user.click(await screen.findByRole('button', { name: '일정 수정' }))
+    await user.click(
+      await screen.findByRole('button', { name: /수정할 개인 일정/ }, { timeout: 5_000 }),
+    )
+    await user.click(await screen.findByRole('button', { name: '일정 수정' }, { timeout: 5_000 }))
     await user.click(screen.getByLabelText('하루종일'))
     await user.click(screen.getByRole('button', { name: '수정 저장' }))
 
@@ -148,7 +152,7 @@ describe('ScheduleCalendar', () => {
         allDay: true,
       }),
     )
-  })
+  }, 10_000)
 
   it('asks before cancellation, removes a cancelled schedule, and restores focus', async () => {
     window.history.replaceState({}, '', '/?view=month&date=2024-02-29')

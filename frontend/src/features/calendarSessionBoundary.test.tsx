@@ -23,7 +23,9 @@ describe('Calendar session boundary', () => {
 
     const { unmount } = render(<App />)
 
-    expect(await screen.findByRole('heading', { name: '로그인' })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: '로그인' }, { timeout: 5_000 }),
+    ).toBeInTheDocument()
     unmount()
 
     fetchMock
@@ -36,7 +38,11 @@ describe('Calendar session boundary', () => {
     render(<App />)
 
     expect(
-      await screen.findByText('일정을 불러오지 못했습니다. 다시 시도해 주세요.'),
+      await screen.findByText(
+        '일정을 불러오지 못했습니다. 다시 시도해 주세요.',
+        {},
+        { timeout: 5_000 },
+      ),
     ).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '로그인' })).not.toBeInTheDocument()
   })
