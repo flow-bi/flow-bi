@@ -306,6 +306,7 @@ ADR-0001, ADR-0002와 ADR-0003 승인에 따라 Migration은 UTC Timestamp 기�
 
 - `backend/src/main/resources/db/migration/V20260812000001_00__auth_create_authentication_tables.sql` creates the minimal `positions`, `teams`, `users`, and `user_credentials` tables required by the authentication baseline.
 - `users.employee_number` is unique; `user_credentials.user_id` is unique and required; both user reference keys are required foreign keys. `must_change_password` defaults to `TRUE`, and `password_hash` is required with a maximum length of 255.
+- 공유 개발 DB는 `개발팀`, `기획팀`, `디자인팀`, `인사팀`, `마케팅팀`과 `인턴`, `사원`, `대리`, `과장`, `차장`, `부장`을 조직 기준 데이터로 Migration한다. 이름이 이미 존재하면 중복 삽입하지 않으며, 생성된 ID는 외부 계약으로 고정하지 않는다.
 - Development account creation is not a migration or a startup fixture. The optional adapter is
   registered only when the `local` or `test` profile and
   `auth.dev-employee-account.enabled=true` (or
