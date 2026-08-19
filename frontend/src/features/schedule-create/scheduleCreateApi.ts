@@ -9,6 +9,16 @@ export interface AttendeeCandidate {
   displayName: string
 }
 
+export interface ScheduleTargetOption {
+  id: number
+  name: string
+}
+
+export interface ScheduleTargetOptions {
+  teams: ScheduleTargetOption[]
+  projects: ScheduleTargetOption[]
+}
+
 export interface CreateScheduleRequest {
   title: string
   type: ScheduleType
@@ -74,4 +84,8 @@ export async function searchAttendees(query: string): Promise<AttendeeCandidate[
     `/api/schedules/attendee-candidates?query=${encodeURIComponent(query.trim())}`,
   )
   return response.data
+}
+
+export async function getScheduleTargetOptions(): Promise<ScheduleTargetOptions> {
+  return requestJson<ScheduleTargetOptions>('/api/schedules/target-options')
 }

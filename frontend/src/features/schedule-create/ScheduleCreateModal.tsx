@@ -6,13 +6,15 @@ import { useForm, useWatch } from 'react-hook-form'
 import {
   type AttendeeCandidate,
   type CreateScheduleRequest,
+  type ScheduleTargetOption,
+  type ScheduleTargetOptions,
   type ScheduleType,
   ScheduleApiError,
   createSchedule as createScheduleRequest,
+  getScheduleTargetOptions as getScheduleTargetOptionsRequest,
   searchAttendees as searchAttendeesRequest,
 } from './scheduleCreateApi'
 import {
-  parseIdList,
   scheduleFormSchema,
   scheduleTypeDefaults,
   toScheduleRequest,
@@ -36,6 +38,7 @@ export interface ScheduleCreateModalProps {
   onClose: () => void
   createSchedule?: (request: CreateScheduleRequest) => Promise<void>
   searchAttendees?: (query: string) => Promise<AttendeeCandidate[]>
+  getTargetOptions?: () => Promise<ScheduleTargetOptions>
 }
 
 function typeLabel(type: ScheduleType): string {
@@ -46,6 +49,7 @@ export function ScheduleCreateModal({
   onClose,
   createSchedule = createScheduleRequest,
   searchAttendees = searchAttendeesRequest,
+  getTargetOptions = getScheduleTargetOptionsRequest,
 }: ScheduleCreateModalProps) {
   const lastFocusedElement = useRef<HTMLElement | null>(
     document.activeElement instanceof HTMLElement ? document.activeElement : null,
@@ -83,6 +87,12 @@ export function ScheduleCreateModal({
     queryKey: ['schedule', 'attendee-candidates', attendeeQuery.trim()],
     queryFn: () => searchAttendees(attendeeQuery.trim()),
     enabled: attendeeQuery.trim().length > 0,
+    retry: false,
+  })
+  const targetOptions = useQuery({
+    queryKey: ['schedule', 'target-options'],
+    queryFn: getTargetOptions,
+    enabled: scheduleType === 'TEAM' || scheduleType === 'PROJECT',
     retry: false,
   })
   const mutation = useMutation({
@@ -170,6 +180,17 @@ export function ScheduleCreateModal({
     mutation.mutate(toScheduleRequest(values))
   }
 
+  function toggleTarget(targetField: 'teamTargetIds' | 'projectTargetIds', targetId: number) {
+    const currentTargetIds = form.getValues(targetField)
+    form.setValue(
+      targetField,
+      currentTargetIds.includes(targetId)
+        ? currentTargetIds.filter((id) => id !== targetId)
+        : [...currentTargetIds, targetId],
+      { shouldDirty: true, shouldValidate: true },
+    )
+  }
+
   const totalAttendees = selectedAttendees.length + (creatorAttends ? 1 : 0)
   const canShowResults = attendeeQuery.trim().length > 0 && !attendeeSearch.isLoading
   const attendeeSearchMessage =
@@ -177,6 +198,17 @@ export function ScheduleCreateModal({
     (attendeeSearch.error.status === 401 || attendeeSearch.error.status === 403)
       ? '참석자 검색 권한이 없습니다.'
       : '참석자 검색에 실패했습니다. 다시 시도해 주세요.'
+  const targetField = scheduleType === 'TEAM' ? 'teamTargetIds' : 'projectTargetIds'
+  const targetOptionsForType: ScheduleTargetOption[] =
+    scheduleType === 'TEAM'
+      ? (targetOptions.data?.teams ?? [])
+      : (targetOptions.data?.projects ?? [])
+  const targetLabel = scheduleType === 'TEAM' ? '팀 대상' : '프로젝트 대상'
+  const targetEmptyMessage =
+    scheduleType === 'TEAM' ? '선택 가능한 팀이 없습니다.' : '선택 가능한 프로젝트가 없습니다.'
+  const targetErrorId =
+    scheduleType === 'TEAM' ? 'schedule-team-targets-error' : 'schedule-project-targets-error'
+  const targetError = form.formState.errors[targetField]
 
   return (
     <div
@@ -292,39 +324,55 @@ export function ScheduleCreateModal({
               </option>
             </select>
           </label>
-          {scheduleType === 'TEAM' && (
-            <label className={labelClass}>
-              팀 대상 ID
-              <input
-                inputMode="numeric"
-                className={fieldClass}
-                onChange={(event) =>
-                  form.setValue('teamTargetIds', parseIdList(event.target.value), {
-                    shouldDirty: true,
-                  })
-                }
-              />
-            </label>
-          )}
-          {scheduleType === 'PROJECT' && (
-            <label className={labelClass}>
-              프로젝트 대상 ID
-              <input
-                inputMode="numeric"
-                className={fieldClass}
-                onChange={(event) =>
-                  form.setValue('projectTargetIds', parseIdList(event.target.value), {
-                    shouldDirty: true,
-                  })
-                }
-              />
-            </label>
-          )}
-          {form.formState.errors.teamTargetIds && (
-            <p role="alert">{form.formState.errors.teamTargetIds.message}</p>
-          )}
-          {form.formState.errors.projectTargetIds && (
-            <p role="alert">{form.formState.errors.projectTargetIds.message}</p>
+          {(scheduleType === 'TEAM' || scheduleType === 'PROJECT') && (
+            <fieldset
+              aria-describedby={targetError ? targetErrorId : undefined}
+              aria-invalid={Boolean(targetError)}
+              className="grid min-w-0 gap-2 rounded-md border border-border p-3"
+            >
+              <legend className="px-1 font-semibold text-text-primary">{targetLabel}</legend>
+              {targetOptions.isLoading && <p>일정 대상 목록을 불러오고 있습니다.</p>}
+              {targetOptions.isError && (
+                <div className="grid gap-2" role="alert">
+                  <p>일정 대상 목록을 불러오지 못했습니다. 다시 시도해 주세요.</p>
+                  <button
+                    className={secondaryButtonClass}
+                    onClick={() => void targetOptions.refetch()}
+                    type="button"
+                  >
+                    대상 목록 다시 시도
+                  </button>
+                </div>
+              )}
+              {!targetOptions.isLoading &&
+                !targetOptions.isError &&
+                targetOptionsForType.length === 0 && <p>{targetEmptyMessage}</p>}
+              {!targetOptions.isLoading &&
+                !targetOptions.isError &&
+                targetOptionsForType.length > 0 && (
+                  <div className="grid gap-2">
+                    {targetOptionsForType.map((option) => {
+                      const selected = form.getValues(targetField).includes(option.id)
+                      return (
+                        <label className={checkboxLabelClass} key={option.id}>
+                          <input
+                            checked={selected}
+                            className={checkboxClass}
+                            onChange={() => toggleTarget(targetField, option.id)}
+                            type="checkbox"
+                          />
+                          {option.name}
+                        </label>
+                      )
+                    })}
+                  </div>
+                )}
+              {targetError && (
+                <p id={targetErrorId} role="alert">
+                  {targetError.message}
+                </p>
+              )}
+            </fieldset>
           )}
           <label className={labelClass}>
             색상 라벨
