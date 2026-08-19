@@ -28,6 +28,8 @@ class ScheduleOpenApiContractTest {
         .andExpect(jsonPath("$.paths['/api/schedules/{scheduleId}'].put.summary").value("일정 수정"))
         .andExpect(jsonPath("$.paths['/api/schedules/{scheduleId}'].delete.summary").value("일정 취소"))
         .andExpect(jsonPath("$.paths['/api/schedules/attendee-candidates'].get.summary")
-            .value("일정 참석자 후보 검색"));
+            .value("일정 참석자 후보 검색"))
+        .andExpect(
+            jsonPath("$.paths['/api/schedules/target-options'].get.summary").value("일정 대상 선택지 조회"));
   }
 }

@@ -45,6 +45,12 @@ public class JdbcScheduleIdentityAdapter {
         "%" + query.toLowerCase() + "%","%" + query.toLowerCase() + "%");
   }
 
+  public ScheduleTargetOptions findTargetOptions(long actorId) {
+    requireActiveActor(actorId);
+    return new ScheduleTargetOptions(findTeamsForActor(actorId),
+        findActiveProjectsForActor(actorId));
+  }
+
   void validateForCreation(ScheduleCreateCommand command) {
     requireActiveActor(command.creatorId());
     requireAllActiveUsers(union(command.participantIds(),command.userTargetIds()));
@@ -70,6 +76,31 @@ public class JdbcScheduleIdentityAdapter {
         JOIN projects p ON p.project_id = pm.project_id
         WHERE pm.user_id = ? AND p.status = 'ACTIVE'
         """,actorId,projectIds);
+  }
+
+  private List<ScheduleTargetOption> findTeamsForActor(long actorId) {
+    return jdbcTemplate.query("""
+        SELECT t.team_id, t.team_name
+        FROM users u
+        JOIN teams t ON t.team_id = u.team_id
+        WHERE u.user_id = ? AND u.status = 'ACTIVE'
+        ORDER BY t.team_name ASC, t.team_id ASC
+        """,targetOptionRowMapper(),actorId);
+  }
+
+  private List<ScheduleTargetOption> findActiveProjectsForActor(long actorId) {
+    return jdbcTemplate.query("""
+        SELECT p.project_id, p.project_name
+        FROM projects_members pm
+        JOIN projects p ON p.project_id = pm.project_id
+        WHERE pm.user_id = ? AND p.status = 'ACTIVE'
+        ORDER BY p.project_name ASC, p.project_id ASC
+        """,targetOptionRowMapper(),actorId);
+  }
+
+  private org.springframework.jdbc.core.RowMapper<ScheduleTargetOption> targetOptionRowMapper() {
+    return (resultSet,rowNumber) -> new ScheduleTargetOption(resultSet.getLong(1),
+        resultSet.getString(2));
   }
 
   private String normalizeQuery(String rawQuery) {
