@@ -67,13 +67,15 @@ class ScheduleQueryPostgresPerformanceTest {
 
   @BeforeEach
   void prepareFixture() {
-    jdbcTemplate.update("INSERT INTO teams (team_id, team_name) VALUES (10, 'Fixture Team')");
-    jdbcTemplate.update("INSERT INTO positions (position_id, position_name) VALUES (1, 'Fixture')");
+    Long teamId = jdbcTemplate.queryForObject("SELECT team_id FROM teams WHERE team_name = '개발팀'",
+        Long.class);
+    Long positionId = jdbcTemplate
+        .queryForObject("SELECT position_id FROM positions WHERE position_name = '사원'",Long.class);
     jdbcTemplate.update("""
         INSERT INTO users (user_id, position_id, team_id, employee_number, email, name, status)
-        VALUES (1, 1, 10, 'performance-fixture', 'performance-fixture@example.test',
+        VALUES (1, ?, ?, 'performance-fixture', 'performance-fixture@example.test',
           'Performance Fixture', 'ACTIVE')
-        """);
+        """,positionId,teamId);
     jdbcTemplate.batchUpdate("""
         INSERT INTO schedules (title, schedule_type, visibility, start_at, end_at, creator_id,
         is_all_day, color_label, creator_attends)
@@ -81,8 +83,8 @@ class ScheduleQueryPostgresPerformanceTest {
         """,scheduleRows());
     jdbcTemplate.batchUpdate("""
         INSERT INTO schedule_targets (schedule_id, team_id, target_type)
-        VALUES (?, 10, 'TEAM')
-        """,targetRows());
+        VALUES (?, ?, 'TEAM')
+        """,targetRows(teamId));
     jdbcTemplate.batchUpdate("""
         INSERT INTO schedules_details (schedule_id, content, location)
         VALUES (?, NULL, NULL)
@@ -121,6 +123,13 @@ class ScheduleQueryPostgresPerformanceTest {
       statement.setString(1,"Schedule " + index);
       statement.setObject(2,FROM.plusMinutes(index));
       statement.setObject(3,FROM.plusMinutes(index + 30));
+    });
+  }
+
+  private BatchPreparedStatementSetter targetRows(long teamId) {
+    return rows((statement,index) -> {
+      statement.setLong(1,index);
+      statement.setLong(2,teamId);
     });
   }
 

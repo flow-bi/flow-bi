@@ -19,6 +19,7 @@ import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.util.Set;
 import javax.sql.DataSource;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
@@ -138,6 +139,14 @@ class AuthenticationPersistenceIntegrationTest {
 
     assertThat(foundUser.getPosition()).isNotNull();
     assertThat(foundUser.getTeam()).isNotNull();
+  }
+
+  @Test
+  void migratesSharedDevelopmentTeamsAndPositions() {
+    assertThat(teamRepository.findAll()).extracting(Team::getTeamName)
+        .containsExactlyInAnyOrderElementsOf(Set.of("개발팀","기획팀","디자인팀","인사팀","마케팅팀"));
+    assertThat(positionRepository.findAll()).extracting(Position::getPositionName)
+        .containsExactlyInAnyOrderElementsOf(Set.of("인턴","사원","대리","과장","차장","부장"));
   }
 
   @Test

@@ -102,17 +102,29 @@ class ScheduleMigrationPostgresTest {
 
   private static void insertAuthenticationReferences(Connection connection,boolean emailRequired)
       throws SQLException {
-    connection.createStatement()
-        .execute("INSERT INTO positions (position_id, position_name) VALUES (1, 'Fixture')");
-    connection.createStatement()
-        .execute("INSERT INTO teams (team_id, team_name) VALUES (10, 'Fixture')");
+    long positionId = referenceId(connection,emailRequired,
+        "SELECT position_id FROM positions WHERE position_name = '사원'",
+        "INSERT INTO positions (position_name) VALUES ('Fixture') RETURNING position_id");
+    long teamId = referenceId(connection,emailRequired,
+        "SELECT team_id FROM teams WHERE team_name = '개발팀'",
+        "INSERT INTO teams (team_name) VALUES ('Fixture') RETURNING team_id");
     String users = emailRequired
         ? "INSERT INTO users (user_id, position_id, team_id, employee_number, email, name, status) VALUES "
-            + "(1, 1, 10, 'fixture-1', 'fixture-1@example.test', 'Fixture One', 'ACTIVE'), "
-            + "(2, 1, 10, 'fixture-2', 'fixture-2@example.test', 'Fixture Two', 'ACTIVE')"
+            + "(1, %1$d, %2$d, 'fixture-1', 'fixture-1@example.test', 'Fixture One', 'ACTIVE'), "
+            + "(2, %1$d, %2$d, 'fixture-2', 'fixture-2@example.test', 'Fixture Two', 'ACTIVE')"
         : "INSERT INTO users (user_id, position_id, team_id, employee_number, name) VALUES "
-            + "(1, 1, 10, 'fixture-1', 'Fixture One'), " + "(2, 1, 10, 'fixture-2', 'Fixture Two')";
-    connection.createStatement().execute(users);
+            + "(1, %1$d, %2$d, 'fixture-1', 'Fixture One'), "
+            + "(2, %1$d, %2$d, 'fixture-2', 'Fixture Two')";
+    connection.createStatement().execute(users.formatted(positionId,teamId));
+  }
+
+  private static long referenceId(Connection connection,boolean seedDataAvailable,String selectSql,
+      String insertSql) throws SQLException {
+    try (var result = connection.createStatement()
+        .executeQuery(seedDataAvailable ? selectSql : insertSql)) {
+      assertThat(result.next()).isTrue();
+      return result.getLong(1);
+    }
   }
 
   private static String jdbcUrlFor(String schema) throws SQLException {
