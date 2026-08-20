@@ -4,7 +4,7 @@
 
 > **상태: Reviewed Baseline Draft**
 >
-> 이 문서는 초기 ERD를 기준으로 하되 승인된 인증 결정인 Redis 기반 서버 세션과 최초 로그인 비밀번호 변경 상태를 반영한다. 나머지 미검토 구조는 초기 기준선으로 유지한다.
+> 이 문서는 초기 ERD를 기준으로 하되 승인된 인증 결정인 Redis 기반 서버 세션과 최초 로그인 비밀번호 변경 상태, PostgreSQL 팀 계층 Migration을 반영한다. 나머지 미검토 구조는 초기 기준선으로 유지한다.
 
 인증 영역을 제외한 ERD의 명칭, 타입, 오탈자와 예비 필드는 원본 추적을 위해 그대로 기록한다. 실제 PostgreSQL Migration을 작성하기 전 별도 Schema Review와 승인이 필요하다.
 
@@ -51,25 +51,36 @@
 
 조직 계층의 팀을 관리한다.
 
-| 컬럼             | 타입          | 제약        | 설명       |
-| ---------------- | ------------- | ----------- | ---------- |
-| `team_id`        | `BIGINT`      | PK          | 팀 ID      |
-| `parent_team_id` | `BIGINT`      | NULL        | 상위 팀 ID |
-| `team_name`      | `VARCHAR(50)` | NOT NULL    | 팀 이름    |
-| `created_at`     | `DATETIME`    | DEFAULT NOW | 생성일시   |
-| `updated_at`     | `DATETIME`    | DEFAULT NOW | 수정일시   |
+| 컬럼             | PostgreSQL 타입            | 제약                                      | 설명       |
+| ---------------- | -------------------------- | ----------------------------------------- | ---------- |
+| `team_id`        | `BIGINT`                   | PK, identity                              | 팀 ID      |
+| `parent_team_id` | `BIGINT`                   | NULL, FK → `teams.team_id`, self 제외 CHECK | 상위 팀 ID |
+| `team_name`      | `VARCHAR(50)`              | NOT NULL                                  | 팀 이름    |
+| `created_at`     | `TIMESTAMP WITH TIME ZONE` | NOT NULL, DEFAULT `CURRENT_TIMESTAMP`     | 생성일시   |
+| `updated_at`     | `TIMESTAMP WITH TIME ZONE` | NOT NULL, DEFAULT `CURRENT_TIMESTAMP`     | 수정일시   |
+
+`parent_team_id`에는 `idx_teams_parent_team_id`를 둔다. 이름은 `lower(btrim(team_name))`으로
+정규화하며, 최상위 팀은 `uk_teams_root_normalized_name` partial unique index로, 하위 팀은
+`uk_teams_parent_normalized_name` partial unique index로 같은 부모 아래 중복을 막는다.
+기존 팀은 Migration에서 `parent_team_id = NULL`인 최상위 팀으로 보존한다.
 
 ### 2.4 `teams_closure`
 
 팀 계층을 Closure Table Pattern으로 관리한다.
 
-| 컬럼                 | 타입       | 제약        | 설명                |
-| -------------------- | ---------- | ----------- | ------------------- |
-| `ancestor_team_id`   | `BIGINT`   | PK, FK      | 조상 팀 ID          |
-| `descendant_team_id` | `BIGINT`   | PK, FK      | 자손 팀 ID          |
-| `depth`              | `INT`      | NOT NULL    | 계층 거리; 자신은 0 |
-| `created_at`         | `DATETIME` | DEFAULT NOW | 생성일시            |
-| `updated_at`         | `DATETIME` | DEFAULT NOW | 수정일시            |
+| 컬럼                 | PostgreSQL 타입            | 제약                                        | 설명                |
+| -------------------- | -------------------------- | ------------------------------------------- | ------------------- |
+| `ancestor_team_id`   | `BIGINT`                   | 복합 PK, FK → `teams.team_id`, NOT NULL     | 조상 팀 ID          |
+| `descendant_team_id` | `BIGINT`                   | 복합 PK, FK → `teams.team_id`, NOT NULL     | 자손 팀 ID          |
+| `depth`              | `INTEGER`                  | NOT NULL, Closure depth CHECK                | 조상에서 자손까지 간선 수 |
+| `created_at`         | `TIMESTAMP WITH TIME ZONE` | NOT NULL, DEFAULT `CURRENT_TIMESTAMP`       | 생성일시            |
+| `updated_at`         | `TIMESTAMP WITH TIME ZONE` | NOT NULL, DEFAULT `CURRENT_TIMESTAMP`       | 수정일시            |
+
+`depth`는 조상에서 자손까지의 간선 수다. 동일 팀 행은 반드시 `depth = 0`, 서로 다른 팀 행은
+반드시 `depth > 0`이다. Migration은 모든 기존 팀에 `(team_id, team_id, 0)` 행을 backfill한다.
+조회용 인덱스는 `idx_teams_closure_ancestor_depth_descendant(ancestor_team_id, depth,
+descendant_team_id)` 및 `idx_teams_closure_descendant_depth_ancestor(descendant_team_id, depth,
+ancestor_team_id)`이며, 복합 PK 선두 컬럼과 중복되는 단일 인덱스는 만들지 않는다.
 
 ### 2.5 `positions`
 

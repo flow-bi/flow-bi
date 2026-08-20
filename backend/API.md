@@ -214,10 +214,36 @@ the session or Redis; it is resolved from the authoritative user store for each 
 | `DELETE` | `/api/users/{userId}` | 직원 삭제 또는 비활성화 요청      |
 | `GET`    | `/api/teams`          | 팀 목록 또는 조직도 조회          |
 | `POST`   | `/api/teams`          | 관리자 팀 생성                    |
-| `PUT`    | `/api/teams/{teamId}` | 관리자 팀 수정                    |
-| `DELETE` | `/api/teams/{teamId}` | 관리자 팀 삭제 또는 비활성화 요청 |
+| `PATCH`  | `/api/teams/{teamId}/name` | 관리자 팀 이름 변경          |
+| `PUT`    | `/api/teams/{teamId}/parent` | 관리자 팀 이동              |
+| `DELETE` | `/api/teams/{teamId}` | 관리자 leaf 팀 삭제               |
 
 직원·팀의 구체적인 삭제·비활성화 방식은 관련 Product Spec과 Design Doc에서 결정한다.
+
+#### Team hierarchy API (FR-005 to FR-008, NFR-001)
+
+All team endpoints require an authenticated user. Read endpoints are available to every authenticated user. `POST`, `PATCH`, `PUT`, and `DELETE` additionally require the current server-provided `AuthenticatedUser.Role.ADMIN` and a valid CSRF token; request bodies never contain or establish the acting user or role.
+
+| Method | Path | Response |
+| --- | --- | --- |
+| `GET` | `/api/teams` | `200` list of direct team responses |
+| `GET` | `/api/teams/{teamId}` | `200` team response |
+| `GET` | `/api/teams/{teamId}/parent` | `200` direct parent, or `204` for a root |
+| `GET` | `/api/teams/{teamId}/children` | `200` direct-child list |
+| `GET` | `/api/teams/{teamId}/ancestors` | `200` ancestor list excluding self |
+| `GET` | `/api/teams/{teamId}/descendants` | `200` descendant list excluding self |
+| `GET` | `/api/teams/{teamId}/path` | `200` root-to-team path |
+| `GET` | `/api/teams/{teamId}/tree` | `200` requested subtree |
+| `POST` | `/api/teams` | `201` created team |
+| `PATCH` | `/api/teams/{teamId}/name` | `200` renamed team |
+| `PUT` | `/api/teams/{teamId}/parent` | `200` moved team |
+| `DELETE` | `/api/teams/{teamId}` | `204` |
+
+`TeamCreateRequest` is `{ "teamName": "Platform", "parentTeamId": 1 }`; `parentTeamId` may be `null` for a root. `TeamNameUpdateRequest` is `{ "teamName": "Platform" }` and `TeamMoveRequest` is `{ "newParentTeamId": 1 }`, where `null` moves the team to the root. Names are trimmed, must be 1-50 non-control characters, and IDs must be positive when present. The normal response is `{ "teamId": 1, "teamName": "Platform", "parentTeamId": null }`.
+
+Ancestor and descendant entries return `{ "teamId", "teamName", "distance" }`; `distance` is the Closure Table edge distance (the direct relation is `1`). Path entries return `{ "teamId", "teamName", "depth" }`, where display `depth` starts at `0` for the root. Tree entries return `{ "teamId", "teamName", "depth", "children" }`, where display `depth` starts at `0` for the requested tree root. Thus Closure distance and display depth are distinct.
+
+Errors use `{ "code", "message", "fieldErrors" }` without internal exception details. Malformed input is `400 TEAM_INVALID`; missing authentication is `401 UNAUTHENTICATED`; a non-admin mutation is `403 TEAM_ADMIN_REQUIRED`; missing team or parent is `404 TEAM_NOT_FOUND`; duplicate names, self/cyclic/same-parent moves, non-leaf deletion, and assigned users are `409` with `TEAM_NAME_CONFLICT`, `TEAM_MOVE_CONFLICT`, `TEAM_HAS_CHILDREN`, or `TEAM_IN_USE`. Detected Closure/adjacency inconsistency is `500 TEAM_HIERARCHY_INCONSISTENT`. OpenAPI is available only in the `local` and `harness` profiles; it remains unavailable by default.
 
 ### 8.3 Profile
 
