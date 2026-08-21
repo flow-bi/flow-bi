@@ -4,7 +4,11 @@ import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
-import { ScheduleApiError, type CreateScheduleRequest } from './scheduleCreateApi'
+import {
+  ScheduleApiError,
+  type CreateScheduleRequest,
+  type ScheduleTargetOptions,
+} from './scheduleCreateApi'
 import { ScheduleCreateModal } from './ScheduleCreateModal'
 
 function renderModal(onClose = vi.fn()) {
@@ -33,6 +37,165 @@ function renderModal(onClose = vi.fn()) {
 }
 
 describe('ScheduleCreateModal', () => {
+  it('selects accessible team names and submits their IDs without exposing raw ID inputs', async () => {
+    const user = userEvent.setup()
+    const createSchedule = vi.fn<(request: CreateScheduleRequest) => Promise<void>>(() =>
+      Promise.resolve(),
+    )
+    const targetOptions = vi.fn<() => Promise<ScheduleTargetOptions>>(() =>
+      Promise.resolve({
+        teams: [
+          { id: 10, name: '플랫폼 팀' },
+          { id: 12, name: '디자인 팀' },
+        ],
+        projects: [{ id: 20, name: '캘린더 개선' }],
+      }),
+    )
+    render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <ScheduleCreateModal
+          createSchedule={createSchedule}
+          getTargetOptions={targetOptions}
+          onClose={vi.fn()}
+          searchAttendees={() => Promise.resolve([])}
+        />
+      </QueryClientProvider>,
+    )
+
+    await user.selectOptions(screen.getByLabelText('일정 유형'), 'TEAM')
+    const targets = await screen.findByRole('group', { name: '팀 대상' })
+    await user.click(within(targets).getByLabelText('플랫폼 팀'))
+    await user.click(within(targets).getByLabelText('디자인 팀'))
+    expect(screen.queryByLabelText(['팀 대상', 'ID'].join(' '))).not.toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('제목'), '스프린트 계획')
+    await user.type(screen.getByLabelText('날짜'), '2026-08-10')
+    await user.click(screen.getByRole('button', { name: '일정 저장' }))
+
+    await waitFor(() => expect(createSchedule).toHaveBeenCalledTimes(1))
+    expect(createSchedule.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({ teamTargetIds: [10, 12], projectTargetIds: [] }),
+    )
+  })
+
+  it('shows target option loading, empty, error and retry states without treating failures as empty', async () => {
+    const user = userEvent.setup()
+    const getTargetOptions = vi
+      .fn<() => Promise<ScheduleTargetOptions>>()
+      .mockRejectedValueOnce(new ScheduleApiError('unauthorized', 401))
+      .mockResolvedValueOnce({ teams: [], projects: [] })
+    render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <ScheduleCreateModal
+          getTargetOptions={getTargetOptions}
+          onClose={vi.fn()}
+          searchAttendees={() => Promise.resolve([])}
+        />
+      </QueryClientProvider>,
+    )
+
+    await user.selectOptions(screen.getByLabelText('일정 유형'), 'TEAM')
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '일정 대상 목록을 불러오지 못했습니다.',
+    )
+    expect(screen.queryByText('선택 가능한 팀이 없습니다.')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '대상 목록 다시 시도' }))
+    expect(await screen.findByText('선택 가능한 팀이 없습니다.')).toBeVisible()
+  })
+
+  it('announces target option loading until the available names arrive', async () => {
+    const user = userEvent.setup()
+    let resolveTargetOptions: ((options: ScheduleTargetOptions) => void) | undefined
+    const targetOptions = new Promise<ScheduleTargetOptions>((resolve) => {
+      resolveTargetOptions = resolve
+    })
+    render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <ScheduleCreateModal
+          getTargetOptions={() => targetOptions}
+          onClose={vi.fn()}
+          searchAttendees={() => Promise.resolve([])}
+        />
+      </QueryClientProvider>,
+    )
+
+    await user.selectOptions(screen.getByLabelText('일정 유형'), 'TEAM')
+    expect(await screen.findByText('일정 대상 목록을 불러오고 있습니다.')).toBeVisible()
+    resolveTargetOptions?.({ teams: [{ id: 10, name: '플랫폼 팀' }], projects: [] })
+    expect(await screen.findByLabelText('플랫폼 팀')).toBeVisible()
+  })
+
+  it('keeps 403 target option failures visible instead of treating them as empty', async () => {
+    const user = userEvent.setup()
+    render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <ScheduleCreateModal
+          getTargetOptions={() => Promise.reject(new ScheduleApiError('forbidden', 403))}
+          onClose={vi.fn()}
+          searchAttendees={() => Promise.resolve([])}
+        />
+      </QueryClientProvider>,
+    )
+
+    await user.selectOptions(screen.getByLabelText('일정 유형'), 'PROJECT')
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '일정 대상 목록을 불러오지 못했습니다.',
+    )
+    expect(screen.queryByText('선택 가능한 프로젝트가 없습니다.')).not.toBeInTheDocument()
+  })
+
+  it('clears the other target type when changing schedule type and connects required errors', async () => {
+    const user = userEvent.setup()
+    const createSchedule = vi.fn<(request: CreateScheduleRequest) => Promise<void>>(() =>
+      Promise.resolve(),
+    )
+    render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <ScheduleCreateModal
+          createSchedule={createSchedule}
+          getTargetOptions={() =>
+            Promise.resolve({
+              teams: [{ id: 10, name: '플랫폼 팀' }],
+              projects: [{ id: 20, name: '캘린더 개선' }],
+            })
+          }
+          onClose={vi.fn()}
+          searchAttendees={() => Promise.resolve([])}
+        />
+      </QueryClientProvider>,
+    )
+
+    await user.selectOptions(screen.getByLabelText('일정 유형'), 'TEAM')
+    await user.click(await screen.findByLabelText('플랫폼 팀'))
+    await user.selectOptions(screen.getByLabelText('일정 유형'), 'PROJECT')
+    await user.type(screen.getByLabelText('제목'), '프로젝트 계획')
+    await user.type(screen.getByLabelText('날짜'), '2026-08-10')
+    await user.click(screen.getByRole('button', { name: '일정 저장' }))
+    const error = await screen.findByText('프로젝트 대상을 하나 이상 선택해 주세요.')
+    expect(error).toHaveAttribute('id', 'schedule-project-targets-error')
+    expect(screen.getByRole('group', { name: '프로젝트 대상' })).toHaveAttribute(
+      'aria-describedby',
+      'schedule-project-targets-error',
+    )
+
+    await user.click(screen.getByLabelText('캘린더 개선'))
+    await user.click(screen.getByRole('button', { name: '일정 저장' }))
+    await waitFor(() => expect(createSchedule).toHaveBeenCalledTimes(1))
+    expect(createSchedule.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({ teamTargetIds: [], projectTargetIds: [20] }),
+    )
+  })
+
   it('uses stable hooks for its responsive Tailwind modal surfaces', () => {
     render(
       <QueryClientProvider
@@ -179,6 +342,9 @@ describe('ScheduleCreateModal', () => {
       >
         <ScheduleCreateModal
           createSchedule={createSchedule}
+          getTargetOptions={() =>
+            Promise.resolve({ teams: [{ id: 10, name: '플랫폼 팀' }], projects: [] })
+          }
           onClose={vi.fn()}
           searchAttendees={() => Promise.resolve([{ userId: 2, displayName: '민지' }])}
         />
@@ -189,7 +355,7 @@ describe('ScheduleCreateModal', () => {
     expect(screen.getByLabelText('공개 범위')).toHaveValue('TEAM')
     await user.type(screen.getByLabelText('제목'), '스프린트 계획')
     await user.type(screen.getByLabelText('날짜'), '2026-08-10')
-    await user.type(screen.getByLabelText('팀 대상 ID'), '10')
+    await user.click(await screen.findByLabelText('플랫폼 팀'))
     await user.type(screen.getByLabelText('참석자 검색'), '민지')
     await user.click(await screen.findByRole('button', { name: '민지 참석자로 추가' }))
     await user.type(screen.getByLabelText('참석자 검색'), '민지')

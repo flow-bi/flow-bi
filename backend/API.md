@@ -215,6 +215,7 @@ never contain a session identifier, CSRF token, or authentication credential.
 | -------- | ------------------------------------------- | --------------------------- |
 | `GET`    | `/api/schedules?from=&to=`                  | 기간별 일정 조회            |
 | `GET`    | `/api/schedules/attendee-candidates?query=` | 일정 참석자 후보 검색       |
+| `GET`    | `/api/schedules/target-options`             | 일정 대상 선택지 조회       |
 | `POST`   | `/api/schedules`                            | 일정 생성                   |
 | `GET`    | `/api/schedules/{scheduleId}`               | 일정 상세 조회              |
 | `PUT`    | `/api/schedules/{scheduleId}`               | 일정 수정                   |
@@ -232,6 +233,24 @@ never contain a session identifier, CSRF token, or authentication credential.
 - 현재 사용자가 일정 참석자로 지정할 수 없는 비활성·퇴사·접근 불가 사용자는 결과에서 제외한다.
 - 인증 주체가 없으면 `401 Unauthorized`, 잘못된 검색어는 `400 Bad Request`를 반환한다.
 - 검색 결과가 없으면 빈 배열을 반환하며, 사용자 존재 여부를 오류 응답으로 구분해 노출하지 않는다.
+
+`GET /api/schedules/target-options`는 인증된 사용자가 일정 등록 화면에서 선택할 수 있는 대상의
+최소 식별 정보만 반환한다.
+
+```json
+{
+  "teams": [{ "id": 10, "name": "Platform" }],
+  "projects": [{ "id": 20, "name": "Calendar" }]
+}
+```
+
+- `teams`에는 현재 인증 사용자의 소속 팀만, `projects`에는 현재 인증 사용자가 참여 중인
+  `ACTIVE` 프로젝트만 각각 이름 오름차순, ID 오름차순으로 반환한다.
+- 각 항목은 선택에 필요한 `id`, `name`만 포함하며 직원 정보, 프로젝트 참여자 목록 또는 내부 상태는 포함하지 않는다.
+- 인증되지 않은 요청은 `401 Unauthorized`와 `UNAUTHENTICATED`, 비활성 Actor는 `403 Forbidden`과
+  `SCHEDULE_ACTOR_INACTIVE`를 반환한다. 빈 결과는 해당 배열을 빈 배열로 반환한다.
+- 이 목록은 생성 권한의 대체 수단이 아니며, `POST /api/schedules`와 `PUT /api/schedules/{scheduleId}`는
+  기존 대상 접근 검증을 다시 수행한다.
 
 참석자 ID 목록에 같은 사용자가 반복되면 `400 Bad Request`와 `DUPLICATE_SCHEDULE_PARTICIPANT`로 거부한다. 접근할 수 없거나 비활성인 사용자 ID는 중복 여부와 관계없이 `400 Bad Request`로 거부한다.
 

@@ -28,6 +28,10 @@ function interceptCalendar() {
   )
   cy.intercept('GET', '/api/schedules?*', [summary]).as('schedules')
   cy.intercept('GET', '/api/schedules/11', detail).as('detail')
+  cy.intercept('GET', '/api/schedules/target-options', {
+    teams: [{ id: 10, name: '플랫폼 팀' }],
+    projects: [{ id: 20, name: '캘린더 개선' }],
+  }).as('targetOptions')
 }
 
 describe('calendar schedule management', () => {

@@ -34,16 +34,19 @@ class ScheduleController {
   private final ScheduleUpdateService updateService;
   private final ScheduleCancelService cancelService;
   private final ScheduleIdentityService identityService;
+  private final ScheduleTargetOptionsService targetOptionsService;
 
   ScheduleController(ScheduleCreateService createService, ScheduleQueryService queryService,
       ScheduleDetailService detailService, ScheduleUpdateService updateService,
-      ScheduleCancelService cancelService, ScheduleIdentityService identityService) {
+      ScheduleCancelService cancelService, ScheduleIdentityService identityService,
+      ScheduleTargetOptionsService targetOptionsService) {
     this.createService = createService;
     this.queryService = queryService;
     this.detailService = detailService;
     this.updateService = updateService;
     this.cancelService = cancelService;
     this.identityService = identityService;
+    this.targetOptionsService = targetOptionsService;
   }
 
   @Operation(summary = "기간별 일정 조회")
@@ -65,6 +68,12 @@ class ScheduleController {
   AttendeeCandidates attendees(@RequestParam String query,Authentication authentication) {
     actorId(authentication);
     return new AttendeeCandidates(identityService.searchActiveUsers(query));
+  }
+
+  @Operation(summary = "일정 대상 선택지 조회")
+  @GetMapping("/target-options")
+  ScheduleTargetOptions targetOptions(Authentication authentication) {
+    return targetOptionsService.findForActor(actorId(authentication));
   }
 
   @Operation(summary = "일정 생성")
