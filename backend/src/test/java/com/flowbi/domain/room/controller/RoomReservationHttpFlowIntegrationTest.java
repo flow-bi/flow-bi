@@ -4,14 +4,14 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.flowbi.domain.auth.dto.AuthenticatedUser;
-import com.flowbi.domain.auth.dto.AuthenticatedUser.Role;
+import com.flowbi.domain.auth.security.LoginPrincipal;
 import com.flowbi.domain.room.dto.CreateRoomReservationResult;
 import com.flowbi.domain.room.dto.ReservationActor;
 import com.flowbi.domain.room.dto.RoomAvailabilityResponse;
@@ -27,6 +27,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -65,26 +67,27 @@ class RoomReservationHttpFlowIntegrationTest {
     when(reservationService.update(any(),any()))
         .thenReturn(new UpdateRoomReservationResult(5L, 15L));
 
-    mockMvc
-        .perform(
-            get("/api/rooms").requestAttr("authenticatedUser",user()).param("date","2026-08-10"))
+    mockMvc.perform(get("/api/rooms").principal(authentication()).param("date","2026-08-10"))
         .andExpect(status().isOk()).andExpect(jsonPath("$.rooms[0].reservations[0].id").value(5))
         .andExpect(jsonPath("$.rooms[0].reservations[0].canEdit").value(true));
-    mockMvc.perform(get("/api/room-reservations/5").requestAttr("authenticatedUser",user()))
+    mockMvc.perform(get("/api/room-reservations/5").principal(authentication()))
         .andExpect(status().isOk()).andExpect(jsonPath("$.reservationId").value(5));
     mockMvc
-        .perform(post("/api/room-reservations").requestAttr("authenticatedUser",user())
+        .perform(post("/api/room-reservations").principal(authentication())
             .contentType("application/json").content(requestBody("New planning")))
         .andExpect(status().isCreated()).andExpect(jsonPath("$.reservationId").value(6))
         .andExpect(jsonPath("$.scheduleId").value(16));
     mockMvc
-        .perform(put("/api/room-reservations/5").requestAttr("authenticatedUser",user())
+        .perform(put("/api/room-reservations/5").principal(authentication())
             .contentType("application/json").content(requestBody("Updated planning")))
         .andExpect(status().isOk()).andExpect(jsonPath("$.reservationId").value(5))
         .andExpect(jsonPath("$.scheduleId").value(15));
+    mockMvc.perform(delete("/api/room-reservations/5").principal(authentication()))
+        .andExpect(status().isNoContent());
     ArgumentCaptor<ReservationActor> actors = ArgumentCaptor.forClass(ReservationActor.class);
     verify(reservationService).create(actors.capture(),any());
     verify(reservationService).update(actors.capture(),any());
+    verify(reservationService).cancel(actors.capture(),Mockito.eq(5L));
     org.assertj.core.api.Assertions.assertThat(actors.getAllValues())
         .extracting(ReservationActor::userId).containsOnly(10L);
   }
@@ -100,12 +103,14 @@ class RoomReservationHttpFlowIntegrationTest {
         .content(requestBody("Planning"))).andExpect(status().isUnauthorized());
     mockMvc.perform(put("/api/room-reservations/5").contentType("application/json")
         .content(requestBody("Planning"))).andExpect(status().isUnauthorized());
+    mockMvc.perform(delete("/api/room-reservations/5")).andExpect(status().isUnauthorized());
 
     verify(availabilityService,never()).findAvailability(any(),any());
     verify(availabilityService,never()).findRoomDetail(any());
     verify(reservationDetailService,never()).findOwnedReservation(any(),any());
     verify(reservationService,never()).create(any(),any());
     verify(reservationService,never()).update(any(),any());
+    verify(reservationService,never()).cancel(any(),any());
   }
 
   @Test
@@ -120,12 +125,12 @@ class RoomReservationHttpFlowIntegrationTest {
     for (long reservationId : List.of(5L,6L)) {
       mockMvc
           .perform(get("/api/room-reservations/{reservationId}",reservationId)
-              .requestAttr("authenticatedUser",user()))
+              .principal(authentication()))
           .andExpect(status().isNotFound())
           .andExpect(jsonPath("$.code").value("ROOM_RESERVATION_NOT_FOUND"));
       mockMvc
           .perform(put("/api/room-reservations/{reservationId}",reservationId)
-              .requestAttr("authenticatedUser",user()).contentType("application/json")
+              .principal(authentication()).contentType("application/json")
               .content(requestBody("Planning")))
           .andExpect(status().isNotFound())
           .andExpect(jsonPath("$.code").value("ROOM_RESERVATION_NOT_FOUND"));
@@ -139,7 +144,9 @@ class RoomReservationHttpFlowIntegrationTest {
         """.formatted(title);
   }
 
-  private AuthenticatedUser user() {
-    return new AuthenticatedUser(10L, Role.USER);
+  private Authentication authentication() {
+    LoginPrincipal principal = new LoginPrincipal("10", false);
+    return UsernamePasswordAuthenticationToken.authenticated(principal,"",
+        principal.getAuthorities());
   }
 }

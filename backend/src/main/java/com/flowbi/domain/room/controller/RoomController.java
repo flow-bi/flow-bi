@@ -1,6 +1,6 @@
 package com.flowbi.domain.room.controller;
 
-import com.flowbi.domain.auth.dto.AuthenticatedUser;
+import com.flowbi.domain.auth.security.LoginPrincipal;
 import com.flowbi.domain.room.dto.RoomAvailabilityQuery;
 import com.flowbi.domain.room.dto.RoomAvailabilityResponse;
 import com.flowbi.domain.room.dto.RoomAvailabilityStatus;
@@ -27,9 +27,10 @@ import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.Map;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -66,12 +67,10 @@ public class RoomController {
       @Parameter(name = "minimumCapacity", schema = @Schema(type = "integer", format = "int32")),
       @Parameter(name = "availabilityStatus", schema = @Schema(implementation = RoomAvailabilityStatus.class))})
   @GetMapping("/rooms")
-  public RoomAvailabilityResponse findRooms(
-      @RequestAttribute(value = "authenticatedUser", required = false) @Parameter(hidden = true) AuthenticatedUser authenticatedUser,
-      @RequestParam Map<String, String> parameters) {
-    requireAuthenticated(authenticatedUser);
-    return availabilityService.findAvailability(toAvailabilityQuery(parameters),
-        authenticatedUser.userId());
+  public RoomAvailabilityResponse findRooms(@RequestParam Map<String, String> parameters,
+      Authentication authentication) {
+    long userId = authenticatedUserId(authentication);
+    return availabilityService.findAvailability(toAvailabilityQuery(parameters),userId);
   }
 
   @Operation(summary = "회의실 상세 조회")
@@ -80,10 +79,9 @@ public class RoomController {
       @ApiResponse(responseCode = "401", description = "인증 필요", content = @Content(schema = @Schema(implementation = RoomApiErrorResponse.class))),
       @ApiResponse(responseCode = "404", description = "회의실 없음", content = @Content(schema = @Schema(implementation = RoomApiErrorResponse.class)))})
   @GetMapping("/rooms/{roomId}")
-  public RoomDetailResponse findRoom(
-      @RequestAttribute(value = "authenticatedUser", required = false) @Parameter(hidden = true) AuthenticatedUser authenticatedUser,
-      @Parameter(in = ParameterIn.PATH) @PathVariable Long roomId) {
-    requireAuthenticated(authenticatedUser);
+  public RoomDetailResponse findRoom(@Parameter(in = ParameterIn.PATH) @PathVariable Long roomId,
+      Authentication authentication) {
+    authenticatedUserId(authentication);
     return availabilityService.findRoomDetail(roomId);
   }
 
@@ -94,10 +92,10 @@ public class RoomController {
       @ApiResponse(responseCode = "404", description = "예약이 없거나 접근 불가", content = @Content(schema = @Schema(implementation = RoomApiErrorResponse.class)))})
   @GetMapping("/room-reservations/{reservationId}")
   public RoomReservationDetailResponse findReservation(
-      @RequestAttribute(value = "authenticatedUser", required = false) @Parameter(hidden = true) AuthenticatedUser authenticatedUser,
-      @Parameter(in = ParameterIn.PATH) @PathVariable Long reservationId) {
-    requireAuthenticated(authenticatedUser);
-    return reservationDetailService.findOwnedReservation(authenticatedUser.userId(),reservationId);
+      @Parameter(in = ParameterIn.PATH) @PathVariable Long reservationId,
+      Authentication authentication) {
+    return reservationDetailService.findOwnedReservation(authenticatedUserId(authentication),
+        reservationId);
   }
 
   @Operation(summary = "회의실 예약과 연결 일정 생성")
@@ -110,11 +108,10 @@ public class RoomController {
       @ApiResponse(responseCode = "409", description = "수용 인원 또는 예약 시간 충돌", content = @Content(schema = @Schema(implementation = RoomApiErrorResponse.class)))})
   @org.springframework.web.bind.annotation.PostMapping("/room-reservations")
   public ResponseEntity<CreateRoomReservationResult> createReservation(
-      @RequestAttribute(value = "authenticatedUser", required = false) @Parameter(hidden = true) AuthenticatedUser authenticatedUser,
-      @io.swagger.v3.oas.annotations.parameters.RequestBody(required = true, content = @Content(schema = @Schema(implementation = CreateRoomReservationRequest.class))) @RequestBody CreateRoomReservationRequest request) {
-    requireAuthenticated(authenticatedUser);
+      @io.swagger.v3.oas.annotations.parameters.RequestBody(required = true, content = @Content(schema = @Schema(implementation = CreateRoomReservationRequest.class))) @RequestBody CreateRoomReservationRequest request,
+      Authentication authentication) {
     CreateRoomReservationResult result = reservationService
-        .create(new ReservationActor(authenticatedUser.userId()),request.toCommand());
+        .create(new ReservationActor(authenticatedUserId(authentication)),request.toCommand());
     return ResponseEntity.status(HttpStatus.CREATED).body(result);
   }
 
@@ -128,16 +125,39 @@ public class RoomController {
       @ApiResponse(responseCode = "409", description = "수정 불가, 수용 인원 또는 예약 시간 충돌", content = @Content(schema = @Schema(implementation = RoomApiErrorResponse.class)))})
   @PutMapping("/room-reservations/{reservationId}")
   public UpdateRoomReservationResult updateReservation(
-      @RequestAttribute(value = "authenticatedUser", required = false) @Parameter(hidden = true) AuthenticatedUser authenticatedUser,
       @Parameter(in = ParameterIn.PATH) @PathVariable Long reservationId,
-      @io.swagger.v3.oas.annotations.parameters.RequestBody(required = true, content = @Content(schema = @Schema(implementation = UpdateRoomReservationRequest.class))) @RequestBody UpdateRoomReservationRequest request) {
-    requireAuthenticated(authenticatedUser);
-    return reservationService.update(new ReservationActor(authenticatedUser.userId()),
+      @io.swagger.v3.oas.annotations.parameters.RequestBody(required = true, content = @Content(schema = @Schema(implementation = UpdateRoomReservationRequest.class))) @RequestBody UpdateRoomReservationRequest request,
+      Authentication authentication) {
+    return reservationService.update(new ReservationActor(authenticatedUserId(authentication)),
         request.toCommand(reservationId));
   }
 
-  private void requireAuthenticated(AuthenticatedUser authenticatedUser) {
-    if (authenticatedUser == null) {
+  @Operation(summary = "회의실 예약과 연결 일정 취소")
+  @ApiResponses({@ApiResponse(responseCode = "204", description = "예약과 일정 취소"),
+      @ApiResponse(responseCode = "401", description = "인증 필요", content = @Content(schema = @Schema(implementation = RoomApiErrorResponse.class))),
+      @ApiResponse(responseCode = "404", description = "예약이 없거나 접근 불가", content = @Content(schema = @Schema(implementation = RoomApiErrorResponse.class))),
+      @ApiResponse(responseCode = "409", description = "취소 충돌", content = @Content(schema = @Schema(implementation = RoomApiErrorResponse.class)))})
+  @DeleteMapping("/room-reservations/{reservationId}")
+  public ResponseEntity<Void> cancelReservation(
+      @Parameter(in = ParameterIn.PATH) @PathVariable Long reservationId,
+      Authentication authentication) {
+    reservationService.cancel(new ReservationActor(authenticatedUserId(authentication)),
+        reservationId);
+    return ResponseEntity.noContent().build();
+  }
+
+  private long authenticatedUserId(Authentication authentication) {
+    if (authentication == null || !authentication.isAuthenticated()
+        || !(authentication.getPrincipal() instanceof LoginPrincipal principal)) {
+      throw new AuthenticationRequiredException();
+    }
+    try {
+      long userId = Long.parseLong(principal.userId());
+      if (userId < 1) {
+        throw new AuthenticationRequiredException();
+      }
+      return userId;
+    } catch (NumberFormatException exception) {
       throw new AuthenticationRequiredException();
     }
   }

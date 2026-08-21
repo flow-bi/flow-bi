@@ -47,6 +47,7 @@ export function meetingRoomTestGateway({
   return {
     isReservationCreationAvailable: true,
     isReservationUpdateAvailable: true,
+    isReservationCancellationAvailable: true,
     findAvailability: (query: RoomAvailabilityQuery) => {
       availabilityRequests += 1
       if (initialAvailabilityDate === undefined) {
@@ -169,6 +170,18 @@ export function meetingRoomTestGateway({
           : reservation,
       )
       return Promise.resolve({ reservationId: command.reservationId, scheduleId: 41 })
+    },
+    cancelReservation: (reservationId) => {
+      const reservation = editableReservations.find(
+        (candidate) => candidate.reservationId === reservationId,
+      )
+      if (!reservation || !reservation.canEdit) {
+        return Promise.reject(new MeetingRoomGatewayError('ROOM_RESERVATION_NOT_FOUND'))
+      }
+      editableReservations = editableReservations.filter(
+        (candidate) => candidate.reservationId !== reservationId,
+      )
+      return Promise.resolve()
     },
   }
 }

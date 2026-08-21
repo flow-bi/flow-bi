@@ -75,7 +75,7 @@ export interface EditableRoomReservation {
   startAt: string
   endAt: string
   attendeeIds: number[]
-  attendees?: RoomReservationAttendee[]
+  attendees: RoomReservationAttendee[]
   description: string
   canEdit: boolean
 }
@@ -83,11 +83,13 @@ export interface EditableRoomReservation {
 export interface MeetingRoomGateway {
   isReservationCreationAvailable?: boolean
   isReservationUpdateAvailable?: boolean
+  isReservationCancellationAvailable?: boolean
   findAvailability(query: RoomAvailabilityQuery): Promise<RoomAvailabilityResponse>
   findAttendeeCandidates?(this: void, query: string): Promise<RoomReservationAttendee[]>
   createReservation?(command: CreateRoomReservationCommand): Promise<CreateRoomReservationResult>
   getReservationForEdit?(reservationId: number): Promise<EditableRoomReservation>
   updateReservation?(command: UpdateRoomReservationCommand): Promise<UpdateRoomReservationResult>
+  cancelReservation?(reservationId: number): Promise<void>
 }
 
 type MeetingRoomGatewayErrorCode =
@@ -174,6 +176,13 @@ async function requestJson<T>(url: string, options?: RequestInit): Promise<T> {
   return response.json() as Promise<T>
 }
 
+async function requestEmpty(url: string, options: RequestInit): Promise<void> {
+  const response = await authenticatedFetch(url, options)
+  if (!response.ok) {
+    throw await toGatewayError(response)
+  }
+}
+
 function requestBody(command: CreateRoomReservationCommand): string {
   return JSON.stringify({
     roomId: command.roomId,
@@ -188,6 +197,7 @@ function requestBody(command: CreateRoomReservationCommand): string {
 export const productionMeetingRoomGateway: MeetingRoomGateway = {
   isReservationCreationAvailable: true,
   isReservationUpdateAvailable: true,
+  isReservationCancellationAvailable: true,
   findAvailability: (query) => {
     const search = new URLSearchParams()
     search.set('date', query.date)
@@ -229,6 +239,8 @@ export const productionMeetingRoomGateway: MeetingRoomGateway = {
       headers: { 'Content-Type': 'application/json' },
       body: requestBody(command),
     }),
+  cancelReservation: (reservationId) =>
+    requestEmpty(`/api/room-reservations/${reservationId}`, { method: 'DELETE' }),
 }
 
 interface ResolveMeetingRoomGatewayOptions {

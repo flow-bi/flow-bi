@@ -1,5 +1,11 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useRef, useState, type FormEvent } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from 'react'
 
 import {
   type EditableRoomReservation,
@@ -41,6 +47,7 @@ const defaultImage =
 const defaultDate = new Date().toISOString().slice(0, 10)
 const meetingRoomQueryKey = ['meeting-room'] as const
 const scheduleListQueryKey = ['schedules'] as const
+const scheduleDetailQueryKey = ['schedule-detail'] as const
 
 function initialSearch(date: string): SearchForm {
   return {
@@ -66,8 +73,10 @@ function RoomCard({
   room,
   onReserve,
   onEdit,
+  onCancel,
   isSubmissionAvailable,
   isUpdateAvailable,
+  isCancellationAvailable,
 }: {
   room: RoomSummary
   onReserve: (room: RoomSummary, trigger: HTMLButtonElement) => void
@@ -76,8 +85,14 @@ function RoomCard({
     reservation: RoomSummary['reservations'][number],
     trigger: HTMLButtonElement,
   ) => void
+  onCancel: (
+    room: RoomSummary,
+    reservation: RoomSummary['reservations'][number],
+    trigger: HTMLButtonElement,
+  ) => void
   isSubmissionAvailable: boolean
   isUpdateAvailable: boolean
+  isCancellationAvailable: boolean
 }) {
   return (
     <article
@@ -119,7 +134,23 @@ function RoomCard({
               </button>
             ))
         : null}
+      {isCancellationAvailable
+        ? room.reservations
+            .filter((reservation) => reservation.canEdit === true)
+            .map((reservation) => (
+              <button
+                key={`cancel-${reservation.id}`}
+                className="mt-3 mr-3 rounded border border-(--color-danger) px-4 py-2 text-(--color-danger)"
+                type="button"
+                aria-label={`예약 취소: ${reservation.title}`}
+                onClick={(event) => onCancel(room, reservation, event.currentTarget)}
+              >
+                예약 취소
+              </button>
+            ))
+        : null}
       <button
+        id={`room-reserve-${room.id}`}
         className="mt-4 rounded bg-(--color-primary) px-4 py-2 text-white"
         type="button"
         onClick={(event) => onReserve(room, event.currentTarget)}
@@ -145,7 +176,17 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
     reservation: EditableRoomReservation
   }>()
   const [editError, setEditError] = useState<string>()
+  const [selectedCancellation, setSelectedCancellation] = useState<{
+    room: RoomSummary
+    reservation: RoomSummary['reservations'][number]
+  }>()
+  const [cancellationError, setCancellationError] = useState<string>()
+  const [isCancellationRefreshRecommended, setIsCancellationRefreshRecommended] = useState(false)
+  const [isCancelling, setIsCancelling] = useState(false)
+  const [cancellationNotice, setCancellationNotice] = useState<string>()
   const reserveTriggerRef = useRef<HTMLButtonElement | undefined>(undefined)
+  const cancelActionRef = useRef<HTMLButtonElement>(null)
+  const cancellationAdjacentFocusRoomIdRef = useRef<number | undefined>(undefined)
   const queryClient = useQueryClient()
   const query = useQuery({
     queryKey: [...meetingRoomQueryKey, submittedSearch],
@@ -178,6 +219,44 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
     setSelectedUpdate(undefined)
     requestAnimationFrame(() => reserveTriggerRef.current?.focus())
   }
+
+  function closeCancellationDialog() {
+    if (isCancelling) {
+      return
+    }
+    setSelectedCancellation(undefined)
+    setCancellationError(undefined)
+    setIsCancellationRefreshRecommended(false)
+    requestAnimationFrame(() => reserveTriggerRef.current?.focus())
+  }
+
+  useEffect(() => {
+    if (!selectedCancellation) {
+      return
+    }
+    cancelActionRef.current?.focus()
+    const onEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeCancellationDialog()
+      }
+    }
+    window.addEventListener('keydown', onEscape)
+    return () => window.removeEventListener('keydown', onEscape)
+  }, [selectedCancellation, isCancelling])
+
+  useEffect(() => {
+    const roomId = cancellationAdjacentFocusRoomIdRef.current
+    if (selectedCancellation || isCancelling || roomId === undefined) {
+      return
+    }
+    const focusAdjacentAction = () => document.getElementById(`room-reserve-${roomId}`)?.focus()
+    focusAdjacentAction()
+    const timer = window.setTimeout(() => {
+      focusAdjacentAction()
+      cancellationAdjacentFocusRoomIdRef.current = undefined
+    }, 50)
+    return () => window.clearTimeout(timer)
+  })
 
   async function openReservationForEdit(
     room: RoomSummary,
@@ -226,6 +305,90 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
       }),
       queryClient.invalidateQueries({ queryKey: scheduleListQueryKey }),
     ])
+  }
+
+  async function cancelReservation() {
+    if (!selectedCancellation || isCancelling) {
+      return
+    }
+    if (!gateway.cancelReservation) {
+      setCancellationError('다시 로그인한 뒤 예약 취소를 다시 시도해 주세요.')
+      return
+    }
+    setCancellationError(undefined)
+    setIsCancellationRefreshRecommended(false)
+    setIsCancelling(true)
+    try {
+      await gateway.cancelReservation(selectedCancellation.reservation.id)
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: [...meetingRoomQueryKey, submittedSearch],
+          exact: true,
+        }),
+        queryClient.invalidateQueries({ queryKey: scheduleListQueryKey }),
+        queryClient.invalidateQueries({ queryKey: scheduleDetailQueryKey }),
+      ])
+      cancellationAdjacentFocusRoomIdRef.current = selectedCancellation.room.id
+      setCancellationNotice('예약과 연결 일정이 취소되어 기본 화면에서 사라졌습니다.')
+      setSelectedCancellation(undefined)
+    } catch (error) {
+      if (isMeetingRoomGatewayError(error)) {
+        setIsCancellationRefreshRecommended(
+          error.code === 'ROOM_RESERVATION_NOT_FOUND' ||
+            error.code === 'ROOM_RESERVATION_CANCEL_CONFLICT',
+        )
+        setCancellationError(
+          error.code === 'AUTH_INTEGRATION_PENDING'
+            ? '다시 로그인한 뒤 예약 취소를 다시 시도해 주세요.'
+            : error.code === 'ROOM_RESERVATION_NOT_FOUND'
+              ? '예약 취소 권한이 없거나 이미 사용할 수 없는 예약입니다.'
+              : error.code === 'ROOM_RESERVATION_CANCEL_CONFLICT'
+                ? '예약 상태가 변경되었습니다. 최신 예약 현황을 다시 조회한 뒤 시도해 주세요.'
+                : '예약 취소를 완료하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+        )
+      } else {
+        setCancellationError('네트워크 오류로 예약 취소를 완료하지 못했습니다. 다시 시도해 주세요.')
+      }
+    } finally {
+      setIsCancelling(false)
+    }
+  }
+
+  async function refreshCancellationAvailability() {
+    if (!selectedCancellation || isCancelling) {
+      return
+    }
+    const cancellation = selectedCancellation
+    setCancellationError(undefined)
+    const result = await query.refetch()
+    if (result.error) {
+      setCancellationError('최신 예약 현황을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.')
+      return
+    }
+    setIsCancellationRefreshRecommended(false)
+    cancellationAdjacentFocusRoomIdRef.current = cancellation.room.id
+    setSelectedCancellation(undefined)
+  }
+
+  function keepCancellationFocus(event: ReactKeyboardEvent<HTMLElement>) {
+    if (event.key !== 'Tab') {
+      return
+    }
+    const actions = Array.from(
+      event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not([disabled])'),
+    )
+    const firstAction = actions.at(0)
+    const lastAction = actions.at(-1)
+    if (!firstAction || !lastAction) {
+      return
+    }
+    if (event.shiftKey && document.activeElement === firstAction) {
+      event.preventDefault()
+      lastAction.focus()
+    } else if (!event.shiftKey && document.activeElement === lastAction) {
+      event.preventDefault()
+      firstAction.focus()
+    }
   }
 
   return (
@@ -355,6 +518,11 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
           {editError}
         </p>
       ) : null}
+      {cancellationNotice ? (
+        <p className="mb-4" role="status">
+          {cancellationNotice}
+        </p>
+      ) : null}
       {visibleRooms?.length === 0 ? (
         <p>조회된 회의실이 없습니다. 검색 조건을 바꿔 다시 시도해 주세요.</p>
       ) : null}
@@ -366,6 +534,7 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
               room={room}
               isSubmissionAvailable={gateway.isReservationCreationAvailable === true}
               isUpdateAvailable={gateway.isReservationUpdateAvailable === true}
+              isCancellationAvailable={gateway.isReservationCancellationAvailable === true}
               onReserve={(selected, trigger) => {
                 reserveTriggerRef.current = trigger
                 setReservationPanelInstance((instance) => instance + 1)
@@ -373,6 +542,13 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
               }}
               onEdit={(room, reservation, trigger) => {
                 void openReservationForEdit(room, reservation.id, trigger)
+              }}
+              onCancel={(room, reservation, trigger) => {
+                reserveTriggerRef.current = trigger
+                setCancellationNotice(undefined)
+                setCancellationError(undefined)
+                setIsCancellationRefreshRecommended(false)
+                setSelectedCancellation({ room, reservation })
               }}
             />
           ))}
@@ -395,7 +571,10 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
               reservationId: selectedUpdate.reservation.reservationId,
               ...command,
             })
-            await invalidateCreatedReservationQueries()
+            await queryClient.invalidateQueries({
+              queryKey: ['meeting-room', submittedSearch],
+              exact: true,
+            })
           }}
           onRefreshAvailability={() => {
             void query.refetch()
@@ -423,6 +602,74 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
           }}
           onFindAttendeeCandidates={findAttendeeCandidates}
         />
+      ) : null}
+      {selectedCancellation ? (
+        <div
+          className="fixed inset-0 z-20 flex items-center justify-center bg-black/30 p-4"
+          role="presentation"
+        >
+          <section
+            className="w-full max-w-md rounded-xl bg-(--color-surface) p-5 shadow-xl"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="reservation-cancellation-title"
+            onKeyDown={keepCancellationFocus}
+          >
+            <h2 id="reservation-cancellation-title" className="text-xl font-bold">
+              {selectedCancellation.reservation.title} 예약 취소 확인
+            </h2>
+            <p className="mt-3">
+              이 작업은 되돌릴 수 없습니다. 예약과 연결 일정이 함께 취소됩니다.
+            </p>
+            <dl className="mt-3 space-y-1">
+              <div>
+                <dt className="inline font-semibold">회의실: </dt>
+                <dd className="inline">{selectedCancellation.room.name}</dd>
+              </div>
+              <div>
+                <dt className="inline font-semibold">시간: </dt>
+                <dd className="inline">
+                  {selectedCancellation.reservation.startAt.slice(11, 16)}–
+                  {selectedCancellation.reservation.endAt.slice(11, 16)}
+                </dd>
+              </div>
+            </dl>
+            {cancellationError ? (
+              <p className="mt-3" role="alert">
+                {cancellationError}
+              </p>
+            ) : null}
+            {isCancellationRefreshRecommended ? (
+              <button
+                type="button"
+                className="mt-3 rounded border border-(--color-border) px-4 py-2"
+                onClick={() => void refreshCancellationAvailability()}
+                disabled={isCancelling}
+              >
+                최신 예약 현황 조회
+              </button>
+            ) : null}
+            <div className="mt-5 flex flex-wrap justify-end gap-3">
+              <button
+                type="button"
+                className="rounded border border-(--color-border) px-4 py-2"
+                onClick={closeCancellationDialog}
+                disabled={isCancelling}
+              >
+                닫기
+              </button>
+              <button
+                ref={cancelActionRef}
+                type="button"
+                className="rounded bg-(--color-danger) px-4 py-2 text-white disabled:opacity-60"
+                onClick={() => void cancelReservation()}
+                disabled={isCancelling}
+              >
+                {isCancelling ? '예약 취소 중' : '예약 취소 실행'}
+              </button>
+            </div>
+          </section>
+        </div>
       ) : null}
     </div>
   )

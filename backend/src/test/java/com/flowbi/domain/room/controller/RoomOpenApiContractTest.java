@@ -114,10 +114,20 @@ class RoomOpenApiContractTest {
   }
 
   @Test
-  void documentsTheReservationSummaryEditabilityRequiredByTheFrontendGateway() throws Exception {
+  void documentsReservationSummaryEditabilityAndCancellationResponses() throws Exception {
     mockMvc.perform(get("/v3/api-docs")).andExpect(status().isOk())
         .andExpect(jsonPath("$.components.schemas.ReservationSummary.properties.canEdit").exists())
         .andExpect(
-            jsonPath("$.paths['/api/room-reservations/{reservationId}'].delete").doesNotExist());
+            jsonPath("$.paths['/api/room-reservations/{reservationId}'].delete.responses['204']")
+                .exists())
+        .andExpect(
+            jsonPath("$.paths['/api/room-reservations/{reservationId}'].delete.responses['401']")
+                .exists())
+        .andExpect(
+            jsonPath("$.paths['/api/room-reservations/{reservationId}'].delete.responses['404']")
+                .exists())
+        .andExpect(
+            jsonPath("$.paths['/api/room-reservations/{reservationId}'].delete.responses['409']")
+                .exists());
   }
 }

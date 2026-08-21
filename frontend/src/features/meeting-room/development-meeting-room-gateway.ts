@@ -119,6 +119,7 @@ export function createDevelopmentMeetingRoomGateway(): MeetingRoomGateway {
   return {
     isReservationCreationAvailable: true,
     isReservationUpdateAvailable: true,
+    isReservationCancellationAvailable: true,
     findAvailability: (query) => {
       ensureInitialReservation(query.date)
       const queryPeriod =
@@ -204,6 +205,16 @@ export function createDevelopmentMeetingRoomGateway(): MeetingRoomGateway {
         reservationId: command.reservationId,
         scheduleId: current.scheduleId,
       })
+    },
+    cancelReservation: (reservationId) => {
+      const current = reservations.find((candidate) => candidate.reservationId === reservationId)
+      if (!current || !current.canEdit) {
+        return Promise.reject(new MeetingRoomGatewayError('ROOM_RESERVATION_NOT_FOUND'))
+      }
+      reservations = reservations.filter(
+        (reservation) => reservation.reservationId !== reservationId,
+      )
+      return Promise.resolve()
     },
   }
 }
