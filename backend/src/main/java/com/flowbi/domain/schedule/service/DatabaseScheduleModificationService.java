@@ -4,8 +4,10 @@ import com.flowbi.domain.schedule.dto.ScheduleUpdateCommand;
 import com.flowbi.domain.schedule.entity.Schedule;
 import com.flowbi.domain.schedule.entity.ScheduleStatus;
 import com.flowbi.domain.schedule.entity.ScheduleTarget;
+import com.flowbi.domain.schedule.exception.RoomReservationScheduleCancelConflictException;
 import com.flowbi.domain.schedule.repository.ScheduleRepository;
 import java.time.ZoneId;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
@@ -29,6 +31,12 @@ public class DatabaseScheduleModificationService implements ScheduleModification
   }
 
   @Override
+  public Optional<ReservationSchedule> findReservationScheduleForCancellation(Long scheduleId) {
+    return scheduleRepository.findById(scheduleId)
+        .map(schedule -> new ReservationSchedule(schedule.getId(), schedule.getCreatorId()));
+  }
+
+  @Override
   public Optional<ReservationScheduleDetails> findReservationScheduleDetails(Long scheduleId) {
     return scheduleRepository.findActiveByIdWithAssociations(scheduleId)
         .map(schedule -> new ReservationScheduleDetails(schedule.getCreatorId(),
@@ -42,6 +50,19 @@ public class DatabaseScheduleModificationService implements ScheduleModification
         .ifPresentOrElse(schedule -> updateSchedule(schedule,command),() -> {
           throw new IllegalStateException("Connected reservation schedule is unavailable");
         });
+  }
+
+  @Override
+  public void cancelReservationSchedule(Long scheduleId,long actorId,OffsetDateTime cancelledAt) {
+    Schedule schedule = scheduleRepository.findByIdWithAssociationsForUpdate(scheduleId)
+        .orElseThrow(RoomReservationScheduleCancelConflictException::new);
+    if (schedule.getCreatorId() != actorId) {
+      throw new RoomReservationScheduleCancelConflictException();
+    }
+    if (schedule.getStatus() != ScheduleStatus.ACTIVE) {
+      throw new RoomReservationScheduleCancelConflictException();
+    }
+    schedule.cancel(actorId,cancelledAt);
   }
 
   private void updateSchedule(Schedule schedule,UpdateReservationScheduleCommand command) {

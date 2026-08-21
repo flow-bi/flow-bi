@@ -8,41 +8,24 @@ import {
 } from './meeting-room-gateway'
 
 describe('developmentMeetingRoomGateway', () => {
-  it('selects the development gateway only in development mode', () => {
+  it('uses production in normal development and only uses an injected Cypress gateway', () => {
     const injectedGateway: MeetingRoomGateway = {
       findAvailability: vi.fn().mockResolvedValue({ rooms: [] }),
     }
-    const developmentGateway = createDevelopmentMeetingRoomGateway()
-
     expect(
       resolveMeetingRoomGateway({
-        isDevelopment: true,
-        isTestHarness: false,
-        developmentGateway,
-        injectedGateway,
+        isTestHarness: true,
       }),
-    ).toBe(developmentGateway)
+    ).toBe(productionMeetingRoomGateway)
     expect(
       resolveMeetingRoomGateway({
-        isDevelopment: false,
         isTestHarness: false,
-        developmentGateway,
         injectedGateway,
       }),
     ).toBe(productionMeetingRoomGateway)
     expect(
       resolveMeetingRoomGateway({
-        isDevelopment: false,
         isTestHarness: true,
-        developmentGateway,
-        injectedGateway,
-      }),
-    ).toBe(productionMeetingRoomGateway)
-    expect(
-      resolveMeetingRoomGateway({
-        isDevelopment: true,
-        isTestHarness: true,
-        developmentGateway,
         injectedGateway,
       }),
     ).toBe(injectedGateway)

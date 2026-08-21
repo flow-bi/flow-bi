@@ -64,23 +64,25 @@ describe('App main screen', () => {
   })
 
   it('rechecks server state after browser back or forward navigation', async () => {
-    const fetchMock = vi.fn((path: string) => {
-      if (path === '/api/me/header') {
+    let sessionRequestCount = 0
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+      if (url.startsWith('/api/rooms?')) {
+        return Promise.resolve(new Response(JSON.stringify({ rooms: [] }), { status: 200 }))
+      }
+      if (url === '/api/auth/session') {
+        sessionRequestCount += 1
         return Promise.resolve(
-          new Response(JSON.stringify({ name: '실제 사용자' }), { status: 200 }),
+          new Response(
+            JSON.stringify({
+              authenticated: true,
+              mustChangePassword: sessionRequestCount > 1,
+            }),
+            { status: 200 },
+          ),
         )
       }
-      return Promise.resolve(
-        new Response(
-          JSON.stringify({
-            authenticated: true,
-            mustChangePassword: fetchMock.mock.calls.length > 2,
-          }),
-          {
-            status: 200,
-          },
-        ),
-      )
+      return Promise.reject(new Error(`Unexpected request: ${url}`))
     })
     vi.stubGlobal('fetch', fetchMock)
     render(<App />)

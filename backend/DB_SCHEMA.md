@@ -228,8 +228,11 @@ Project와 User의 N:M Mapping이다.
 | `start_at`       | `TIMESTAMP`    | NOT NULL     | 시작일시                 |
 | `end_at`         | `TIMESTAMP`    | NOT NULL     | 종료일시                 |
 | `status`         | `VARCHAR(30)`  | NOT NULL     | `RESERVED`, `CANCELED`   |
+| `cancelled_at`   | `TIMESTAMP`    | NULL         | 예약 취소 시각           |
 
-`rooms_reservations`의 시간 구간은 `end_at > start_at`이어야 한다. `room_id`, `status`,
+`rooms_reservations`의 시간 구간은 `end_at > start_at`이어야 한다. `RESERVED`는
+`cancelled_at`이 `NULL`이고 `CANCELED`는 `cancelled_at`이 반드시 존재해야 한다. 기존 취소
+예약은 Migration 적용 시 현재 시각으로 취소 시각을 보완해 이력을 보존한다. `room_id`, `status`,
 `start_at`, `end_at`의 복합 Index로 활성 예약 중복 조회를 지원하고, `schedule_id` Index로
 연결 일정 여부 조회를 지원한다.
 

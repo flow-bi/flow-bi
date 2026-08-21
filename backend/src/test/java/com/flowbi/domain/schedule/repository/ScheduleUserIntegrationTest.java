@@ -45,6 +45,15 @@ class ScheduleUserIntegrationTest {
         .isInstanceOf(InvalidScheduleReferenceException.class);
   }
 
+  @Test
+  void resolvesOnlyDisplayNamesInTheRequestedAttendeeOrder() {
+    insertUser(9601L,9611L,"ACTIVE");
+    insertUser(9602L,9612L,"INACTIVE");
+
+    assertThat(adapter.findUserDisplayNames(List.of(9602L,9601L))).containsExactly(
+        new AttendeeCandidate(9602L, "User 9602"),new AttendeeCandidate(9601L, "User 9601"));
+  }
+
   private ScheduleCreateCommand command(long creatorId,List<Long> projectIds) {
     return ScheduleCreateCommand.of(creatorId,"Project",ScheduleType.PROJECT,
         ScheduleVisibility.PROJECT,OffsetDateTime.parse("2026-08-10T09:00:00+09:00"),

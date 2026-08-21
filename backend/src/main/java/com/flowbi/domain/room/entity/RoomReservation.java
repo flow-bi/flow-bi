@@ -41,6 +41,9 @@ public class RoomReservation {
   @Enumerated(EnumType.STRING)
   private ReservationStatus status;
 
+  @Column(name = "cancelled_at")
+  private LocalDateTime cancelledAt;
+
   protected RoomReservation() {
   }
 
@@ -88,10 +91,22 @@ public class RoomReservation {
     return status;
   }
 
+  public LocalDateTime getCancelledAt() {
+    return cancelledAt;
+  }
+
   public void update(Room room,String title,LocalDateTime startAt,LocalDateTime endAt) {
     this.room = room;
     this.title = title;
     this.startAt = startAt;
     this.endAt = endAt;
+  }
+
+  public void cancel(LocalDateTime occurredAt) {
+    if (status != ReservationStatus.RESERVED) {
+      throw new IllegalStateException("Only reserved room reservations can be cancelled");
+    }
+    status = ReservationStatus.CANCELED;
+    cancelledAt = occurredAt;
   }
 }

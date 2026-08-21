@@ -12,6 +12,7 @@ import com.flowbi.domain.room.entity.RoomReservation;
 import com.flowbi.domain.room.repository.RoomRepository;
 import com.flowbi.domain.room.repository.RoomReservationRepository;
 import com.flowbi.domain.schedule.entity.ScheduleStatus;
+import com.flowbi.domain.schedule.exception.RoomReservationScheduleCancelConflictException;
 import com.flowbi.domain.schedule.service.CreateScheduleCommand;
 import com.flowbi.domain.schedule.service.ScheduleCreationService;
 import com.flowbi.domain.schedule.service.ScheduleModificationService;
@@ -19,17 +20,23 @@ import com.flowbi.domain.schedule.service.ScheduleModificationService.Reservatio
 import com.flowbi.domain.schedule.service.ScheduleModificationService.UpdateReservationScheduleCommand;
 import com.flowbi.domain.user.service.ReservationParticipantAccessService;
 import java.time.LocalTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.LinkedHashSet;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class RoomReservationService {
 
+  private static final Logger AUDIT_LOG = LoggerFactory.getLogger(RoomReservationService.class);
   private static final LocalTime BUSINESS_START = LocalTime.of(9,0);
   private static final LocalTime BUSINESS_END = LocalTime.of(18,0);
+  private static final ZoneId KOREA_ZONE = ZoneId.of("Asia/Seoul");
 
   private final RoomRepository roomRepository;
   private final RoomReservationRepository reservationRepository;
@@ -115,6 +122,34 @@ public class RoomReservationService {
     return new UpdateRoomReservationResult(reservation.getId(), schedule.scheduleId());
   }
 
+  @Transactional
+  public void cancel(ReservationActor actor,Long reservationId) {
+    validateActor(actor);
+    if (reservationId == null || reservationId < 1) {
+      throw new RoomReservationApplicationException("ROOM_RESERVATION_NOT_FOUND");
+    }
+    RoomReservation reservation = reservationRepository.findByIdForUpdate(reservationId)
+        .orElseThrow(() -> new RoomReservationApplicationException("ROOM_RESERVATION_NOT_FOUND"));
+    ReservationSchedule schedule = findScheduleForCancellation(reservation,actor);
+    if (reservation.getStatus() == ReservationStatus.CANCELED) {
+      writeCancellationAudit(actor.userId(),OffsetDateTime.now(),reservation.getId(),
+          schedule.scheduleId(),"ALREADY_CANCELED");
+      return;
+    }
+    OffsetDateTime cancelledAt = OffsetDateTime.now();
+    try {
+      scheduleModificationService.cancelReservationSchedule(schedule.scheduleId(),actor.userId(),
+          cancelledAt);
+    } catch (RoomReservationScheduleCancelConflictException exception) {
+      writeCancellationAudit(actor.userId(),cancelledAt,reservation.getId(),schedule.scheduleId(),
+          "CONFLICT");
+      throw new RoomReservationApplicationException("ROOM_RESERVATION_CANCEL_CONFLICT");
+    }
+    reservation.cancel(cancelledAt.atZoneSameInstant(KOREA_ZONE).toLocalDateTime());
+    writeCancellationAudit(actor.userId(),cancelledAt,reservation.getId(),schedule.scheduleId(),
+        "CANCELED");
+  }
+
   private void validateActor(ReservationActor actor) {
     if (actor == null || actor.userId() == null || actor.userId() < 1) {
       throw new RoomReservationApplicationException("RESERVATION_ACTOR_REQUIRED");
@@ -178,5 +213,25 @@ public class RoomReservationService {
       throw new RoomReservationApplicationException("ROOM_RESERVATION_NOT_FOUND");
     }
     return schedule;
+  }
+
+  private ReservationSchedule findScheduleForCancellation(RoomReservation reservation,
+      ReservationActor actor) {
+    if (scheduleModificationService == null) {
+      throw new IllegalStateException("Reservation schedule modification is not configured");
+    }
+    ReservationSchedule schedule = scheduleModificationService
+        .findReservationScheduleForCancellation(reservation.getScheduleId())
+        .orElseThrow(() -> new RoomReservationApplicationException("ROOM_RESERVATION_NOT_FOUND"));
+    if (!actor.userId().equals(schedule.creatorId())) {
+      throw new RoomReservationApplicationException("ROOM_RESERVATION_NOT_FOUND");
+    }
+    return schedule;
+  }
+
+  private void writeCancellationAudit(long actorId,OffsetDateTime occurredAt,Long reservationId,
+      Long scheduleId,String result) {
+    AUDIT_LOG.info("roomReservationCancellation actorId={}, occurredAt={}, reservationId={}, "
+        + "scheduleId={}, result={}",actorId,occurredAt,reservationId,scheduleId,result);
   }
 }

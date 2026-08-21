@@ -21,4 +21,8 @@ public class ScheduleIdentityService {
   public List<AttendeeCandidate> searchActiveUsers(String query) {
     return identityAdapter.searchActiveUsers(query);
   }
+
+  public List<AttendeeCandidate> findUserDisplayNames(List<Long> userIds) {
+    return identityAdapter.findUserDisplayNames(userIds);
+  }
 }
