@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -15,11 +15,24 @@ afterEach(() => {
   window.history.replaceState({}, '', '/')
 })
 
+function authenticatedFetchMock(name = '실제 사용자') {
+  return vi.fn((path: string) => {
+    if (path === '/api/me/header') {
+      return Promise.resolve(new Response(JSON.stringify({ name }), { status: 200 }))
+    }
+    return Promise.resolve(
+      new Response(JSON.stringify({ authenticated: true, mustChangePassword: false }), {
+        status: 200,
+      }),
+    )
+  })
+}
+
 describe('App main screen', () => {
   it.each([
     ['/', true, '비밀번호 변경', '/password-change'],
-    ['/password-change', false, '콘텐츠', '/'],
-    ['/unknown', false, '콘텐츠', '/'],
+    ['/password-change', false, '회의실 예약 현황', '/'],
+    ['/unknown', false, '회의실 예약 현황', '/'],
   ])(
     'normalizes %s from the server session state',
     async (requestedPath, mustChangePassword, heading, expectedPath) => {
@@ -51,21 +64,27 @@ describe('App main screen', () => {
   })
 
   it('rechecks server state after browser back or forward navigation', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ authenticated: true, mustChangePassword: false }), {
-          status: 200,
-        }),
+    const fetchMock = vi.fn((path: string) => {
+      if (path === '/api/me/header') {
+        return Promise.resolve(
+          new Response(JSON.stringify({ name: '실제 사용자' }), { status: 200 }),
+        )
+      }
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            authenticated: true,
+            mustChangePassword: fetchMock.mock.calls.length > 2,
+          }),
+          {
+            status: 200,
+          },
+        ),
       )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ authenticated: true, mustChangePassword: true }), {
-          status: 200,
-        }),
-      )
+    })
     vi.stubGlobal('fetch', fetchMock)
     render(<App />)
-    await screen.findByRole('heading', { name: '콘텐츠' })
+    await screen.findByRole('main', { name: '콘텐츠' })
     window.history.pushState({}, '', '/login')
     window.dispatchEvent(new PopStateEvent('popstate'))
     expect(await screen.findByRole('heading', { name: '비밀번호 변경' })).toBeInTheDocument()
@@ -73,18 +92,89 @@ describe('App main screen', () => {
   })
 
   it('keeps the existing shell available only for a normal authenticated session', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(
+    vi.stubGlobal('fetch', authenticatedFetchMock())
+    render(<App />)
+    expect(await screen.findByText('실제 사용자')).toBeInTheDocument()
+    expect(screen.getByRole('banner')).toHaveTextContent('Flow BI')
+    expect(screen.getByRole('main', { name: '콘텐츠' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '콘텐츠' })).not.toBeInTheDocument()
+    expect(screen.queryByText('로그인되었습니다.')).not.toBeInTheDocument()
+    expect(
+      within(screen.getByTestId('desktop-sidebar')).getByRole('button', { name: '로그아웃' }),
+    ).toHaveClass(
+      'border-border',
+      'bg-surface',
+      'text-text-primary',
+      'focus-visible:outline-focus-ring',
+    )
+    expect(
+      within(screen.getByTestId('desktop-sidebar')).getByRole('button', { name: '로그아웃' }),
+    ).toHaveAttribute('aria-label', '로그아웃')
+  })
+
+  it('shows the actual current-user name in the desktop and mobile header instead of a static name', async () => {
+    vi.stubGlobal('fetch', authenticatedFetchMock('인증 사용자'))
+    const user = userEvent.setup()
+    render(<App />)
+
+    expect(await screen.findByText('인증 사용자')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '사이드바 열기' }))
+    expect(screen.getByRole('banner')).toHaveTextContent('인증 사용자')
+    const mobileSidebar = within(screen.getByRole('dialog', { name: '주요 탐색' }))
+    const navigation = mobileSidebar.getByRole('navigation', { name: '주요 탐색' })
+    const logoutButton = mobileSidebar.getByRole('button', { name: '로그아웃' })
+    expect(logoutButton).toBeInTheDocument()
+    expect(logoutButton).toHaveAttribute('aria-label', '로그아웃')
+    expect(
+      navigation.compareDocumentPosition(logoutButton) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+
+  it('describes current-user loading, retries ordinary errors, and delegates a 401 to session expiry', async () => {
+    let rejectCurrentUser: ((reason?: unknown) => void) | undefined
+    const fetchMock = vi.fn((path: string) => {
+      if (path === '/api/me/header') {
+        return new Promise<Response>((_resolve, reject) => {
+          rejectCurrentUser = reject
+        })
+      }
+      return Promise.resolve(
         new Response(JSON.stringify({ authenticated: true, mustChangePassword: false }), {
           status: 200,
         }),
+      )
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    render(<App />)
+
+    expect(await screen.findByText('사용자 이름을 불러오는 중입니다.')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.filter(([path]) => path === '/api/me/header')).toHaveLength(1)
+    })
+    rejectCurrentUser?.(new Error('temporary failure'))
+    expect(await screen.findByRole('alert')).toHaveTextContent('사용자 이름을 불러올 수 없습니다.')
+    await user.click(screen.getByRole('button', { name: '다시 시도' }))
+    expect(fetchMock.mock.calls.filter(([path]) => path === '/api/me/header')).toHaveLength(2)
+  })
+
+  it('returns to login and clears the header when current-user lookup receives 401', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((path: string) =>
+        Promise.resolve(
+          path === '/api/me/header'
+            ? new Response(null, { status: 401 })
+            : new Response(JSON.stringify({ authenticated: true, mustChangePassword: false }), {
+                status: 200,
+              }),
+        ),
       ),
     )
     render(<App />)
-    expect(await screen.findByRole('banner')).toHaveTextContent('Flow BI')
-    expect(screen.getByRole('main', { name: '콘텐츠' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '콘텐츠' })).toBeInTheDocument()
+
+    expect(await screen.findByRole('heading', { name: '로그인' })).toBeInTheDocument()
+    expect(screen.queryByRole('banner')).not.toBeInTheDocument()
   })
 
   it('uses static Tailwind theme and responsive utilities for the global layout', async () => {
@@ -166,7 +256,7 @@ describe('App main screen', () => {
 
     render(<App />)
 
-    await screen.findByText('로그인되었습니다.')
+    await screen.findByRole('main', { name: '콘텐츠' })
     const calendarLink = screen.getByRole('link', { name: '캘린더' })
     await user.click(calendarLink)
 
@@ -194,7 +284,7 @@ describe('App main screen', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await screen.findByText('로그인되었습니다.')
+    await screen.findByRole('main', { name: '콘텐츠' })
     await user.click(screen.getByRole('link', { name: '캘린더' }))
     const createTrigger = await screen.findByRole('button', { name: '일정 추가' })
     await user.click(createTrigger)
@@ -221,7 +311,7 @@ describe('App main screen', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await screen.findByText('로그인되었습니다.')
+    await screen.findByRole('main', { name: '콘텐츠' })
     await user.click(screen.getByRole('button', { name: '사이드바 열기' }))
     const mobileSidebar = within(screen.getByRole('dialog', { name: '주요 탐색' }))
     await user.click(mobileSidebar.getByRole('link', { name: '캘린더' }))

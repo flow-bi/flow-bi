@@ -1,10 +1,17 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from 'react'
 
-import { getSession, logout, type LoginResult, type SessionResult } from './features/auth/api'
+import {
+  getSession,
+  LoginApiError,
+  logout,
+  type LoginResult,
+  type SessionResult,
+} from './features/auth/api'
 import { LoginPage } from './features/auth/LoginPage'
 import { PasswordChangePage } from './features/auth/PasswordChangePage'
 import { onUnauthenticated } from './features/authenticatedFetch'
+import { CurrentUserName } from './features/current-user'
 import {
   createDevelopmentMeetingRoomGateway,
   MeetingRoomPage,
@@ -34,7 +41,6 @@ function CalendarStarter() {
 type HeaderProps = {
   companyName: string
   isMobileSidebarOpen: boolean
-  userName: string
   onOpenSidebar: () => void
   openSidebarButtonRef: RefObject<HTMLButtonElement | null>
 }
@@ -42,7 +48,6 @@ type HeaderProps = {
 function Header({
   companyName,
   isMobileSidebarOpen,
-  userName,
   onOpenSidebar,
   openSidebarButtonRef,
 }: HeaderProps) {
@@ -62,27 +67,31 @@ function Header({
         메뉴
       </button>
       <h1 className="m-0 justify-self-start font-bold">{companyName}</h1>
-      <p className="m-0 justify-self-end text-text-secondary">{userName}</p>
+      <p className="m-0 justify-self-end text-text-secondary">
+        <CurrentUserName />
+      </p>
     </header>
   )
 }
 
-type SidebarProps = { children: ReactNode }
+type SidebarProps = { children: ReactNode; logout: ReactNode }
 
-function Sidebar({ children }: SidebarProps) {
+function Sidebar({ children, logout }: SidebarProps) {
   return (
-    <aside className="hidden border-r border-border bg-surface p-6 md:block" data-desktop-sidebar>
-      <nav aria-label="주요 탐색">
-        <h2 className="mt-0 text-base">주요 탐색</h2>
-        {children}
-      </nav>
+    <aside
+      className="hidden flex-col border-r border-border bg-surface p-6 md:flex"
+      data-desktop-sidebar
+      data-testid="desktop-sidebar"
+    >
+      <nav aria-label="주요 탐색">{children}</nav>
+      <div className="mt-auto pt-6">{logout}</div>
     </aside>
   )
 }
 
 type MobileSidebarProps = SidebarProps & { onClose: () => void }
 
-function MobileSidebar({ children, onClose }: MobileSidebarProps) {
+function MobileSidebar({ children, logout, onClose }: MobileSidebarProps) {
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     closeButtonRef.current?.focus()
@@ -96,7 +105,7 @@ function MobileSidebar({ children, onClose }: MobileSidebarProps) {
       <aside
         aria-label="주요 탐색"
         aria-modal="true"
-        className="min-h-full w-[min(20rem,85vw)] bg-surface p-5 shadow-[0_0_1.5rem_color-mix(in_srgb,var(--color-text-primary)_20%,transparent)]"
+        className="flex min-h-full w-[min(20rem,85vw)] flex-col bg-surface p-5 shadow-[0_0_1.5rem_color-mix(in_srgb,var(--color-text-primary)_20%,transparent)]"
         onClick={(event) => event.stopPropagation()}
         onKeyDown={(event) => {
           if (event.key === 'Escape') {
@@ -106,7 +115,6 @@ function MobileSidebar({ children, onClose }: MobileSidebarProps) {
         role="dialog"
       >
         <div className="mb-6 flex items-center justify-between gap-4">
-          <h2>주요 탐색</h2>
           <button
             aria-label="사이드바 닫기"
             className="rounded-md border border-border bg-surface px-2.5 py-1.5 text-text-primary"
@@ -118,6 +126,7 @@ function MobileSidebar({ children, onClose }: MobileSidebarProps) {
           </button>
         </div>
         <nav aria-label="주요 탐색">{children}</nav>
+        <div className="mt-auto pt-6">{logout}</div>
       </aside>
     </div>
   )
@@ -125,6 +134,7 @@ function MobileSidebar({ children, onClose }: MobileSidebarProps) {
 
 type AppShellProps = {
   sidebar: (onNavigate: () => void) => ReactNode
+  logout: ReactNode
   children: ReactNode
 }
 
@@ -132,7 +142,7 @@ function isMeetingRoomTestHarness(): boolean {
   return import.meta.env.DEV && 'Cypress' in window
 }
 
-function AppShell({ sidebar, children }: AppShellProps) {
+function AppShell({ sidebar, logout, children }: AppShellProps) {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const openSidebarButtonRef = useRef<HTMLButtonElement>(null)
   const closeMobileSidebar = () => {
@@ -145,21 +155,18 @@ function AppShell({ sidebar, children }: AppShellProps) {
   }
 
   return (
-    // todo: 인증인가 이후, 회사명과 사용자명을 props로 전달받도록 수정
-
     <div className="min-h-screen bg-background text-text-primary">
       <Header
         companyName="Flow BI"
         isMobileSidebarOpen={isMobileSidebarOpen}
         onOpenSidebar={() => setIsMobileSidebarOpen(true)}
         openSidebarButtonRef={openSidebarButtonRef}
-        userName="김유선"
       />
       <div
         className="min-h-[calc(100vh-4rem)] md:grid md:grid-cols-[16rem_minmax(0,1fr)]"
         data-app-body
       >
-        <Sidebar>{sidebar(() => undefined)}</Sidebar>
+        <Sidebar logout={logout}>{sidebar(() => undefined)}</Sidebar>
         <main
           aria-label="콘텐츠"
           className="bg-background p-4 md:p-8 [&>h1]:mt-0 [&>p]:text-text-secondary"
@@ -169,7 +176,7 @@ function AppShell({ sidebar, children }: AppShellProps) {
         </main>
       </div>
       {isMobileSidebarOpen ? (
-        <MobileSidebar onClose={closeMobileSidebar}>
+        <MobileSidebar logout={logout} onClose={closeMobileSidebar}>
           {sidebar(closeMobileSidebarAfterNavigation)}
         </MobileSidebar>
       ) : null}
@@ -206,13 +213,20 @@ type AuthenticatedAppProps = {
   queryClient: QueryClient
 }
 
+function logoutErrorMessage(error: unknown): string {
+  if (error instanceof LoginApiError && error.status === 403) {
+    return '요청을 확인할 수 없습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요.'
+  }
+  return '로그아웃할 수 없습니다. 잠시 후 다시 시도해 주세요.'
+}
+
 function AuthenticatedApp({ onLoggedOut, queryClient }: AuthenticatedAppProps) {
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [logoutError, setLogoutError] = useState<string>()
   const [locationSearch, setLocationSearch] = useState(() => window.location.search)
   const [developmentMeetingRoomGateway] = useState(() =>
     import.meta.env.DEV ? createDevelopmentMeetingRoomGateway() : undefined,
   )
-  const mainHeadingRef = useRef<HTMLHeadingElement>(null)
   const isCalendarRoute = new URLSearchParams(locationSearch).has('view')
   const isTestHarness = isMeetingRoomTestHarness()
   const meetingRoomGateway = resolveMeetingRoomGateway({
@@ -234,21 +248,25 @@ function AuthenticatedApp({ onLoggedOut, queryClient }: AuthenticatedAppProps) {
   }
 
   useEffect(() => {
-    mainHeadingRef.current?.focus()
-  }, [])
-
-  useEffect(() => {
     const updateLocation = () => setLocationSearch(window.location.search)
     window.addEventListener('popstate', updateLocation)
     return () => window.removeEventListener('popstate', updateLocation)
   }, [])
 
   async function handleLogout() {
+    setLogoutError(undefined)
     setIsLoggingOut(true)
     try {
       await logout()
       queryClient.clear()
       onLoggedOut()
+    } catch (error: unknown) {
+      if (error instanceof LoginApiError && error.status === 401) {
+        queryClient.clear()
+        onLoggedOut()
+        return
+      }
+      setLogoutError(logoutErrorMessage(error))
     } finally {
       setIsLoggingOut(false)
     }
@@ -273,7 +291,7 @@ function AuthenticatedApp({ onLoggedOut, queryClient }: AuthenticatedAppProps) {
         }}
       >
         회의실
-        {!isCalendarRoute && <span aria-hidden="true"/>}
+        {!isCalendarRoute && <span aria-hidden="true" />}
       </a>
       <a
         aria-current={isCalendarRoute ? 'page' : undefined}
@@ -287,21 +305,33 @@ function AuthenticatedApp({ onLoggedOut, queryClient }: AuthenticatedAppProps) {
         }}
       >
         캘린더
-        {isCalendarRoute && <span aria-hidden="true"/>}
+        {isCalendarRoute && <span aria-hidden="true" />}
       </a>
     </div>
   )
 
+  const logoutButton = (
+    <>
+      {logoutError !== undefined ? (
+        <p aria-live="assertive" className="mb-3 text-sm text-danger" role="alert">
+          {logoutError}
+        </p>
+      ) : null}
+      <button
+        aria-label={isLoggingOut ? '로그아웃 중' : '로그아웃'}
+        className="w-full rounded-lg border border-border bg-surface px-3 py-2 font-semibold text-text-primary transition hover:border-primary hover:bg-secondary focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-2 disabled:cursor-wait disabled:opacity-70"
+        disabled={isLoggingOut}
+        onClick={() => void handleLogout()}
+        type="button"
+      >
+        {isLoggingOut ? '로그아웃 중' : '로그아웃'}
+      </button>
+    </>
+  )
+
   return (
     <QueryClientProvider client={queryClient}>
-      <AppShell sidebar={sidebar}>
-        <h1 ref={mainHeadingRef} tabIndex={-1}>
-          콘텐츠
-        </h1>
-        <p>로그인되었습니다.</p>
-        <button disabled={isLoggingOut} onClick={() => void handleLogout()} type="button">
-          {isLoggingOut ? '로그아웃 중' : '로그아웃'}
-        </button>
+      <AppShell logout={logoutButton} sidebar={sidebar}>
         {isCalendarRoute ? <CalendarStarter /> : <MeetingRoomPage gateway={meetingRoomGateway} />}
       </AppShell>
     </QueryClientProvider>

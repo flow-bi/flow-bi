@@ -1,6 +1,8 @@
 package com.flowbi.domain.user.service;
 
 import com.flowbi.domain.user.dto.UserDetailResponse;
+import com.flowbi.domain.user.dto.CurrentUserResponse;
+import com.flowbi.domain.user.repository.CurrentUserNameProjection;
 import com.flowbi.domain.user.repository.UserDetailProjection;
 import com.flowbi.domain.user.repository.UserRepository;
 import java.util.Optional;
@@ -30,5 +32,12 @@ public class UserService {
     return new UserDetailResponse(user.userId(), user.name(), user.status().name(),
         new UserDetailResponse.TeamDetail(user.teamId(), user.teamName()),
         new UserDetailResponse.PositionDetail(user.positionId(), user.positionName()));
+  }
+
+  @Transactional(readOnly = true)
+  public CurrentUserResponse getCurrentUser(long userId) {
+    CurrentUserNameProjection user = userRepository.findActiveNameByUserId(userId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+    return new CurrentUserResponse(user.name());
   }
 }
