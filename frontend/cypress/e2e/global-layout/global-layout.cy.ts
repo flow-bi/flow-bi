@@ -4,6 +4,9 @@ describe('global application layout', () => {
       body: { authenticated: true, mustChangePassword: false },
       statusCode: 200,
     })
+    cy.intercept('GET', '/api/me/header', { body: { name: '인증 사용자' }, statusCode: 200 }).as(
+      'currentUser',
+    )
   })
 
   function interceptAuthenticatedCalendar() {
@@ -17,7 +20,8 @@ describe('global application layout', () => {
     cy.viewport(1280, 800)
     cy.visit('/')
 
-    cy.get('[data-app-header]').should('contain.text', 'Flow BI').and('contain.text', '김유선')
+    cy.get('[data-app-header]').should('contain.text', 'Flow BI').and('contain.text', '인증 사용자')
+    cy.wait('@currentUser')
     cy.get('[data-app-body]').should('have.class', 'md:grid')
     cy.get('nav[aria-label="주요 탐색"]').should('be.visible')
     cy.get('main[aria-label="콘텐츠"]').should('be.visible')
@@ -31,6 +35,7 @@ describe('global application layout', () => {
     cy.get('[data-app-body]').should('not.have.class', 'grid')
     cy.get('[data-desktop-sidebar]').should('not.be.visible')
     cy.get('button[aria-label="사이드바 열기"]').click()
+    cy.get('[data-app-header]').should('contain.text', '인증 사용자')
     cy.get('[role="dialog"][aria-label="주요 탐색"]').should('be.visible')
     cy.focused().type('{esc}')
     cy.get('[role="dialog"][aria-label="주요 탐색"]').should('not.exist')

@@ -18,4 +18,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
       + "where user.userId = :userId "
       + "and user.status = com.flowbi.domain.user.entity.UserStatus.ACTIVE")
   Optional<UserDetailProjection> findActiveDetailByUserId(@Param("userId") Long userId);
+
+  @Query("select new com.flowbi.domain.user.repository.CurrentUserNameProjection(user.name) "
+      + "from User user where user.userId = :userId "
+      + "and user.status = com.flowbi.domain.user.entity.UserStatus.ACTIVE")
+  Optional<CurrentUserNameProjection> findActiveNameByUserId(@Param("userId") Long userId);
 }

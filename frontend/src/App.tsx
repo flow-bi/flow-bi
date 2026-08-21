@@ -1,10 +1,17 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from 'react'
 
-import { getSession, logout, type LoginResult, type SessionResult } from './features/auth/api'
+import {
+  getSession,
+  LoginApiError,
+  logout,
+  type LoginResult,
+  type SessionResult,
+} from './features/auth/api'
 import { LoginPage } from './features/auth/LoginPage'
 import { PasswordChangePage } from './features/auth/PasswordChangePage'
 import { onUnauthenticated } from './features/authenticatedFetch'
+import { CurrentUserName } from './features/current-user'
 import {
   createDevelopmentMeetingRoomGateway,
   MeetingRoomPage,
@@ -34,7 +41,6 @@ function CalendarStarter() {
 type HeaderProps = {
   companyName: string
   isMobileSidebarOpen: boolean
-  userName: string
   onOpenSidebar: () => void
   openSidebarButtonRef: RefObject<HTMLButtonElement | null>
 }
@@ -42,7 +48,6 @@ type HeaderProps = {
 function Header({
   companyName,
   isMobileSidebarOpen,
-  userName,
   onOpenSidebar,
   openSidebarButtonRef,
 }: HeaderProps) {
@@ -62,7 +67,9 @@ function Header({
         메뉴
       </button>
       <h1 className="m-0 justify-self-start font-bold">{companyName}</h1>
-      <p className="m-0 justify-self-end text-text-secondary">{userName}</p>
+      <p className="m-0 justify-self-end text-text-secondary">
+        <CurrentUserName />
+      </p>
     </header>
   )
 }
@@ -145,15 +152,12 @@ function AppShell({ sidebar, children }: AppShellProps) {
   }
 
   return (
-    // todo: 인증인가 이후, 회사명과 사용자명을 props로 전달받도록 수정
-
     <div className="min-h-screen bg-background text-text-primary">
       <Header
         companyName="Flow BI"
         isMobileSidebarOpen={isMobileSidebarOpen}
         onOpenSidebar={() => setIsMobileSidebarOpen(true)}
         openSidebarButtonRef={openSidebarButtonRef}
-        userName="김유선"
       />
       <div
         className="min-h-[calc(100vh-4rem)] md:grid md:grid-cols-[16rem_minmax(0,1fr)]"

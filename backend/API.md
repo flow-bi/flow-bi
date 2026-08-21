@@ -175,6 +175,25 @@ invalid CSRF token returns `403 CSRF_VALIDATION_FAILED`. Reuse of the expired se
 protected API returns `401 UNAUTHENTICATED`. Logout audit records contain only the outcome and
 never contain a session identifier, CSRF token, or authentication credential.
 
+### 8.0.4 Current user name contract
+
+`GET /api/me/header` requires an authenticated server session and returns `200 OK` with exactly the
+header-display field `{ "name": "..." }`. The server derives the user only from the authenticated
+`LoginPrincipal` immutable internal `userId`; the request accepts no user ID in its path, query,
+header, or body and cannot select another user.
+
+The lookup reads only the name of an `ACTIVE` user. Missing, inactive, or malformed Principal user
+IDs return `404 Not Found` without profile data, so the response does not reveal whether a user
+record exists. Missing or expired sessions return `401 UNAUTHENTICATED`, and sessions requiring an
+initial password change return `403 PASSWORD_CHANGE_REQUIRED` under the existing protected API
+filter contract. The successful response and the identity-safe `404` response include
+`Cache-Control: no-store`; unauthenticated session failures retain the existing global no-store
+contract.
+
+The response never includes a user ID, employee number, email, team, position, role, credential,
+password, session identifier, CSRF value, or any other profile data. The name is not copied into
+the session or Redis; it is resolved from the authoritative user store for each request.
+
 ### 8.1 Authentication
 
 | Method | Path                   | 목적                  |
@@ -204,7 +223,8 @@ never contain a session identifier, CSRF token, or authentication credential.
 
 | Method  | Path                            | 목적                           |
 | ------- | ------------------------------- | ------------------------------ |
-| `GET`   | `/api/me`                       | 내 정보 조회                   |
+| `GET`   | `/api/me`                       | 내 정보 조회 (마이페이지 확장 지점) |
+| `GET`   | `/api/me/header`                | 현재 인증 사용자의 이름만 조회 |
 | `PATCH` | `/api/me`                       | 이메일·전화번호·업무 상태 수정 |
 | `GET`   | `/api/me/notification-settings` | 알림 설정 조회                 |
 | `PUT`   | `/api/me/notification-settings` | 알림 설정 변경                 |

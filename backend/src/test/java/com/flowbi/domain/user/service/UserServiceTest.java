@@ -5,7 +5,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
 import com.flowbi.domain.user.dto.UserDetailResponse;
+import com.flowbi.domain.user.dto.CurrentUserResponse;
 import com.flowbi.domain.user.entity.UserStatus;
+import com.flowbi.domain.user.repository.CurrentUserNameProjection;
 import com.flowbi.domain.user.repository.UserDetailProjection;
 import com.flowbi.domain.user.repository.UserRepository;
 import java.util.Optional;
@@ -43,6 +45,28 @@ class UserServiceTest {
     when(users.findActiveDetailByUserId(9L)).thenReturn(Optional.empty());
 
     assertThatThrownBy(() -> service.getUserDetail(9L)).isInstanceOf(ResponseStatusException.class)
+        .extracting(exception -> ((ResponseStatusException) exception).getStatusCode().value())
+        .isEqualTo(404);
+  }
+
+  @Test
+  void returnsOnlyTheActivePrincipalsNameForTheCurrentUserResponse() {
+    when(users.findActiveNameByUserId(42L))
+        .thenReturn(Optional.of(new CurrentUserNameProjection("Kim Flow")));
+
+    CurrentUserResponse response = service.getCurrentUser(42L);
+
+    assertThat(response.name()).isEqualTo("Kim Flow");
+    assertThat(CurrentUserResponse.class.getRecordComponents())
+        .extracting(component -> component.getName()).containsExactly("name");
+  }
+
+  @Test
+  void hidesMissingOrInactiveCurrentUsersAsNotFound() {
+    when(users.findActiveNameByUserId(42L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.getCurrentUser(42L))
+        .isInstanceOf(ResponseStatusException.class)
         .extracting(exception -> ((ResponseStatusException) exception).getStatusCode().value())
         .isEqualTo(404);
   }

@@ -75,4 +75,29 @@ class UserRepositoryIntegrationTest {
     assertThat(detail.positionName()).isEqualTo("Engineer");
     assertThat(sessionFactory.getStatistics().getPrepareStatementCount()).isEqualTo(1);
   }
+
+  @Test
+  void fetchesOnlyTheActiveUsersNameForTheCurrentUserResponse() {
+    Position position = positions.save(Position.create("Engineer"));
+    Team team = teams.save(Team.create("Platform"));
+    User activeUser = users
+        .save(User.create("employee-42","employee-42@example.test","Fixture User",position,team));
+    User inactiveUser = users
+        .save(User.create("employee-43","employee-43@example.test","Inactive User",position,team));
+    inactiveUser.deactivate();
+    entityManager.flush();
+    entityManager.clear();
+    SessionFactory sessionFactory = entityManager.getEntityManagerFactory()
+        .unwrap(SessionFactory.class);
+    sessionFactory.getStatistics().clear();
+
+    CurrentUserNameProjection currentUser = users.findActiveNameByUserId(activeUser.getUserId())
+        .orElseThrow();
+
+    assertThat(currentUser.name()).isEqualTo("Fixture User");
+    assertThat(users.findActiveNameByUserId(inactiveUser.getUserId())).isEmpty();
+    assertThat(CurrentUserNameProjection.class.getRecordComponents())
+        .extracting(component -> component.getName()).containsExactly("name");
+    assertThat(sessionFactory.getStatistics().getPrepareStatementCount()).isEqualTo(2);
+  }
 }
