@@ -401,7 +401,7 @@ Calendar Core의 조회 경계 DTO는 검증 가능한 Actor ID를 명시적으�
 | `GET` | `/api/room-reservations?from=&to=` | 예약 현황 조회 |
 | `POST` | `/api/room-reservations` | 회의실 예약과 일정 생성 |
 | `PUT` | `/api/room-reservations/{reservationId}` | 예약 수정 |
-| `DELETE` | `/api/room-reservations/{reservationId}` | 예약 취소 후보(일정 도메인 경계 확정 후 구현) |
+| `DELETE` | `/api/room-reservations/{reservationId}` | 예약과 연결 일정 취소(Soft Cancel) |
 
 중복 예약은 `409 Conflict`와 안정적인 Error Code로 반환한다.
 
@@ -420,9 +420,20 @@ Calendar Core의 조회 경계 DTO는 검증 가능한 Actor ID를 명시적으�
 `usesDefaultImage`만 반환한다.
 
 `GET /api/room-reservations/{reservationId}`는 예약 수정 화면에 필요한
-`reservationId`, `roomId`, `title`, `startAt`, `endAt`, `attendeeIds`, `description`,
-`editable`만 반환한다. 연결 일정 ID, 예약 Entity, 인증 사용자 정보 및 참석자 이외의
-개인정보는 반환하지 않는다.
+`reservationId`, `roomId`, `title`, `startAt`, `endAt`, `attendeeIds`, `attendees`,
+`description`, `editable`만 반환한다. `attendees`의 각 항목은 `userId`와 `displayName`만
+포함하며 `attendeeIds`와 같은 ID를 같은 순서로 제공한다. 연결 일정 ID, 예약 Entity, 인증
+사용자 정보 및 이메일·전화번호·조직 정보·재직 상태 등 불필요한 개인정보는 반환하지 않는다.
+
+```json
+{
+  "attendeeIds": [10, 11],
+  "attendees": [
+    { "userId": 10, "displayName": "김하늘" },
+    { "userId": 11, "displayName": "이바다" }
+  ]
+}
+```
 
 세 Endpoint 모두 인증된 사용자 경계를 요구한다. 현재 실제 인증 Adapter가 없으므로
 인증 사용자 공급 없이 실행되는 요청은 Use Case를 호출하지 않고 `401 Unauthorized`와
@@ -501,6 +512,20 @@ Calendar Core의 조회 경계 DTO는 검증 가능한 Actor ID를 명시적으�
 `ROOM_RESERVATION_NOT_FOUND`를 반환해 IDOR에 따른 존재 여부 노출을 막는다. 수정 불가 상태는
 `409`와 `ROOM_RESERVATION_NOT_EDITABLE`, 수용 인원 초과는 `409`와
 `ROOM_CAPACITY_EXCEEDED`, 시간 충돌은 `409`와 `ROOM_RESERVATION_CONFLICT`를 반환한다.
+
+#### 구현된 예약 취소 계약
+
+`DELETE /api/room-reservations/{reservationId}`는 인증된 예약 소유자만 호출할 수 있다. 성공 시
+응답 Body 없이 `204 No Content`를 반환하며, 예약과 연결 일정은 하나의 트랜잭션에서 각각
+`CANCELED` 및 취소 시각으로 전환된다. 취소된 예약은 회의실 예약 현황과 충돌 검사에서,
+취소된 일정은 기본 Calendar 기간·상세 조회에서 제외된다.
+
+인증 정보가 없으면 Service 호출 전에 `401 Unauthorized`와 `AUTHENTICATION_REQUIRED`를
+반환한다. 존재하지 않는 예약과 소유하지 않은 예약은 모두 `404 Not Found`와
+`ROOM_RESERVATION_NOT_FOUND`를 반환한다. 이미 취소된 예약은 같은 소유자의 반복 요청에
+상태를 다시 변경하지 않고 `204`를 반환한다. 동시 취소·연결 일정 상태 충돌 등 상태 전이
+충돌은 `409 Conflict`와 `ROOM_RESERVATION_CANCEL_CONFLICT`로 반환한다. 취소 감사는 Actor,
+시각, 예약·일정 식별자와 결과만 기록하며 제목·설명·참석자·Session 정보는 포함하지 않는다.
 
 ### 8.6 Roles and Permissions
 
