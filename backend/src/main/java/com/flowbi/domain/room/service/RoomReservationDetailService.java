@@ -6,6 +6,7 @@ import com.flowbi.domain.room.entity.ReservationStatus;
 import com.flowbi.domain.room.entity.RoomReservation;
 import com.flowbi.domain.room.repository.RoomReservationRepository;
 import com.flowbi.domain.schedule.service.ScheduleModificationService;
+import com.flowbi.domain.schedule.service.ScheduleIdentityService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,11 +16,14 @@ public class RoomReservationDetailService {
 
   private final RoomReservationRepository reservationRepository;
   private final ScheduleModificationService scheduleModificationService;
+  private final ScheduleIdentityService scheduleIdentityService;
 
   public RoomReservationDetailService(RoomReservationRepository reservationRepository,
-      ScheduleModificationService scheduleModificationService) {
+      ScheduleModificationService scheduleModificationService,
+      ScheduleIdentityService scheduleIdentityService) {
     this.reservationRepository = reservationRepository;
     this.scheduleModificationService = scheduleModificationService;
+    this.scheduleIdentityService = scheduleIdentityService;
   }
 
   public RoomReservationDetailResponse findOwnedReservation(Long userId,Long reservationId) {
@@ -33,10 +37,18 @@ public class RoomReservationDetailService {
     if (!userId.equals(schedule.creatorId())) {
       throw notFound();
     }
+    var attendeeIds = schedule.attendeeIds();
+    var attendees = scheduleIdentityService.findUserDisplayNames(attendeeIds).stream()
+        .map(attendee -> new RoomReservationDetailResponse.Attendee(attendee.userId(),
+            attendee.displayName()))
+        .toList();
+    if (!attendeeIds
+        .equals(attendees.stream().map(RoomReservationDetailResponse.Attendee::userId).toList())) {
+      throw notFound();
+    }
     return new RoomReservationDetailResponse(reservation.getId(), reservation.getRoom().getId(),
-        reservation.getTitle(), reservation.getStartAt(), reservation.getEndAt(),
-        schedule.attendeeIds(), schedule.description(),
-        reservation.getStatus() == ReservationStatus.RESERVED);
+        reservation.getTitle(), reservation.getStartAt(), reservation.getEndAt(), attendeeIds,
+        attendees, schedule.description(), reservation.getStatus() == ReservationStatus.RESERVED);
   }
 
   private RoomReservationApplicationException notFound() {

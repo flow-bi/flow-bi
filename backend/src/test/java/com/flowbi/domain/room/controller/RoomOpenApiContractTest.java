@@ -29,7 +29,18 @@ class RoomOpenApiContractTest {
                 .exists())
         .andExpect(
             jsonPath("$.components.schemas.RoomReservationDetailResponse.properties.scheduleId")
-                .doesNotExist());
+                .doesNotExist())
+        .andExpect(
+            jsonPath("$.components.schemas.RoomReservationDetailResponse.properties.attendees")
+                .exists())
+        .andExpect(jsonPath("$.components.schemas.Attendee.properties.userId").exists())
+        .andExpect(jsonPath("$.components.schemas.Attendee.properties.displayName").exists())
+        .andExpect(jsonPath("$.components.schemas.Attendee.properties.email").doesNotExist())
+        .andExpect(jsonPath("$.components.schemas.Attendee.properties.phoneNumber").doesNotExist())
+        .andExpect(
+            jsonPath("$.components.schemas.Attendee.properties.employeeNumber").doesNotExist())
+        .andExpect(jsonPath("$.components.schemas.Attendee.properties.teamId").doesNotExist())
+        .andExpect(jsonPath("$.components.schemas.Attendee.properties.status").doesNotExist());
   }
 
   @Test

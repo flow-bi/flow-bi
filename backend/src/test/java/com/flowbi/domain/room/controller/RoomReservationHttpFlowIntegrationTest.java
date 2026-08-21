@@ -56,9 +56,10 @@ class RoomReservationHttpFlowIntegrationTest {
                 LocalDateTime.of(2026,8,10,10,0), LocalDateTime.of(2026,8,10,11,0),
                 com.flowbi.domain.room.dto.ReservationDisplayStatus.UPCOMING, true)))));
     when(availabilityService.findAvailability(any(),Mockito.eq(10L))).thenReturn(availability);
-    when(reservationDetailService.findOwnedReservation(10L,5L)).thenReturn(
-        new RoomReservationDetailResponse(5L, 1L, "Planning", LocalDateTime.of(2026,8,10,10,0),
-            LocalDateTime.of(2026,8,10,11,0), List.of(10L), "Initial", true));
+    when(reservationDetailService.findOwnedReservation(10L,5L))
+        .thenReturn(new RoomReservationDetailResponse(5L, 1L, "Planning",
+            LocalDateTime.of(2026,8,10,10,0), LocalDateTime.of(2026,8,10,11,0), List.of(10L),
+            List.of(new RoomReservationDetailResponse.Attendee(10L, "Owner")), "Initial", true));
     when(reservationService.create(any(),any()))
         .thenReturn(new CreateRoomReservationResult(6L, 16L));
     when(reservationService.update(any(),any()))

@@ -15,6 +15,13 @@ function openUpdate() {
 }
 
 describe('meeting room reservation update', () => {
+  beforeEach(() => {
+    cy.intercept('GET', '/api/auth/session', {
+      body: { authenticated: true, mustChangePassword: false },
+      statusCode: 200,
+    })
+  })
+
   it('loads an owned reservation, updates it, and refreshes the availability list', () => {
     cy.viewport(1280, 800)
     visitMeetingRooms()
@@ -27,6 +34,10 @@ describe('meeting room reservation update', () => {
         .clear()
         .type('수정된 제품 검토')
       cy.contains('label', '상세 설명').find('textarea').should('have.value', '초기 설명')
+      cy.contains('button', '김하늘 제거').should('be.visible').click()
+      cy.contains('label', '참석자 검색').find('input').type('이바다')
+      cy.contains('button', '이바다 참석자로 추가').click()
+      cy.contains('button', '이바다 제거').should('be.visible')
       cy.contains('button', '예약 및 일정 수정').click()
       cy.contains('예약과 연결 일정이 수정되었습니다.').should('be.visible')
     })
@@ -61,6 +72,7 @@ describe('meeting room reservation update', () => {
     })
     cy.get('[data-testid="reservation-panel-overlay"]').click('topLeft')
     cy.get('[role="alertdialog"]')
+      .scrollIntoView()
       .should('be.visible')
       .within(() => {
         cy.contains('button', '입력 내용 삭제').click()

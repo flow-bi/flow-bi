@@ -89,13 +89,19 @@ class RoomControllerTest {
 
   @Test
   void returnsOnlyTheOwnersReservationEditDetails() throws Exception {
-    when(reservationDetailService.findOwnedReservation(10L,5L)).thenReturn(
-        new RoomReservationDetailResponse(5L, 1L, "Planning", LocalDateTime.of(2026,8,10,10,0),
-            LocalDateTime.of(2026,8,10,11,0), List.of(10L,11L), "Discuss plan", true));
+    when(reservationDetailService.findOwnedReservation(10L,5L))
+        .thenReturn(new RoomReservationDetailResponse(5L, 1L, "Planning",
+            LocalDateTime.of(2026,8,10,10,0), LocalDateTime.of(2026,8,10,11,0), List.of(10L,11L),
+            List.of(new RoomReservationDetailResponse.Attendee(10L, "Owner"),
+                new RoomReservationDetailResponse.Attendee(11L, "Attendee")),
+            "Discuss plan", true));
 
     mockMvc.perform(get("/api/room-reservations/5").requestAttr("authenticatedUser",user()))
         .andExpect(status().isOk()).andExpect(jsonPath("$.roomId").value(1))
         .andExpect(jsonPath("$.attendeeIds[1]").value(11))
+        .andExpect(jsonPath("$.attendees[0].userId").value(10))
+        .andExpect(jsonPath("$.attendees[0].displayName").value("Owner"))
+        .andExpect(jsonPath("$.attendees[0].email").doesNotExist())
         .andExpect(jsonPath("$.description").value("Discuss plan"))
         .andExpect(jsonPath("$.editable").value(true));
   }

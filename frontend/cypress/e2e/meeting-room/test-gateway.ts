@@ -15,6 +15,15 @@ type TestReservation = EditableRoomReservation & {
   displayStatus: ReservationDisplayStatus
 }
 
+const attendeeCandidates = [
+  { userId: 1, displayName: '김하늘' },
+  { userId: 2, displayName: '이바다' },
+]
+
+function attendeesFor(attendeeIds: number[]) {
+  return attendeeCandidates.filter(({ userId }) => attendeeIds.includes(userId))
+}
+
 export function meetingRoomTestGateway({
   availabilityFailure,
 }: MeetingRoomTestGatewayOptions = {}): MeetingRoomGateway {
@@ -29,6 +38,7 @@ export function meetingRoomTestGateway({
       startAt: '2026-08-07T10:00:00',
       endAt: '2026-08-07T11:00:00',
       attendeeIds: [1],
+      attendees: [attendeeCandidates[0]],
       description: '초기 설명',
       canEdit: true,
       displayStatus: 'IN_USE' as const,
@@ -117,6 +127,12 @@ export function meetingRoomTestGateway({
       })
       return Promise.resolve({ rooms })
     },
+    findAttendeeCandidates: (query) =>
+      Promise.resolve(
+        attendeeCandidates.filter(({ displayName }) =>
+          displayName.includes(query.trim().replace(/\s+/g, ' ')),
+        ),
+      ),
     createReservation: (command: CreateRoomReservationCommand) => {
       if (command.title === '충돌 회의') {
         return Promise.reject(new MeetingRoomGatewayError('ROOM_RESERVATION_CONFLICT'))
@@ -124,7 +140,13 @@ export function meetingRoomTestGateway({
       const reservationId = nextReservationId++
       editableReservations = [
         ...editableReservations,
-        { reservationId, ...command, canEdit: true, displayStatus: 'UPCOMING' as const },
+        {
+          reservationId,
+          ...command,
+          attendees: attendeesFor(command.attendeeIds),
+          canEdit: true,
+          displayStatus: 'UPCOMING' as const,
+        },
       ]
       return Promise.resolve({ reservationId, scheduleId: 41 })
     },
@@ -143,7 +165,7 @@ export function meetingRoomTestGateway({
       }
       editableReservations = editableReservations.map((reservation) =>
         reservation.reservationId === command.reservationId
-          ? { ...reservation, ...command }
+          ? { ...reservation, ...command, attendees: attendeesFor(command.attendeeIds) }
           : reservation,
       )
       return Promise.resolve({ reservationId: command.reservationId, scheduleId: 41 })

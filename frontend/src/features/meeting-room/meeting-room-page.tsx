@@ -160,6 +160,8 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
   const pendingAuthentication =
     isMeetingRoomGatewayError(query.error) && query.error.code === 'AUTH_INTEGRATION_PENDING'
   const visibleRooms = query.data?.rooms ?? lastValidResponse?.rooms
+  const findAttendeeCandidates = (attendeeQuery: string) =>
+    gateway.findAttendeeCandidates?.(attendeeQuery) ?? Promise.resolve([])
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -211,6 +213,7 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
       startTime: reservation.startAt.slice(11, 16),
       endTime: reservation.endAt.slice(11, 16),
       attendeeIds: reservation.attendeeIds,
+      attendees: reservation.attendees,
       description: reservation.description,
     }
   }
@@ -397,6 +400,7 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
           onRefreshAvailability={() => {
             void query.refetch()
           }}
+          onFindAttendeeCandidates={findAttendeeCandidates}
         />
       ) : null}
       {selectedRoom ? (
@@ -417,6 +421,7 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
           onRefreshAvailability={() => {
             void query.refetch()
           }}
+          onFindAttendeeCandidates={findAttendeeCandidates}
         />
       ) : null}
     </div>

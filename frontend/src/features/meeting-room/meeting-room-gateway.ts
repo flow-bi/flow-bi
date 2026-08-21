@@ -53,6 +53,11 @@ export interface CreateRoomReservationResult {
   scheduleId: number
 }
 
+export interface RoomReservationAttendee {
+  userId: number
+  displayName: string
+}
+
 // This mirrors Task 5's Application Service command. It deliberately has no actor ID.
 export interface UpdateRoomReservationCommand extends CreateRoomReservationCommand {
   reservationId: number
@@ -70,6 +75,7 @@ export interface EditableRoomReservation {
   startAt: string
   endAt: string
   attendeeIds: number[]
+  attendees?: RoomReservationAttendee[]
   description: string
   canEdit: boolean
 }
@@ -78,6 +84,7 @@ export interface MeetingRoomGateway {
   isReservationCreationAvailable?: boolean
   isReservationUpdateAvailable?: boolean
   findAvailability(query: RoomAvailabilityQuery): Promise<RoomAvailabilityResponse>
+  findAttendeeCandidates?(this: void, query: string): Promise<RoomReservationAttendee[]>
   createReservation?(command: CreateRoomReservationCommand): Promise<CreateRoomReservationResult>
   getReservationForEdit?(reservationId: number): Promise<EditableRoomReservation>
   updateReservation?(command: UpdateRoomReservationCommand): Promise<UpdateRoomReservationResult>
@@ -91,6 +98,8 @@ type MeetingRoomGatewayErrorCode =
   | 'ROOM_CAPACITY_EXCEEDED'
   | 'ROOM_RESERVATION_NOT_FOUND'
   | 'ROOM_RESERVATION_NOT_EDITABLE'
+  | 'ROOM_RESERVATION_CANCEL_CONFLICT'
+  | 'ATTENDEE_SEARCH_FORBIDDEN'
 
 export class MeetingRoomGatewayError extends Error {
   public readonly code: MeetingRoomGatewayErrorCode
@@ -117,6 +126,8 @@ export function isMeetingRoomGatewayError(error: unknown): error is MeetingRoomG
         'ROOM_CAPACITY_EXCEEDED',
         'ROOM_RESERVATION_NOT_FOUND',
         'ROOM_RESERVATION_NOT_EDITABLE',
+        'ROOM_RESERVATION_CANCEL_CONFLICT',
+        'ATTENDEE_SEARCH_FORBIDDEN',
       ].includes(error.code))
   )
 }
@@ -124,6 +135,9 @@ export function isMeetingRoomGatewayError(error: unknown): error is MeetingRoomG
 function errorCodeFor(status: number, code: unknown): MeetingRoomGatewayErrorCode {
   if (status === 401) {
     return 'AUTH_INTEGRATION_PENDING'
+  }
+  if (status === 403) {
+    return 'ATTENDEE_SEARCH_FORBIDDEN'
   }
   if (
     typeof code === 'string' &&
@@ -134,6 +148,7 @@ function errorCodeFor(status: number, code: unknown): MeetingRoomGatewayErrorCod
       'ROOM_CAPACITY_EXCEEDED',
       'ROOM_RESERVATION_NOT_FOUND',
       'ROOM_RESERVATION_NOT_EDITABLE',
+      'ROOM_RESERVATION_CANCEL_CONFLICT',
     ].includes(code)
   ) {
     return code as MeetingRoomGatewayErrorCode
@@ -189,6 +204,16 @@ export const productionMeetingRoomGateway: MeetingRoomGateway = {
       search.set('availabilityStatus', query.availabilityStatus)
     }
     return requestJson<RoomAvailabilityResponse>(`/api/rooms?${search.toString()}`)
+  },
+  findAttendeeCandidates: async (query) => {
+    const normalizedQuery = query.trim().replace(/\s+/g, ' ')
+    if (!normalizedQuery) {
+      return []
+    }
+    const response = await requestJson<{ data: RoomReservationAttendee[] }>(
+      `/api/schedules/attendee-candidates?query=${encodeURIComponent(normalizedQuery)}`,
+    )
+    return response.data
   },
   createReservation: (command) =>
     requestJson<CreateRoomReservationResult>('/api/room-reservations', {
