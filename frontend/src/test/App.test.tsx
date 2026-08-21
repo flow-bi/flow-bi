@@ -43,10 +43,24 @@ describe('App authentication guard', () => {
 
   it('returns to login after logout and does not retain the protected screen', async () => {
     document.cookie = 'XSRF-TOKEN=csrf-value; Path=/'
-    vi.stubGlobal(
-      'fetch',
-      authenticatedFetchMock({ authenticated: true, mustChangePassword: false }),
-    )
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+      if (url === '/api/auth/session') {
+        return Promise.resolve(
+          new Response(JSON.stringify({ authenticated: true, mustChangePassword: false }), {
+            status: 200,
+          }),
+        )
+      }
+      if (url.startsWith('/api/rooms?')) {
+        return Promise.resolve(new Response(JSON.stringify({ rooms: [] }), { status: 200 }))
+      }
+      if (url === '/api/auth/csrf' || url === '/api/auth/logout') {
+        return Promise.resolve(new Response(null, { status: 204 }))
+      }
+      return Promise.reject(new Error(`Unexpected request: ${url}`))
+    })
+    vi.stubGlobal('fetch', fetchMock)
     const user = userEvent.setup()
     render(<App />)
 

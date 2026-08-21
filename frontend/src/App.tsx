@@ -13,7 +13,6 @@ import { PasswordChangePage } from './features/auth/PasswordChangePage'
 import { onUnauthenticated } from './features/authenticatedFetch'
 import { CurrentUserName } from './features/current-user'
 import {
-  createDevelopmentMeetingRoomGateway,
   MeetingRoomPage,
   resolveMeetingRoomGateway,
   type MeetingRoomGateway,
@@ -24,6 +23,7 @@ import { ScheduleCreateModal } from './features/schedule-create/ScheduleCreateMo
 declare global {
   interface Window {
     __FLOW_BI_MEETING_ROOM_GATEWAY__?: MeetingRoomGateway
+    __FLOW_BI_MEETING_ROOM_TEST_HARNESS__?: boolean
   }
 }
 
@@ -139,7 +139,7 @@ type AppShellProps = {
 }
 
 function isMeetingRoomTestHarness(): boolean {
-  return import.meta.env.DEV && 'Cypress' in window
+  return import.meta.env.DEV && window.__FLOW_BI_MEETING_ROOM_TEST_HARNESS__ === true
 }
 
 function AppShell({ sidebar, logout, children }: AppShellProps) {
@@ -224,15 +224,10 @@ function AuthenticatedApp({ onLoggedOut, queryClient }: AuthenticatedAppProps) {
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [logoutError, setLogoutError] = useState<string>()
   const [locationSearch, setLocationSearch] = useState(() => window.location.search)
-  const [developmentMeetingRoomGateway] = useState(() =>
-    import.meta.env.DEV ? createDevelopmentMeetingRoomGateway() : undefined,
-  )
   const isCalendarRoute = new URLSearchParams(locationSearch).has('view')
   const isTestHarness = isMeetingRoomTestHarness()
   const meetingRoomGateway = resolveMeetingRoomGateway({
-    isDevelopment: import.meta.env.DEV,
     isTestHarness,
-    developmentGateway: developmentMeetingRoomGateway,
     injectedGateway: isTestHarness ? window.__FLOW_BI_MEETING_ROOM_GATEWAY__ : undefined,
   })
 

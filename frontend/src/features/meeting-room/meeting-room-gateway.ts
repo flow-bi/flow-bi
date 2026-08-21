@@ -1,3 +1,5 @@
+import { authenticatedFetch } from '../authenticatedFetch'
+
 export const RESERVATION_DISPLAY_STATUSES = ['UPCOMING', 'IN_USE', 'COMPLETED'] as const
 
 export type ReservationDisplayStatus = (typeof RESERVATION_DISPLAY_STATUSES)[number]
@@ -150,7 +152,7 @@ async function toGatewayError(response: Response): Promise<MeetingRoomGatewayErr
 }
 
 async function requestJson<T>(url: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(url, { credentials: 'include', ...options })
+  const response = await authenticatedFetch(url, options)
   if (!response.ok) {
     throw await toGatewayError(response)
   }
@@ -205,23 +207,16 @@ export const productionMeetingRoomGateway: MeetingRoomGateway = {
 }
 
 interface ResolveMeetingRoomGatewayOptions {
-  isDevelopment: boolean
   isTestHarness: boolean
-  developmentGateway?: MeetingRoomGateway
   injectedGateway?: MeetingRoomGateway
 }
 
 export function resolveMeetingRoomGateway({
-  isDevelopment,
   isTestHarness,
-  developmentGateway,
   injectedGateway,
 }: ResolveMeetingRoomGatewayOptions): MeetingRoomGateway {
-  if (isDevelopment && isTestHarness && injectedGateway) {
+  if (isTestHarness && injectedGateway) {
     return injectedGateway
-  }
-  if (isDevelopment && developmentGateway) {
-    return developmentGateway
   }
   return productionMeetingRoomGateway
 }

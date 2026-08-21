@@ -3,6 +3,7 @@ import { meetingRoomTestGateway } from './test-gateway'
 function visitMeetingRooms() {
   cy.visit('/', {
     onBeforeLoad(window) {
+      window.__FLOW_BI_MEETING_ROOM_TEST_HARNESS__ = true
       window.__FLOW_BI_MEETING_ROOM_GATEWAY__ = meetingRoomTestGateway()
     },
   })

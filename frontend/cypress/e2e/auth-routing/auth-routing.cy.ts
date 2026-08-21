@@ -20,7 +20,7 @@ describe('authentication-based application routing', () => {
     cy.get('#employee-number').type('ROUTE-1001')
     cy.get('#password').type('Route!1234')
     cy.get('button').contains('로그인').click()
-    cy.get('h1').contains('콘텐츠').should('be.visible')
+    cy.get('h1').contains('회의실 예약 현황').should('be.visible')
     cy.location('pathname').should('eq', '/')
   })
 
@@ -42,6 +42,6 @@ describe('authentication-based application routing', () => {
     cy.get('#new-password').type('Changed!1234')
     cy.get('#password-confirmation').type('Changed!1234')
     cy.get('button').contains('비밀번호 변경').click()
-    cy.get('h1').contains('콘텐츠').should('be.visible')
+    cy.get('h1').contains('회의실 예약 현황').should('be.visible')
   })
 })
