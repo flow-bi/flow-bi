@@ -39,6 +39,8 @@ type SearchFormErrors = Partial<Pick<SearchForm, 'startTime' | 'endTime'>>
 const defaultImage =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='180' viewBox='0 0 320 180'%3E%3Crect width='320' height='180' fill='%23e5e7eb'/%3E%3Cpath d='M70 130h180V80H70zM95 80V50h130v30' fill='%239ca3af'/%3E%3C/svg%3E"
 const defaultDate = new Date().toISOString().slice(0, 10)
+const meetingRoomQueryKey = ['meeting-room'] as const
+const scheduleListQueryKey = ['schedules'] as const
 
 function initialSearch(date: string): SearchForm {
   return {
@@ -146,7 +148,7 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
   const reserveTriggerRef = useRef<HTMLButtonElement | undefined>(undefined)
   const queryClient = useQueryClient()
   const query = useQuery({
-    queryKey: ['meeting-room', submittedSearch],
+    queryKey: [...meetingRoomQueryKey, submittedSearch],
     queryFn: async () => {
       const response = await gateway.findAvailability(toQuery(submittedSearch))
       setLastValidResponse(response)
@@ -211,6 +213,16 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
       attendeeIds: reservation.attendeeIds,
       description: reservation.description,
     }
+  }
+
+  async function invalidateCreatedReservationQueries() {
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: [...meetingRoomQueryKey, submittedSearch],
+        exact: true,
+      }),
+      queryClient.invalidateQueries({ queryKey: scheduleListQueryKey }),
+    ])
   }
 
   return (
@@ -380,10 +392,7 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
               reservationId: selectedUpdate.reservation.reservationId,
               ...command,
             })
-            await queryClient.invalidateQueries({
-              queryKey: ['meeting-room', submittedSearch],
-              exact: true,
-            })
+            await invalidateCreatedReservationQueries()
           }}
           onRefreshAvailability={() => {
             void query.refetch()
@@ -403,10 +412,7 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
               throw new MeetingRoomGatewayError('AUTH_INTEGRATION_PENDING')
             }
             await gateway.createReservation(command)
-            await queryClient.invalidateQueries({
-              queryKey: ['meeting-room', submittedSearch],
-              exact: true,
-            })
+            await invalidateCreatedReservationQueries()
           }}
           onRefreshAvailability={() => {
             void query.refetch()
