@@ -22,6 +22,15 @@ DISCOVERY_GUIDANCE = (
     "build 및 Gradle 캐시 디렉터리를 재귀 탐색하지 마십시오."
 )
 
+CONTEXT_EFFICIENCY_GUIDANCE = (
+    "최초 탐색에서 변경 대상 파일과 필요한 구간을 확정하고, 이미 읽은 동일 구간을 "
+    "변경 없이 다시 읽지 마십시오. 관련 변경을 가능한 한 큰 단위의 patch로 적용하고, "
+    "patch가 실패한 경우에만 해당 구간을 다시 조회하십시오. 진행 중 전체 diff를 반복 "
+    "출력하지 말고 최종 `git diff`는 한 번만 확인하십시오. 테스트와 정적 검증 명령은 "
+    "가능한 범위에서 묶어서 실행하며, 긴 테스트 로그는 실패 원인 주변의 제한된 구간만 "
+    "조회하십시오."
+)
+
 TASK_WORKER_GUIDANCE = (
     "현재 세션은 이미 Harness Task Worker입니다. 전달된 Task를 허용 경로 안에서 "
     "직접 구현하고 검증하십시오. harness-exec, harness-plan 또는 다른 Harness "
@@ -270,6 +279,7 @@ def parse_invocation(raw_invocation: str) -> InvocationResult:
     prompt_parts = [
         common_prompt,
         DISCOVERY_GUIDANCE,
+        CONTEXT_EFFICIENCY_GUIDANCE,
         TASK_WORKER_GUIDANCE,
         BROWSER_VERIFICATION_GUIDANCE,
         BACKEND_VERIFICATION_GUIDANCE,

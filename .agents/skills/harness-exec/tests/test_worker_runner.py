@@ -238,6 +238,142 @@ class WorkerReadablePathTests(unittest.TestCase):
         )
 
 
+class WorkerExecutionTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name)
+
+    def tearDown(self) -> None:
+        self.temporary.cleanup()
+
+    @staticmethod
+    def output_path(command: list[str]) -> Path:
+        return Path(command[command.index("-o") + 1])
+
+    @staticmethod
+    def command(
+        _allowed: tuple[str, ...],
+        _forbidden: tuple[str, ...],
+        output_path: Path,
+        *_args: object,
+        **_kwargs: object,
+    ) -> list[str]:
+        return ["codex", "exec", "-o", str(output_path)]
+
+    def patch_command_builder(self) -> mock._patch:
+        return mock.patch.object(
+            worker_runner_module,
+            "build_codex_command",
+            side_effect=self.command,
+        )
+
+    def pending_files(self) -> tuple[Path, ...]:
+        pending = self.root / ".codex-logs" / ".pending"
+        return tuple(pending.iterdir()) if pending.exists() else ()
+
+    def test_execute_worker_isolates_progress_streams_and_cleans_temporary_files(self) -> None:
+        captured_streams: list[object] = []
+
+        def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            stdout = kwargs["stdout"]
+            stderr = kwargs["stderr"]
+            self.assertIs(stdout, stderr)
+            self.assertNotIn(stdout, (None, subprocess.PIPE))
+            stdout.write("progress that must stay internal\n")
+            stdout.flush()
+            self.output_path(command).write_text('{"final_status":"PASS"}', encoding="utf-8")
+            captured_streams.append(stdout)
+            return subprocess.CompletedProcess(command, 0)
+
+        with self.patch_command_builder():
+            result = execute_worker(
+                "task",
+                (".agents",),
+                (),
+                project_root=self.root,
+                runner=run,
+                logger=lambda *_args: None,
+            )
+
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.output, {"final_status": "PASS"})
+        self.assertEqual(result.output_error, "")
+        self.assertTrue(captured_streams[0].closed)
+        self.assertEqual(self.pending_files(), ())
+
+    def test_execute_worker_returns_only_a_bounded_failure_log_tail(self) -> None:
+        tail_limit = worker_runner_module.WORKER_LOG_TAIL_BYTES
+
+        def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            log = kwargs["stderr"]
+            log.write("discarded-prefix\n")
+            log.write("x" * tail_limit)
+            log.write("\nfailure-marker\n")
+            log.flush()
+            return subprocess.CompletedProcess(command, 7)
+
+        with self.patch_command_builder():
+            result = execute_worker(
+                "task",
+                (".agents",),
+                (),
+                project_root=self.root,
+                runner=run,
+                logger=lambda *_args: None,
+            )
+
+        self.assertEqual(result.returncode, 7)
+        self.assertIn("failure-marker", result.output_error)
+        self.assertNotIn("discarded-prefix", result.output_error)
+        self.assertLessEqual(len(result.output_error), tail_limit + 512)
+        self.assertEqual(self.pending_files(), ())
+
+    def test_execute_worker_includes_log_tail_when_final_json_is_invalid(self) -> None:
+        def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            log = kwargs["stderr"]
+            log.write("json-generation-failed\n")
+            log.flush()
+            self.output_path(command).write_text("not-json", encoding="utf-8")
+            return subprocess.CompletedProcess(command, 0)
+
+        with self.patch_command_builder():
+            result = execute_worker(
+                "task",
+                (".agents",),
+                (),
+                project_root=self.root,
+                runner=run,
+                logger=lambda *_args: None,
+            )
+
+        self.assertIsNone(result.output)
+        self.assertIn("Expecting value", result.output_error)
+        self.assertIn("json-generation-failed", result.output_error)
+        self.assertEqual(self.pending_files(), ())
+
+    def test_execute_worker_attaches_log_tail_and_cleans_files_on_timeout(self) -> None:
+        def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            log = kwargs["stderr"]
+            log.write("timeout-marker\n")
+            log.flush()
+            raise subprocess.TimeoutExpired(command, 30)
+
+        with self.patch_command_builder():
+            with self.assertRaises(subprocess.TimeoutExpired) as raised:
+                execute_worker(
+                    "task",
+                    (".agents",),
+                    (),
+                    project_root=self.root,
+                    runner=run,
+                    logger=lambda *_args: None,
+                    timeout=30,
+                )
+
+        self.assertIn("timeout-marker", raised.exception.stderr)
+        self.assertEqual(self.pending_files(), ())
+
+
 class WorkerInvocationTests(unittest.TestCase):
     def payload(self, execution_context: dict[str, object]) -> str:
         return json.dumps(
@@ -271,6 +407,24 @@ class WorkerInvocationTests(unittest.TestCase):
         self.assertIn('"mode": "new_or_changed"', prompt)
         self.assertIn("Red → Green → Refactor", prompt)
         self.assertIn("과거 TDD 증거를 재사용하지 마십시오", prompt)
+
+    def test_worker_guidance_limits_repeated_discovery_patches_and_diff_output(self) -> None:
+        prompt, _allowed, _forbidden = parse_invocation(
+            self.payload(
+                {
+                    "plan_id": "rerun-01",
+                    "fingerprint": "efficient-fingerprint",
+                    "mode": "new_or_changed",
+                    "prior_tdd_evidence": None,
+                }
+            )
+        )
+
+        self.assertIn("최초 탐색에서 변경 대상 파일과 필요한 구간을 확정", prompt)
+        self.assertIn("관련 변경을 가능한 한 큰 단위의 patch로 적용", prompt)
+        self.assertIn("patch가 실패한 경우에만 해당 구간을 다시 조회", prompt)
+        self.assertIn("최종 `git diff`는 한 번만", prompt)
+        self.assertIn("긴 테스트 로그는 실패 원인 주변의 제한된 구간", prompt)
 
     def test_same_revision_rerun_references_prior_evidence_and_current_regression(self) -> None:
         prompt, _allowed, _forbidden = parse_invocation(
