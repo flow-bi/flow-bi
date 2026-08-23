@@ -30,8 +30,14 @@ final class RoomUserFixture {
   }
 
   static void deleteAll(UserRepository users,PositionRepository positions,TeamRepository teams) {
-    users.deleteAll();
-    teams.deleteAll();
-    positions.deleteAll();
+    users.deleteAll(users.findAll().stream()
+        .filter(user -> user.getEmployeeNumber().startsWith("room-")).toList());
+    users.flush();
+    teams.deleteAll(teams.findAll().stream()
+        .filter(team -> team.getTeamName().equals("Room test team")).toList());
+    teams.flush();
+    positions.deleteAll(positions.findAll().stream()
+        .filter(position -> position.getPositionName().equals("Room test position")).toList());
+    positions.flush();
   }
 }

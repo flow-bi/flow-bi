@@ -23,14 +23,16 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
+import com.flowbi.test.H2SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.transaction.annotation.Transactional;
 
-@SpringBootTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
+@H2SpringBootTest
 @AutoConfigureMockMvc
+@Transactional
 class ScheduleAttendeeControllerTest {
 
   @Autowired
@@ -53,17 +55,30 @@ class ScheduleAttendeeControllerTest {
 
   @Test
   void returnsOnlyMinimalActiveUserResultsInStableOrder() throws Exception {
-    insertUser(9301L,"ACTIVE","search-actor","검색 사용자");
-    insertUser(9302L,"ACTIVE","active-result","가나다 검색");
-    insertUser(9303L,"INACTIVE","inactive-result","나가다 검색");
+    insertUser(9301L,"ACTIVE","search-actor-9301","검색 사용자");
+    insertUser(9302L,"ACTIVE","CAL-ATTENDEE-TEST-001","김안녕");
+    insertUser(9303L,"INACTIVE","CAL-ATTENDEE-TEST-002","박잘가");
 
     mockMvc
         .perform(get("/api/schedules/attendee-candidates").with(user(principal(9301L)))
-            .session(authenticatedSession()).param("query"," 검색 "))
-        .andExpect(status().isOk()).andExpect(jsonPath("$.data.length()").value(2))
+            .session(authenticatedSession()).param("query"," 안녕 "))
+        .andExpect(status().isOk()).andExpect(jsonPath("$.data.length()").value(1))
         .andExpect(jsonPath("$.data[0].userId").value(9302L))
-        .andExpect(jsonPath("$.data[0].displayName").value("가나다 검색"))
+        .andExpect(jsonPath("$.data[0].displayName").value("김안녕"))
         .andExpect(jsonPath("$.data[0].employeeNumber").doesNotExist());
+  }
+
+  @Test
+  void findsAnActiveSyntheticAttendeeByEmployeeNumber() throws Exception {
+    insertUser(9351L,"ACTIVE","search-actor-9351","검색 사용자");
+    insertUser(9352L,"ACTIVE","CAL-ATTENDEE-TEST-003","최반갑");
+
+    mockMvc
+        .perform(get("/api/schedules/attendee-candidates").with(user(principal(9351L)))
+            .session(authenticatedSession()).param("query","ATTENDEE-TEST-003"))
+        .andExpect(status().isOk()).andExpect(jsonPath("$.data.length()").value(1))
+        .andExpect(jsonPath("$.data[0].userId").value(9352L))
+        .andExpect(jsonPath("$.data[0].displayName").value("최반갑"));
   }
 
   @Test

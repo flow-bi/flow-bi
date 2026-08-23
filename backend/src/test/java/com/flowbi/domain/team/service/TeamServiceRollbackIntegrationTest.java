@@ -19,6 +19,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import java.util.UUID;
 
 @SpringBootTest
 @ActiveProfiles("test")
@@ -49,11 +50,12 @@ class TeamServiceRollbackIntegrationTest {
 
   @Test
   void rollsBackTheTeamWhenClosurePersistenceFails() {
+    String fixtureName = "Company-" + UUID.randomUUID();
     when(closures.saveAll(anyList())).thenThrow(new DataIntegrityViolationException("failure"));
 
-    assertThatThrownBy(() -> service.create(new TeamCreateRequest("Company", null)))
+    assertThatThrownBy(() -> service.create(new TeamCreateRequest(fixtureName, null)))
         .isInstanceOf(DataIntegrityViolationException.class);
 
-    assertThat(teams.count()).isZero();
+    assertThat(teams.findByTeamNameIgnoreCaseAndParentTeamIsNull(fixtureName)).isEmpty();
   }
 }

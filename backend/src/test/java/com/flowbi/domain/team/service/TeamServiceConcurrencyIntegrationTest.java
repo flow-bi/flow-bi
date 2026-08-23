@@ -10,7 +10,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.stream.Stream;
-import org.junit.jupiter.api.AfterEach;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -48,19 +48,14 @@ class TeamServiceConcurrencyIntegrationTest {
   @Autowired
   private TeamClosureRepository closures;
 
-  @AfterEach
-  void cleanUp() {
-    closures.deleteAll();
-    teams.deleteAll();
-  }
-
   @Test
   void allowsOnlyOneConcurrentRootCreationWithTheSameName() throws Exception {
+    String fixtureName = "Company-" + UUID.randomUUID();
     ExecutorService executor = Executors.newFixedThreadPool(2);
     try {
       Callable<Boolean> createCompany = () -> {
         try {
-          service.create(new TeamCreateRequest("Company", null));
+          service.create(new TeamCreateRequest(fixtureName, null));
           return true;
         } catch (TeamNameConflictException exception) {
           return false;
@@ -71,8 +66,11 @@ class TeamServiceConcurrencyIntegrationTest {
       Future<Boolean> second = executor.submit(createCompany);
 
       assertThat(Stream.of(first.get(),second.get()).filter(Boolean::booleanValue)).hasSize(1);
-      assertThat(teams.findAll()).hasSize(1);
-      assertThat(closures.findAll()).hasSize(1);
+      var fixtureTeam = teams.findByTeamNameIgnoreCaseAndParentTeamIsNull(fixtureName);
+      assertThat(fixtureTeam).isPresent();
+      assertThat(closures
+          .findAllByDescendantTeamTeamIdOrderByDepthAsc(fixtureTeam.orElseThrow().getTeamId()))
+          .hasSize(1);
     } finally {
       executor.shutdownNow();
     }

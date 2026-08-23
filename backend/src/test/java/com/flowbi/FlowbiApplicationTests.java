@@ -6,13 +6,13 @@ import com.flowbi.domain.schedule.port.ScheduleReferenceValidator;
 import com.flowbi.domain.schedule.port.ScheduleRoomReservationLookup;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
+import com.flowbi.test.H2SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 
-@SpringBootTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
+@H2SpringBootTest
 @Import(FlowbiApplicationTests.CalendarBoundaryConfiguration.class)
 class FlowbiApplicationTests {
 
