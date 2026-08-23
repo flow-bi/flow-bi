@@ -8,9 +8,12 @@ import com.flowbi.domain.schedule.repository.*;
 import com.flowbi.domain.schedule.service.*;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.doAnswer;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -27,6 +30,7 @@ import com.flowbi.test.H2SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @H2SpringBootTest
@@ -61,6 +65,44 @@ class ScheduleControllerTest {
             .param("to","2026-08-01T00:00:00+09:00"))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.code").value("INVALID_SCHEDULE_PERIOD"));
+  }
+
+  @Test
+  void rejectsPersonalParticipantsAtTheCalendarWriteBoundaryWithoutCreatingASchedule()
+      throws Exception {
+    insertUser(9961L);
+
+    mockMvc
+        .perform(post("/api/schedules").with(user(new LoginPrincipal("9961", false))).with(csrf())
+            .session(new MockHttpSession()).contentType(MediaType.APPLICATION_JSON).content(
+                """
+                    {"title":"Private","type":"PERSONAL","visibility":"PRIVATE",
+                     "startAt":"2026-08-10T09:00:00+09:00","endAt":"2026-08-10T10:00:00+09:00",
+                     "allDay":false,"colorLabel":"BLUE","creatorAttends":true,
+                     "participantIds":[9602],"userTargetIds":[],"teamTargetIds":[],"projectTargetIds":[]}
+                    """))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("SCHEDULE_PERSONAL_RELATIONS_FORBIDDEN"));
+
+    assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM schedules",Long.class)).isZero();
+  }
+
+  @Test
+  void rejectsMalformedPersonalParticipantIdsWithTheSameStableCalendarError() throws Exception {
+    insertUser(9962L);
+
+    mockMvc
+        .perform(post("/api/schedules").with(user(new LoginPrincipal("9962", false))).with(csrf())
+            .session(new MockHttpSession()).contentType(MediaType.APPLICATION_JSON).content("""
+                {"title":"Private","type":"PERSONAL","visibility":"PRIVATE",
+                 "startAt":"2026-08-10T09:00:00+09:00","endAt":"2026-08-10T10:00:00+09:00",
+                 "allDay":false,"colorLabel":"BLUE","creatorAttends":true,
+                 "participantIds":[0],"userTargetIds":[],"teamTargetIds":[],"projectTargetIds":[]}
+                """))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("SCHEDULE_PERSONAL_RELATIONS_FORBIDDEN"));
+
+    assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM schedules",Long.class)).isZero();
   }
 
   private void insertUser(long userId) {
