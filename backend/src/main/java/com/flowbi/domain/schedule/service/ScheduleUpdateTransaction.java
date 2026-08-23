@@ -34,6 +34,8 @@ class ScheduleUpdateTransaction {
     if (schedule.getStatus() != ScheduleStatus.ACTIVE) {
       throw new ScheduleNotFoundException();
     }
+    PersonalScheduleRelationValidator.reject(command.type(),command.participantIds(),
+        command.userTargetIds(),command.teamTargetIds(),command.projectTargetIds());
     referenceValidator.validateForUpdate(schedule.getCreatorId(),command);
     schedule.update(command);
     return schedule;

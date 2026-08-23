@@ -3,6 +3,7 @@ package com.flowbi.domain.room.repository;
 import com.flowbi.domain.room.entity.RoomReservation;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Collection;
 import java.util.Optional;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.Lock;
@@ -55,6 +56,9 @@ public interface RoomReservationRepository
   Optional<RoomReservation> findById(Long reservationId);
 
   boolean existsByScheduleId(Long scheduleId);
+
+  @Query("select reservation.scheduleId from RoomReservation reservation where reservation.scheduleId in :scheduleIds")
+  List<Long> findScheduleIdsIn(@Param("scheduleIds") Collection<Long> scheduleIds);
 
   RoomReservation save(RoomReservation reservation);
 

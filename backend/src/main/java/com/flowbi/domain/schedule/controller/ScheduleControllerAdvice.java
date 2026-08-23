@@ -37,6 +37,12 @@ class ScheduleControllerAdvice {
     return error(HttpStatus.BAD_REQUEST,"INVALID_SCHEDULE",exception.getMessage());
   }
 
+  @ExceptionHandler(PersonalScheduleRelationsForbiddenException.class)
+  ResponseEntity<ErrorResponse> personalScheduleRelationsForbidden() {
+    return error(HttpStatus.BAD_REQUEST,"SCHEDULE_PERSONAL_RELATIONS_FORBIDDEN",
+        "Personal schedules cannot have participants or explicit user targets.");
+  }
+
   @ExceptionHandler(InvalidScheduleReferenceException.class)
   ResponseEntity<ErrorResponse> invalidReference() {
     return error(HttpStatus.BAD_REQUEST,"SCHEDULE_REFERENCE_INVALID",
