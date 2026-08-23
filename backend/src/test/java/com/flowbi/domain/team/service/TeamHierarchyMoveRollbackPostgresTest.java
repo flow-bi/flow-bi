@@ -10,7 +10,6 @@ import com.flowbi.domain.team.dto.TeamResponse;
 import com.flowbi.domain.team.repository.TeamClosureRepository;
 import com.flowbi.domain.team.repository.TeamHierarchyClosureRow;
 import com.flowbi.domain.team.repository.TeamRepository;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -55,12 +54,6 @@ class TeamHierarchyMoveRollbackPostgresTest {
   @MockBean
   private TeamHierarchyService hierarchyService;
 
-  @BeforeEach
-  void clearHierarchy() {
-    closures.deleteAllInBatch();
-    teamRepository.deleteAllInBatch();
-  }
-
   @Test
   void rollsBackTheParentAndClosureChangesWhenTheFinalConsistencyCheckFails() {
     TeamResponse company = create("Company",null);
@@ -77,15 +70,24 @@ class TeamHierarchyMoveRollbackPostgresTest {
     assertThat(
         teamRepository.findById(development.teamId()).orElseThrow().getParentTeam().getTeamId())
         .isEqualTo(company.teamId());
-    assertThat(closures.findAllHierarchyRows()).containsExactlyInAnyOrder(
-        row(company.teamId(),company.teamId(),0),row(development.teamId(),development.teamId(),0),
-        row(backend.teamId(),backend.teamId(),0),row(platform.teamId(),platform.teamId(),0),
-        row(company.teamId(),development.teamId(),1),row(development.teamId(),backend.teamId(),1),
-        row(company.teamId(),backend.teamId(),2),row(company.teamId(),platform.teamId(),1));
+    assertThat(closures.findAllHierarchyRows().stream()
+        .filter(row -> java.util.Set
+            .of(company.teamId(),development.teamId(),backend.teamId(),platform.teamId())
+            .contains(row.ancestorTeamId()))
+        .filter(row -> java.util.Set
+            .of(company.teamId(),development.teamId(),backend.teamId(),platform.teamId())
+            .contains(row.descendantTeamId()))
+        .toList()).containsExactlyInAnyOrder(row(company.teamId(),company.teamId(),0),
+            row(development.teamId(),development.teamId(),0),
+            row(backend.teamId(),backend.teamId(),0),row(platform.teamId(),platform.teamId(),0),
+            row(company.teamId(),development.teamId(),1),
+            row(development.teamId(),backend.teamId(),1),row(company.teamId(),backend.teamId(),2),
+            row(company.teamId(),platform.teamId(),1));
   }
 
   private TeamResponse create(String name,Long parentTeamId) {
-    return teams.create(new TeamCreateRequest(name, parentTeamId));
+    return teams
+        .create(new TeamCreateRequest(name + "-" + java.util.UUID.randomUUID(), parentTeamId));
   }
 
   private static TeamHierarchyClosureRow row(Long ancestorId,Long descendantId,int depth) {

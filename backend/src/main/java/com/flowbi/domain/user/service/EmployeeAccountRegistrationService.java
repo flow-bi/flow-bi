@@ -7,6 +7,7 @@ import com.flowbi.domain.position.entity.Position;
 import com.flowbi.domain.position.service.PositionService;
 import com.flowbi.domain.team.entity.Team;
 import com.flowbi.domain.team.service.TeamService;
+import com.flowbi.domain.team.service.TeamNotFoundException;
 import com.flowbi.domain.user.entity.User;
 import com.flowbi.domain.user.repository.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -64,7 +65,7 @@ public class EmployeeAccountRegistrationService {
   private Team findTeam(Long teamId) {
     try {
       return teams.findExisting(teamId);
-    } catch (ResponseStatusException exception) {
+    } catch (TeamNotFoundException | ResponseStatusException exception) {
       throw new EmployeeAccountRegistrationException("Team does not exist.");
     }
   }

@@ -28,10 +28,10 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
+import com.flowbi.test.H2SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
-@SpringBootTest
+@H2SpringBootTest
 class RoomReservationCancelRollbackTest {
 
   private static final LocalDateTime START = LocalDateTime.of(2026,8,10,10,0);

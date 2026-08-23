@@ -9,12 +9,13 @@ import com.flowbi.domain.team.repository.TeamClosureRepository;
 import com.flowbi.domain.team.repository.TeamHierarchyClosureRow;
 import com.flowbi.domain.team.repository.TeamRepository;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -55,12 +56,6 @@ class TeamHierarchyMovePostgresTest {
   @Autowired
   private TeamClosureRepository closures;
 
-  @BeforeEach
-  void clearHierarchy() {
-    closures.deleteAllInBatch();
-    teamRepository.deleteAllInBatch();
-  }
-
   @Test
   void movesASubtreeWithPostgresBulkQueriesAndKeepsEveryClosureDepthCorrect() {
     TeamResponse company = create("Company",null);
@@ -73,7 +68,7 @@ class TeamHierarchyMovePostgresTest {
     assertThat(
         teamRepository.findById(development.teamId()).orElseThrow().getParentTeam().getTeamId())
         .isEqualTo(platform.teamId());
-    assertThat(closures.findAllHierarchyRows()).containsExactlyInAnyOrder(
+    assertThat(fixtureRows(company,development,backend,platform)).containsExactlyInAnyOrder(
         row(company.teamId(),company.teamId(),0),row(development.teamId(),development.teamId(),0),
         row(backend.teamId(),backend.teamId(),0),row(platform.teamId(),platform.teamId(),0),
         row(company.teamId(),platform.teamId(),1),row(platform.teamId(),development.teamId(),1),
@@ -91,7 +86,7 @@ class TeamHierarchyMovePostgresTest {
 
     assertThat(teamRepository.findById(development.teamId()).orElseThrow().getParentTeam())
         .isNull();
-    assertThat(closures.findAllHierarchyRows()).containsExactlyInAnyOrder(
+    assertThat(fixtureRows(company,development,backend)).containsExactlyInAnyOrder(
         row(company.teamId(),company.teamId(),0),row(development.teamId(),development.teamId(),0),
         row(backend.teamId(),backend.teamId(),0),row(development.teamId(),backend.teamId(),1));
   }
@@ -125,7 +120,16 @@ class TeamHierarchyMovePostgresTest {
   }
 
   private TeamResponse create(String name,Long parentTeamId) {
-    return teams.create(new TeamCreateRequest(name, parentTeamId));
+    return teams.create(new TeamCreateRequest(name + "-" + UUID.randomUUID(), parentTeamId));
+  }
+
+  private List<TeamHierarchyClosureRow> fixtureRows(TeamResponse... fixtureTeams) {
+    Set<Long> fixtureIds = java.util.Arrays.stream(fixtureTeams).map(TeamResponse::teamId)
+        .collect(java.util.stream.Collectors.toSet());
+    return closures.findAllHierarchyRows().stream()
+        .filter(row -> fixtureIds.contains(row.ancestorTeamId())
+            && fixtureIds.contains(row.descendantTeamId()))
+        .toList();
   }
 
   private String moveAfter(CountDownLatch start,Long teamId,Long newParentTeamId)

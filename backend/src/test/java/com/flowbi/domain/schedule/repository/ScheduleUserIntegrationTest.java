@@ -16,10 +16,10 @@ import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
+import com.flowbi.test.H2SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
-@SpringBootTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
+@H2SpringBootTest
 class ScheduleUserIntegrationTest {
 
   @Autowired
