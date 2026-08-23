@@ -97,6 +97,33 @@ describe('productionMeetingRoomGateway', () => {
     )
   })
 
+  it('maps the backend editable flag to the frontend edit permission', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            reservationId: 5,
+            roomId: 1,
+            title: '소유한 예약',
+            startAt: '2026-08-10T09:00:00',
+            endAt: '2026-08-10T10:00:00',
+            attendeeIds: [10],
+            attendees: [{ userId: 10, displayName: '김하늘' }],
+            description: '',
+            editable: true,
+          }),
+          { status: 200 },
+        ),
+      ),
+    )
+
+    await expect(productionMeetingRoomGateway.getReservationForEdit?.(5)).resolves.toMatchObject({
+      reservationId: 5,
+      canEdit: true,
+    })
+  })
+
   it('cancels with a same-origin empty DELETE request and maps cancellation errors', async () => {
     const fetch = vi
       .fn()

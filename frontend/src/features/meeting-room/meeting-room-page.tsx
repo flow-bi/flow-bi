@@ -661,7 +661,7 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
               <button
                 ref={cancelActionRef}
                 type="button"
-                className="rounded bg-(--color-danger) px-4 py-2 text-white disabled:opacity-60"
+                className="rounded bg-red-700 px-4 py-2 text-white disabled:opacity-60"
                 onClick={() => void cancelReservation()}
                 disabled={isCancelling}
               >

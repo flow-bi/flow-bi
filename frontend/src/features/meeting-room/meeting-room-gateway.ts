@@ -80,6 +80,10 @@ export interface EditableRoomReservation {
   canEdit: boolean
 }
 
+type RoomReservationDetailResponse = Omit<EditableRoomReservation, 'canEdit'> & {
+  editable: boolean
+}
+
 export interface MeetingRoomGateway {
   isReservationCreationAvailable?: boolean
   isReservationUpdateAvailable?: boolean
@@ -231,8 +235,13 @@ export const productionMeetingRoomGateway: MeetingRoomGateway = {
       headers: { 'Content-Type': 'application/json' },
       body: requestBody(command),
     }),
-  getReservationForEdit: (reservationId) =>
-    requestJson<EditableRoomReservation>(`/api/room-reservations/${reservationId}`),
+  getReservationForEdit: async (reservationId) => {
+    const response = await requestJson<RoomReservationDetailResponse>(
+      `/api/room-reservations/${reservationId}`,
+    )
+    const { editable, ...reservation } = response
+    return { ...reservation, canEdit: editable }
+  },
   updateReservation: ({ reservationId, ...command }) =>
     requestJson<UpdateRoomReservationResult>(`/api/room-reservations/${reservationId}`, {
       method: 'PUT',
