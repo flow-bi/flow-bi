@@ -15,6 +15,7 @@ import com.flowbi.domain.auth.credential.UserCredentialRepository;
 import com.flowbi.domain.position.entity.Position;
 import com.flowbi.domain.position.service.PositionService;
 import com.flowbi.domain.team.entity.Team;
+import com.flowbi.domain.team.service.TeamNotFoundException;
 import com.flowbi.domain.team.service.TeamService;
 import com.flowbi.domain.user.entity.User;
 import com.flowbi.domain.user.repository.UserRepository;
@@ -109,9 +110,7 @@ class EmployeeAccountRegistrationServiceTest {
     UserCredentialRepository credentials = mock(UserCredentialRepository.class);
     PasswordEncoder encoder = mock(PasswordEncoder.class);
     when(users.findByEmployeeNumber("E100")).thenReturn(Optional.empty());
-    when(teams.findExisting(1L))
-        .thenThrow(new org.springframework.web.server.ResponseStatusException(
-            org.springframework.http.HttpStatus.NOT_FOUND));
+    when(teams.findExisting(1L)).thenThrow(new TeamNotFoundException(1L));
     EmployeeAccountRegistrationService service = new EmployeeAccountRegistrationService(users,
         teams, positions, credentials, encoder, new PasswordPolicy());
 
