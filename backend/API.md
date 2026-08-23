@@ -267,17 +267,29 @@ Errors use `{ "code", "message", "fieldErrors" }` without internal exception det
 | `PUT`    | `/api/schedules/{scheduleId}`               | 일정 수정                   |
 | `DELETE` | `/api/schedules/{scheduleId}`               | 일반 일정 취소(Soft Delete) |
 
-일정 생성·수정 요청은 유형을 정확히 하나만 가져야 한다. `TEAM` 일정은 하나 이상의 팀 ID, `PROJECT` 일정은 하나 이상의 프로젝트 ID를 가질 수 있고 모든 유형은 여러 참석자 ID와 명시적 사용자 공유 대상 ID를 가질 수 있다. 유형과 맞지 않는 팀·프로젝트 대상 조합은 `400 Bad Request`로 거부한다.
+일정 생성·수정 요청은 유형을 정확히 하나만 가져야 한다. 일반 `PERSONAL`/`PRIVATE` 일정은 등록자 전용이며 `participantIds`, `userTargetIds`, `teamTargetIds`, `projectTargetIds`가 모두 빈 배열이어야 한다. `TEAM` 일정은 하나 이상의 팀 ID, `PROJECT` 일정은 하나 이상의 프로젝트 ID를 가지며 여러 참석자 ID와 명시적 사용자 공유 대상 ID를 가질 수 있다. 유형과 맞지 않는 팀·프로젝트 대상 조합은 `400 Bad Request`로 거부한다.
+
+일반 `PERSONAL`/`PRIVATE` 요청에 `participantIds` 또는 `userTargetIds`가 하나라도 포함되면 서버는 저장·관계 갱신 전에 `400 Bad Request`와 `SCHEDULE_PERSONAL_RELATIONS_FORBIDDEN`을 반환한다. 같은 요청에서 팀·프로젝트 대상이 포함된 경우도 같은 입력 오류로 거부한다. 이 오류는 생성과 전체 교체 수정에 동일하게 적용되며, 실패한 요청은 일정 행이나 기존 관계에 부분 변경을 남기지 않는다. (`CAL-11-R2`)
+
+```json
+{
+  "code": "SCHEDULE_PERSONAL_RELATIONS_FORBIDDEN",
+  "message": "개인 일정에는 참석자 또는 사용자 공유 대상을 지정할 수 없습니다.",
+  "fieldErrors": [
+    { "field": "participantIds", "message": "개인 일정에서는 빈 배열이어야 합니다." }
+  ]
+}
+```
 
 참석자와 명시적 사용자 공유 대상은 별도 관계로 관리한다. 명시적 사용자 공유 대상은 일정 조회 권한을 갖지만 참석 인원에는 포함하지 않는다. 같은 사용자가 참석자와 공유 대상에 모두 포함되면 조회 권한은 한 번만 판정한다.
 
-일정 참석자 후보 검색은 인증된 사용자가 일정 등록·수정 화면에서 접근 가능한 활성 사내 사용자를 찾는 용도로만 사용한다.
+일정 참석자 후보 검색은 인증된 사용자가 팀·프로젝트 일정 등록·수정 화면에서 접근 가능한 활성 사내 사용자를 찾는 용도로만 사용한다. 일반 `PERSONAL`/`PRIVATE` 일정 화면은 이 입력을 제공하지 않는다. (`CAL-11-R1`, `CAL-11-R4`)
 
 - `query`는 연속 공백을 단일 공백으로 정규화한 1~50자 문자열이어야 하며 이름 또는 사번의 부분 일치 검색어로 사용한다.
 - 결과는 최대 20건이며 서버가 정한 안정적인 순서로 반환한다.
 - 응답 항목은 `userId`, `displayName`만 포함하고 이메일, 전화번호, 조직 내 민감정보는 반환하지 않는다.
 - 현재 사용자가 일정 참석자로 지정할 수 없는 비활성·퇴사·접근 불가 사용자는 결과에서 제외한다.
-- 인증 주체가 없으면 `401 Unauthorized`, 잘못된 검색어는 `400 Bad Request`를 반환한다.
+- 인증 주체가 없으면 `401 Unauthorized`, 팀·프로젝트 일정의 참석자 검색 권한이 없으면 `403 Forbidden`과 `SCHEDULE_ATTENDEE_SEARCH_FORBIDDEN`, 잘못된 검색어는 `400 Bad Request`를 반환한다. Client는 이 응답을 Loading·Empty·Error와 구분되는 Permission 상태로 표시한다.
 - 검색 결과가 없으면 빈 배열을 반환하며, 사용자 존재 여부를 오류 응답으로 구분해 노출하지 않는다.
 
 `GET /api/schedules/target-options`는 인증된 사용자가 일정 등록 화면에서 선택할 수 있는 대상의
@@ -323,13 +335,15 @@ Errors use `{ "code", "message", "fieldErrors" }` without internal exception det
 }
 ```
 
-`startAt`과 `endAt`은 Offset을 포함하는 ISO 8601 시각이며 `[startAt, endAt)` 구간으로 해석한다. `endAt`은 반드시 `startAt` 뒤여야 한다. `PERSONAL`/`PRIVATE`는 팀·프로젝트 대상이 없어야 하고, `TEAM`/`TEAM`은 하나 이상의 팀 대상만, `PROJECT`/`PROJECT`는 하나 이상의 프로젝트 대상만 가져야 한다. 색상은 `RED`, `ORANGE`, `YELLOW`, `GREEN`, `BLUE`, `PURPLE` 중 하나다. 사용자·팀·프로젝트의 존재·활성·접근성은 Calendar Adapter가 실제 원장 데이터를 기준으로 판정하며 실패는 `SCHEDULE_REFERENCE_INVALID` 계약으로 변환한다.
+`startAt`과 `endAt`은 Offset을 포함하는 ISO 8601 시각이며 `[startAt, endAt)` 구간으로 해석한다. `endAt`은 반드시 `startAt` 뒤여야 한다. `PERSONAL`/`PRIVATE`는 `participantIds`, `userTargetIds`, 팀·프로젝트 대상이 모두 빈 배열이어야 한다. `TEAM`/`TEAM`은 하나 이상의 팀 대상만, `PROJECT`/`PROJECT`는 하나 이상의 프로젝트 대상만 가져야 한다. 팀·프로젝트 일정의 참석자 검색·선택 결과는 `userId`, `displayName`만 사용하며 이름 또는 사번으로 검색하고 중복 없이 추가·개별 제거한다. 색상은 `RED`, `ORANGE`, `YELLOW`, `GREEN`, `BLUE`, `PURPLE` 중 하나다. 사용자·팀·프로젝트의 존재·활성·접근성은 Calendar Adapter가 실제 원장 데이터를 기준으로 판정하며 실패는 `SCHEDULE_REFERENCE_INVALID` 계약으로 변환한다.
 
 조회 결과는 다음 공개 규칙을 적용한다.
 
-- `PERSONAL`: 작성자, 참석자와 명시적 사용자 공유 대상
+- 일반 `PERSONAL`/`PRIVATE`: 작성자만. 과거 데이터에 남은 참석자·명시적 사용자 공유 관계는 등록자 외 공개 근거로 사용하지 않는다.
 - `TEAM`: 연결된 팀 소속 사용자, 참석자와 명시적 사용자 공유 대상
 - `PROJECT`: 연결된 프로젝트 참여자, 참석자와 명시적 사용자 공유 대상
+
+기존 일반 개인 일정 관계는 승인 없는 Migration으로 삭제하지 않는다. 등록자가 해당 일정을 전체 수정·저장하면 `participantIds`, `userTargetIds`, `teamTargetIds`, `projectTargetIds`를 빈 배열로 제출하여 새 계약에 맞게 관계를 정리한다. 회의실 예약에서 관리되는 연결 일정은 예약자·참석자 연동과 공개 정책을 유지하는 예외이며 Calendar에서는 직접 수정할 수 없다. (`CAL-11-R9`, `CAL-11-R10`)
 
 Calendar Core의 조회 경계 DTO는 검증 가능한 Actor ID를 명시적으로 받는다. 이 DTO는 HTTP Request나
 인증 우회 수단이 아니며, 보호 Controller에서는 검증된 Principal만 Actor ID를 제공한다.
@@ -362,6 +376,11 @@ Calendar Core의 조회 경계 DTO는 검증 가능한 Actor ID를 명시적으�
   "location": "회의실 A",
   "creatorAttends": true,
   "participantIds": [2, 3],
+  "participants": [
+    { "userId": 2, "displayName": "김하늘" },
+    { "userId": 3, "displayName": "이바다" }
+  ],
+  "attendeeCount": 3,
   "userTargetIds": [4],
   "teamTargetIds": [10],
   "projectTargetIds": [],
@@ -369,6 +388,8 @@ Calendar Core의 조회 경계 DTO는 검증 가능한 Actor ID를 명시적으�
   "canManage": true
 }
 ```
+
+`participantIds`는 기존 Client 호환성을 위해 유지한다. `participants`는 화면 표시에 필요한 최소 객체 목록으로 `participantIds`와 같은 순서의 `{ "userId", "displayName" }`만 포함하며 이메일, 전화번호, 조직·직급·상태 등 추가 개인정보를 포함하지 않는다. `attendeeCount`는 중복 없는 다른 참석자 수에 등록자가 참석하는 경우의 1명을 더해 계산한다. 등록자는 다른 참석자와 중복 계산하지 않고, `creatorAttends`는 등록자의 참석 여부를 별도로 나타낸다. 따라서 상세 모달은 등록자 참석 여부를 별도 표시하고, 다른 참석자가 없을 때도 `attendeeCount`와 빈 목록 상태를 표시할 수 있다. (`CAL-11-R6`, `CAL-11-R7`)
 
 `canManage`는 현재 Actor가 Calendar에서 일반 일정을 수정·취소할 수 있는지를 서버가 계산한 UI 계약이다.
 등록자이면서 회의실 예약에서 관리하지 않는 일정에만 `true`이며, 실제 변경 요청은 서버에서 권한과 관리
@@ -399,7 +420,7 @@ Calendar Core의 조회 경계 DTO는 검증 가능한 Actor ID를 명시적으�
 }
 ```
 
-성공 시 `200 OK`와 `GET /api/schedules/{scheduleId}`의 상세 응답 형식을 반환한다. 잘못된 유형·대상·시간·색상·중복
+성공 시 `200 OK`와 `GET /api/schedules/{scheduleId}`의 상세 응답 형식을 반환한다. `TEAM` 또는 `PROJECT`에서 `PERSONAL`/`PRIVATE`로 유형을 바꾸는 Client는 참석자와 명시적 사용자 공유 대상을 제거했음을 사용자에게 알리고 `participantIds`, `userTargetIds`, `teamTargetIds`, `projectTargetIds`를 모두 빈 배열로 전송해야 한다. 비어 있지 않은 배열은 `400 Bad Request`와 `SCHEDULE_PERSONAL_RELATIONS_FORBIDDEN`으로 거부하며 기존 일정·관계에 부분 변경을 남기지 않는다. 잘못된 유형·대상·시간·색상·중복
 참석자 또는 참조는 생성과 같은 `400 Bad Request` 계약으로 거부한다. 존재하지 않거나 Actor가 등록자가 아닌
 일정, 이미 취소된 일정 및 공개 정책상 노출할 수 없는 일정은 모두 `404 Not Found`와 `SCHEDULE_NOT_FOUND`로
 처리한다. 회의실 예약 연결 일정은 어떤 필드도 직접 수정하지 않으며 `409 Conflict`와
