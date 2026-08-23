@@ -86,6 +86,13 @@ class RoomReservationCancelTransactionTest {
   void cancelsReservationAndScheduleAndExcludesBothFromDefaultQueries() {
     var created = roomReservationService.create(new ReservationActor(ownerId),command());
 
+    var ownerDetail = scheduleDetailService.find(ownerId,created.scheduleId());
+    var attendeeDetail = scheduleDetailService.find(attendeeId,created.scheduleId());
+    assertThat(ownerDetail.roomReservationId()).isEqualTo(created.reservationId());
+    assertThat(ownerDetail.canCancelRoomReservation()).isTrue();
+    assertThat(attendeeDetail.roomReservationId()).isNull();
+    assertThat(attendeeDetail.canCancelRoomReservation()).isFalse();
+
     roomReservationService.cancel(new ReservationActor(ownerId),created.reservationId());
 
     var reservation = reservationRepository.findById(created.reservationId()).orElseThrow();

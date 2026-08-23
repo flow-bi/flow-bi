@@ -403,7 +403,9 @@ Calendar Core의 조회 경계 DTO는 검증 가능한 Actor ID를 명시적으�
   "teamTargetIds": [10],
   "projectTargetIds": [],
   "meetingRoomManaged": false,
-  "canManage": true
+  "canManage": true,
+  "roomReservationId": null,
+  "canCancelRoomReservation": false
 }
 ```
 
@@ -413,6 +415,13 @@ Calendar Core의 조회 경계 DTO는 검증 가능한 Actor ID를 명시적으�
 등록자이면서 회의실 예약에서 관리하지 않는 일정에만 `true`이며, 실제 변경 요청은 서버에서 권한과 관리
 상태를 다시 검증한다. 존재하지 않는 일정, `CANCELED` 일정 및 Actor에게 공개되지 않은 일정은 모두
 동일하게 `404 Not Found`와 `SCHEDULE_NOT_FOUND`를 반환하며, 존재 여부·내부 예외·개인정보를 구분해 노출하지 않는다.
+
+`roomReservationId`와 `canCancelRoomReservation`은 회의실 예약 연결 일정에서만 사용하는 취소 참조다.
+연결된 `RESERVED` 예약의 일정 등록자에게만 각각 예약 식별자와 `true`를 반환한다. 다른 조회 가능 사용자,
+일반 일정, 취소된 예약에는 `roomReservationId: null`, `canCancelRoomReservation: false`를 반환하며 예약 상세,
+참석자 또는 추가 개인정보를 이 필드로 노출하지 않는다. 클라이언트는 `canCancelRoomReservation`이 `true`일 때만
+`DELETE /api/room-reservations/{roomReservationId}`를 호출해야 한다. 이 경로는 캘린더 전용 우회가 아니며 기존
+예약 취소의 인증, CSRF, 객체 수준 인가, 멱등성 및 트랜잭션 오류 계약을 그대로 적용한다.
 
 `PUT /api/schedules/{scheduleId}`는 일반 일정의 등록자만 호출할 수 있다. Calendar Core는 검증 가능한
 `actorId`를 경계 입력으로 받고, 보호 Controller는 검증된 Principal만 이 값을 제공한다.

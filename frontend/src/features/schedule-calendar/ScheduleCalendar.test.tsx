@@ -45,6 +45,8 @@ const roomManagedDetail: ScheduleDetail = {
   projectTargetIds: [],
   meetingRoomManaged: true,
   canManage: false,
+  roomReservationId: null,
+  canCancelRoomReservation: false,
 }
 
 const editableDetail: ScheduleDetail = {
@@ -333,6 +335,110 @@ describe('ScheduleCalendar', () => {
     expect(screen.queryByRole('dialog', { name: '수정할 개인 일정' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '2024년 2월 29일 일정 보기' })).toHaveFocus()
   })
+
+  it('only exposes room reservation cancellation to its owner and preserves normal schedule actions', async () => {
+    window.history.replaceState({}, '', '/?view=month&date=2024-02-29')
+    const user = userEvent.setup()
+    const ownedRoomReservation = {
+      ...roomManagedDetail,
+      roomReservationId: 17,
+      canCancelRoomReservation: true,
+    }
+    renderCalendar({
+      getSchedules: () => Promise.resolve([{ ...roomManagedDetail }]),
+      getScheduleDetail: () => Promise.resolve(ownedRoomReservation),
+    })
+
+    await user.click(await screen.findByRole('button', { name: /기간을 넘는 팀 회의/ }))
+    expect(await screen.findByRole('button', { name: '예약 취소' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: '일정 취소' })).not.toBeInTheDocument()
+
+    renderCalendar({
+      getSchedules: () => Promise.resolve([{ ...roomManagedDetail }]),
+      getScheduleDetail: () => Promise.resolve(roomManagedDetail),
+    })
+    await user.click((await screen.findAllByRole('button', { name: /기간을 넘는 팀 회의/ }))[1])
+    expect(screen.queryAllByRole('button', { name: '예약 취소' })).toHaveLength(1)
+  })
+
+  it('confirms room reservation cancellation once, refreshes related queries, and restores focus', async () => {
+    window.history.replaceState({}, '', '/?view=month&date=2024-02-29')
+    const user = userEvent.setup()
+    let resolveCancellation: (() => void) | undefined
+    const cancelRoomReservation = vi.fn(
+      () => new Promise<void>((resolve) => (resolveCancellation = resolve)),
+    )
+    const ownedRoomReservation = {
+      ...roomManagedDetail,
+      roomReservationId: 17,
+      canCancelRoomReservation: true,
+    }
+    renderCalendar({
+      getSchedules: () => Promise.resolve([{ ...roomManagedDetail }]),
+      getScheduleDetail: () => Promise.resolve(ownedRoomReservation),
+      cancelRoomReservation,
+    })
+
+    const chip = await screen.findByRole('button', { name: /기간을 넘는 팀 회의/ })
+    await user.click(chip)
+    await user.click(await screen.findByRole('button', { name: '예약 취소' }))
+    expect(
+      screen.getByRole('alertdialog', { name: '기간을 넘는 팀 회의 예약 취소' }),
+    ).toHaveTextContent('예약과 연결된 일정이 함께 취소되어')
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '예약 취소' })).toHaveFocus()
+
+    await user.click(screen.getByRole('button', { name: '예약 취소' }))
+    await user.click(screen.getByRole('button', { name: '계속 예약 보기' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: '예약 취소' })).toHaveFocus())
+
+    await user.click(screen.getByRole('button', { name: '예약 취소' }))
+    const confirm = screen.getByRole('button', { name: '예약 취소 확정' })
+    await user.click(confirm)
+    await user.click(confirm)
+    expect(cancelRoomReservation).toHaveBeenCalledTimes(1)
+    expect(cancelRoomReservation).toHaveBeenCalledWith(17)
+    expect(confirm).toBeDisabled()
+    resolveCancellation?.()
+    expect(await screen.findByText('회의실 예약과 연결 일정이 취소되었습니다.')).toBeVisible()
+    expect(screen.queryByRole('dialog', { name: '기간을 넘는 팀 회의' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '2024년 2월 29일 일정 보기' })).toHaveFocus()
+  })
+
+  it.each([
+    [401, '로그인이 만료되었습니다. 다시 로그인해 주세요.'],
+    [403, '이 예약을 취소할 권한이 없습니다.'],
+    [404, '예약을 찾을 수 없습니다. 목록을 새로고침해 주세요.'],
+    [409, '예약 취소 중 충돌이 발생했습니다. 목록을 새로고침한 뒤 다시 시도해 주세요.'],
+    [undefined, '네트워크 오류가 발생했습니다. 기존 일정은 유지됩니다. 다시 시도해 주세요.'],
+  ])(
+    'keeps a room-managed detail visible and explains reservation cancellation error %s',
+    async (status, message) => {
+      window.history.replaceState({}, '', '/?view=month&date=2024-02-29')
+      const user = userEvent.setup()
+      const ownedRoomReservation = {
+        ...roomManagedDetail,
+        roomReservationId: 17,
+        canCancelRoomReservation: true,
+      }
+      renderCalendar({
+        getSchedules: () => Promise.resolve([{ ...roomManagedDetail }]),
+        getScheduleDetail: () => Promise.resolve(ownedRoomReservation),
+        cancelRoomReservation: () =>
+          Promise.reject(
+            status === undefined
+              ? new Error('offline')
+              : Object.assign(new Error('request failed'), { status }),
+          ),
+      })
+      await user.click(await screen.findByRole('button', { name: /기간을 넘는 팀 회의/ }))
+      await user.click(await screen.findByRole('button', { name: '예약 취소' }))
+      await user.click(screen.getByRole('button', { name: '예약 취소 확정' }))
+      expect(await screen.findByText(message)).toBeVisible()
+      expect(screen.getByRole('heading', { name: '기간을 넘는 팀 회의' })).toBeVisible()
+    },
+  )
 
   it.each([
     [403, '이 일정을 취소할 권한이 없습니다.'],
