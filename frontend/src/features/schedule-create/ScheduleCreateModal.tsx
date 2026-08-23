@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 
+import { AttendeeSelector } from './AttendeeSelector'
 import {
   type AttendeeCandidate,
   type CreateScheduleRequest,
@@ -55,9 +56,8 @@ export function ScheduleCreateModal({
     document.activeElement instanceof HTMLElement ? document.activeElement : null,
   )
   const [dirtyCloseConfirmation, setDirtyCloseConfirmation] = useState(false)
-  const [attendeeQuery, setAttendeeQuery] = useState('')
   const [selectedAttendees, setSelectedAttendees] = useState<AttendeeCandidate[]>([])
-  const [duplicateMessage, setDuplicateMessage] = useState('')
+  const [personalRelationNotice, setPersonalRelationNotice] = useState('')
   const queryClient = useQueryClient()
   const form = useForm<ScheduleFormValues>({
     resolver: zodResolver(scheduleFormSchema),
@@ -83,12 +83,6 @@ export function ScheduleCreateModal({
   const creatorAttends = useWatch({ control: form.control, name: 'creatorAttends' })
   const allDay = useWatch({ control: form.control, name: 'allDay' })
   const { isDirty } = form.formState
-  const attendeeSearch = useQuery({
-    queryKey: ['schedule', 'attendee-candidates', attendeeQuery.trim()],
-    queryFn: () => searchAttendees(attendeeQuery.trim()),
-    enabled: attendeeQuery.trim().length > 0,
-    retry: false,
-  })
   const targetOptions = useQuery({
     queryKey: ['schedule', 'target-options'],
     queryFn: getTargetOptions,
@@ -127,6 +121,19 @@ export function ScheduleCreateModal({
     form.setValue('projectTargetIds', [])
   }, [form, scheduleType])
 
+  function handleScheduleTypeChange(nextType: ScheduleType) {
+    if (nextType === 'PERSONAL' && scheduleType !== 'PERSONAL') {
+      const hadRelations =
+        form.getValues('participantIds').length > 0 || form.getValues('userTargetIds').length > 0
+      setSelectedAttendees([])
+      form.setValue('participantIds', [], { shouldDirty: hadRelations })
+      form.setValue('userTargetIds', [], { shouldDirty: hadRelations })
+      setPersonalRelationNotice(
+        '개인 일정은 등록자 전용이므로 참석자와 사용자 공유 대상을 제거했습니다.',
+      )
+    }
+  }
+
   function close() {
     queryClient.removeQueries({ queryKey: ['schedule', 'attendee-candidates'] })
     lastFocusedElement.current?.focus()
@@ -161,19 +168,13 @@ export function ScheduleCreateModal({
     return () => document.removeEventListener('keydown', onKeyDown)
   })
 
-  function addAttendee(candidate: AttendeeCandidate) {
-    if (selectedAttendees.some((attendee) => attendee.userId === candidate.userId)) {
-      setDuplicateMessage('이미 선택된 참석자입니다.')
-      return
-    }
-    const attendees = [...selectedAttendees, candidate]
+  function changeAttendees(attendees: AttendeeCandidate[]) {
     setSelectedAttendees(attendees)
     form.setValue(
       'participantIds',
       attendees.map(({ userId }) => userId),
       { shouldDirty: true },
     )
-    setDuplicateMessage('')
   }
 
   function submit(values: ScheduleFormValues) {
@@ -192,12 +193,6 @@ export function ScheduleCreateModal({
   }
 
   const totalAttendees = selectedAttendees.length + (creatorAttends ? 1 : 0)
-  const canShowResults = attendeeQuery.trim().length > 0 && !attendeeSearch.isLoading
-  const attendeeSearchMessage =
-    attendeeSearch.error instanceof ScheduleApiError &&
-    (attendeeSearch.error.status === 401 || attendeeSearch.error.status === 403)
-      ? '참석자 검색 권한이 없습니다.'
-      : '참석자 검색에 실패했습니다. 다시 시도해 주세요.'
   const targetField = scheduleType === 'TEAM' ? 'teamTargetIds' : 'projectTargetIds'
   const targetOptionsForType: ScheduleTargetOption[] =
     scheduleType === 'TEAM'
@@ -305,7 +300,13 @@ export function ScheduleCreateModal({
           </label>
           <label className={labelClass}>
             일정 유형
-            <select className={fieldClass} {...form.register('type')}>
+            <select
+              className={fieldClass}
+              {...form.register('type', {
+                onChange: (event: { target: HTMLSelectElement }) =>
+                  handleScheduleTypeChange(event.target.value as ScheduleType),
+              })}
+            >
               <option value="PERSONAL">개인</option>
               <option value="TEAM">팀</option>
               <option value="PROJECT">프로젝트</option>
@@ -384,33 +385,17 @@ export function ScheduleCreateModal({
               ))}
             </select>
           </label>
-          <label className={labelClass}>
-            참석자 검색
-            <input
-              onChange={(event) => setAttendeeQuery(event.target.value)}
-              className={fieldClass}
-              value={attendeeQuery}
-            />
-          </label>
-          {attendeeSearch.isLoading && <p>참석자를 검색하고 있습니다.</p>}
-          {attendeeSearch.isError && <p role="alert">{attendeeSearchMessage}</p>}
-          {canShowResults && attendeeSearch.data?.length === 0 && (
-            <p>일치하는 참석자가 없습니다.</p>
+          {(scheduleType === 'TEAM' || scheduleType === 'PROJECT') && (
+            <>
+              <AttendeeSelector
+                onChange={changeAttendees}
+                searchAttendees={searchAttendees}
+                selected={selectedAttendees}
+              />
+              <p>자동 참석 인원: {totalAttendees}명</p>
+            </>
           )}
-          {attendeeSearch.data?.map((candidate) => (
-            <button key={candidate.userId} onClick={() => addAttendee(candidate)} type="button">
-              {candidate.displayName} 참석자로 추가
-            </button>
-          ))}
-          {duplicateMessage && <p role="alert">{duplicateMessage}</p>}
-          {selectedAttendees.length > 0 && (
-            <ul aria-label="선택된 참석자">
-              {selectedAttendees.map((attendee) => (
-                <li key={attendee.userId}>{attendee.displayName}</li>
-              ))}
-            </ul>
-          )}
-          <p>자동 참석 인원: {totalAttendees}명</p>
+          {personalRelationNotice && <p role="status">{personalRelationNotice}</p>}
           <label className={checkboxLabelClass} data-testid="schedule-creator-attends-field">
             <input className={checkboxClass} type="checkbox" {...form.register('creatorAttends')} />
             등록자도 참석

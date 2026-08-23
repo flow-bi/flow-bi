@@ -19,6 +19,8 @@ export interface ScheduleDetail extends ScheduleSummary {
   location: string
   creatorAttends: boolean
   participantIds: number[]
+  participants: Array<{ userId: number; displayName: string }>
+  attendeeCount: number
   userTargetIds: number[]
   teamTargetIds: number[]
   projectTargetIds: number[]
