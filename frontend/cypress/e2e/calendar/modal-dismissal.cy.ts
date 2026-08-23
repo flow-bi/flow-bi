@@ -15,6 +15,11 @@ const detail = {
   location: '회의실 A',
   creatorAttends: true,
   participantIds: [2, 3],
+  participants: [
+    { userId: 2, displayName: '김민지' },
+    { userId: 3, displayName: '이도윤' },
+  ],
+  attendeeCount: 3,
   userTargetIds: [],
   teamTargetIds: [10],
   projectTargetIds: [],

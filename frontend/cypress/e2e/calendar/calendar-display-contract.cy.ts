@@ -62,6 +62,8 @@ const detail = {
   location: '회의실 A',
   creatorAttends: true,
   participantIds: [],
+  participants: [],
+  attendeeCount: 1,
   userTargetIds: [],
   teamTargetIds: [10],
   projectTargetIds: [],
@@ -73,6 +75,10 @@ function interceptCalendar() {
   cy.intercept('GET', '/api/auth/session', { authenticated: true, mustChangePassword: false })
   cy.intercept('GET', '/api/schedules?*', schedules)
   cy.intercept('GET', '/api/schedules/2', detail)
+  cy.intercept('GET', '/api/schedules/target-options', {
+    teams: [{ id: 10, name: '플랫폼팀' }],
+    projects: [],
+  })
 }
 
 function expectNoRawColors() {
