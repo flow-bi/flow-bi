@@ -128,6 +128,9 @@ backend/src/
 - 테스트는 구현 세부보다 사용자의 관찰 가능한 동작과 핵심 규칙을 검증한다.
 - Controller 테스트만으로 도메인 규칙을 검증한 것으로 간주하지 않는다.
 - Mock이 실제 권한·트랜잭션·쿼리 동작을 가리지 않도록 하고, PostgreSQL 고유 동작은 적용 가능한 통합 테스트로 검증한다.
+- H2 기반 Spring 테스트는 빠른 보조 검증으로 사용하며 PostgreSQL 전용 Flyway Migration 이후 Schema는 JPA Mapping으로 격리 구성한다.
+- Migration, PostgreSQL 제약, 영속·트랜잭션·동시성 계약은 전체 Migration과 기준 데이터가 적용된 PostgreSQL Testcontainers에서 검증한다.
+- DB 통합 테스트 Fixture는 공유 기준 데이터를 삭제하거나 고정 ID와 빈 테이블을 가정하지 않고 테스트가 소유한 식별자만 조회·정리한다.
 - 코드 스타일은 Spotless 규칙을 따른다.
 
 ## 10. 미결정 사항
