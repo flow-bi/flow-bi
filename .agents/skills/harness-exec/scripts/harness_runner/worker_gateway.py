@@ -32,6 +32,7 @@ def invoke_task(
         prompt,
         allowed_paths,
         forbidden_paths,
+        task_number=invocation.task.number,
         project_root=root,
         base_environment=environment,
     )

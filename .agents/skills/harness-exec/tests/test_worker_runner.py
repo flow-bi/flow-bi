@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import nullcontext
 from pathlib import Path
 import json
 import os
@@ -50,19 +51,48 @@ class WorkerReadablePathTests(unittest.TestCase):
         self.make_executable(node)
         self.make_executable(git)
         self.make_executable(npm_cli)
-        npm.symlink_to(npm_cli)
         java_home.mkdir()
 
-        paths = set(
-            collect_worker_readable_paths(
-                {
-                    "PATH": str(self.bin_dir),
-                    "JAVA_HOME": str(java_home),
-                },
-                home_dir=self.root / "home",
-                platform_name="linux",
+        original_resolve = Path.resolve
+
+        def resolve_npm_symlink(path: Path, *args: object, **kwargs: object) -> Path:
+            if path == npm:
+                return npm_cli
+            return original_resolve(path, *args, **kwargs)
+
+        try:
+            npm.symlink_to(npm_cli)
+        except OSError as error:
+            if getattr(error, "winerror", None) != 1314:
+                raise
+            self.make_executable(npm)
+            resolve_context = mock.patch.object(
+                Path,
+                "resolve",
+                autospec=True,
+                side_effect=resolve_npm_symlink,
             )
-        )
+        else:
+            resolve_context = nullcontext()
+
+        executables = {"node": str(node), "npm": str(npm), "git": str(git)}
+        with (
+            resolve_context,
+            mock.patch(
+                "worker_runner.codex.shutil.which",
+                side_effect=lambda name, path: executables.get(name),
+            ),
+        ):
+            paths = set(
+                collect_worker_readable_paths(
+                    {
+                        "PATH": str(self.bin_dir),
+                        "JAVA_HOME": str(java_home),
+                    },
+                    home_dir=self.root / "home",
+                    platform_name="linux",
+                )
+            )
 
         self.assertIn(str(java_home), paths)
         self.assertIn(str(self.bin_dir), paths)
@@ -78,21 +108,46 @@ class WorkerReadablePathTests(unittest.TestCase):
         self.make_executable(resolved_python)
         python_opt_root = self.root / "opt" / "python@3.14"
         python_opt_root.parent.mkdir()
-        python_opt_root.symlink_to(python_root, target_is_directory=True)
         python = python_opt_root / "bin" / "python3"
 
-        paths = set(
-            collect_worker_readable_paths(
-                {"PATH": ""},
-                home_dir=self.root / "home",
-                platform_name="darwin",
-                python_executable=python,
-            )
-        )
+        original_resolve = Path.resolve
 
-        self.assertIn(str(python.resolve()), paths)
-        self.assertIn(str(python.parent.resolve()), paths)
-        self.assertIn(str(python_root.resolve()), paths)
+        def resolve_python_symlink(
+            path: Path,
+            *args: object,
+            **kwargs: object,
+        ) -> Path:
+            if path == python:
+                return resolved_python
+            return original_resolve(path, *args, **kwargs)
+
+        try:
+            python_opt_root.symlink_to(python_root, target_is_directory=True)
+        except OSError as error:
+            if getattr(error, "winerror", None) != 1314:
+                raise
+            resolve_context = mock.patch.object(
+                Path,
+                "resolve",
+                autospec=True,
+                side_effect=resolve_python_symlink,
+            )
+        else:
+            resolve_context = nullcontext()
+
+        with resolve_context:
+            paths = set(
+                collect_worker_readable_paths(
+                    {"PATH": ""},
+                    home_dir=self.root / "home",
+                    platform_name="darwin",
+                    python_executable=python,
+                )
+            )
+
+        self.assertIn(str(resolved_python), paths)
+        self.assertIn(str(resolved_python.parent), paths)
+        self.assertIn(str(python_root), paths)
         self.assertIn(str(python_opt_root), paths)
 
     def test_collects_package_json_for_project_ancestors(self) -> None:
@@ -153,8 +208,8 @@ class WorkerReadablePathTests(unittest.TestCase):
             )
         )
 
-        self.assertIn("/Library/Developer/CommandLineTools", mac_paths)
-        self.assertIn("/System/Library/OpenSSL", mac_paths)
+        self.assertIn(str(Path("/Library/Developer/CommandLineTools")), mac_paths)
+        self.assertIn(str(Path("/System/Library/OpenSSL")), mac_paths)
         self.assertIn(str(git_config), mac_paths)
         self.assertIn(str(xdg_git_config), mac_paths)
         self.assertNotIn(str(mac_cache), mac_paths)
@@ -172,13 +227,18 @@ class WorkerReadablePathTests(unittest.TestCase):
         npm_package.mkdir(parents=True)
         self.make_executable(git)
 
-        paths = set(
-            collect_worker_readable_paths(
-                {"PATH": os.pathsep.join((str(node_install), str(git.parent)))},
-                home_dir=self.root / "home",
-                platform_name="win32",
+        executables = {"npm": str(npm), "git": str(git)}
+        with mock.patch(
+            "worker_runner.codex.shutil.which",
+            side_effect=lambda name, path: executables.get(name),
+        ):
+            paths = set(
+                collect_worker_readable_paths(
+                    {"PATH": os.pathsep.join((str(node_install), str(git.parent)))},
+                    home_dir=self.root / "home",
+                    platform_name="win32",
+                )
             )
-        )
 
         self.assertIn(str(npm_package), paths)
         self.assertIn(str(node_install), paths)
@@ -187,6 +247,7 @@ class WorkerReadablePathTests(unittest.TestCase):
     def test_worker_environment_uses_workspace_backed_tmpdir(self) -> None:
         environment = build_subprocess_environment(
             "test-run",
+            task_number=12,
             base_environment={"PATH": os.environ.get("PATH", "")},
             project_root=self.root,
         )
@@ -199,6 +260,45 @@ class WorkerReadablePathTests(unittest.TestCase):
             environment["FLOW_BI_PYTHON_EXECUTABLE"],
             sys.executable,
         )
+        self.assertEqual(environment["FLOW_BI_TASK_NUMBER"], "12")
+
+    def test_worker_environment_keeps_task_identifiers_separate_from_verifier_values(self) -> None:
+        environment = build_subprocess_environment(
+            "worker-run-id",
+            task_number=12,
+            base_environment={
+                "PATH": os.environ.get("PATH", ""),
+                "CODEX_THREAD_ID": "parent-session-id",
+                "FLOW_BI_RUN_ID": "stale-run-id",
+                "FLOW_BI_TASK_NUMBER": "99",
+                "FLOW_BI_BROWSER_VERIFIER_URL": "http://127.0.0.1:1234",
+                "FLOW_BI_BROWSER_VERIFIER_TOKEN": "token",
+            },
+            project_root=self.root,
+        )
+
+        self.assertEqual(environment["FLOW_BI_RUN_ID"], "worker-run-id")
+        self.assertEqual(environment["FLOW_BI_TASK_NUMBER"], "12")
+        self.assertEqual(
+            environment["FLOW_BI_PARENT_SESSION_ID"],
+            "parent-session-id",
+        )
+        self.assertEqual(
+            environment["FLOW_BI_BROWSER_VERIFIER_URL"],
+            "http://127.0.0.1:1234",
+        )
+        self.assertEqual(environment["FLOW_BI_BROWSER_VERIFIER_TOKEN"], "token")
+
+    def test_worker_environment_rejects_invalid_task_numbers(self) -> None:
+        for value in (None, True, False, 0, -1, "2", 1.5):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValueError, "Task number"):
+                    build_subprocess_environment(
+                        "test-run",
+                        task_number=value,
+                        base_environment={"PATH": ""},
+                        project_root=self.root,
+                    )
 
     def test_worker_temp_directory_keeps_recursive_write_permission(self) -> None:
         config = load_config((), ("backend",))
@@ -209,7 +309,7 @@ class WorkerReadablePathTests(unittest.TestCase):
             workspace_permissions["backend/.gradle-user-home/**"],
             "write",
         )
-
+        self.assertNotIn(".git/**", workspace_permissions)
 
     def test_execute_worker_forwards_collected_paths_to_codex_permissions(self) -> None:
         readable_paths = ("/toolchain/node", "/toolchain/npm")
@@ -222,7 +322,7 @@ class WorkerReadablePathTests(unittest.TestCase):
                 worker_runner_module,
                 "build_subprocess_environment",
                 return_value={"PATH": ""},
-            ),
+            ) as build_environment,
             mock.patch.object(
                 worker_runner_module,
                 "collect_worker_readable_paths",
@@ -238,6 +338,7 @@ class WorkerReadablePathTests(unittest.TestCase):
                 "task",
                 ("frontend",),
                 ("backend",),
+                task_number=1,
                 project_root=self.root,
                 runner=subprocess_runner,
                 logger=lambda *_args: None,
@@ -250,6 +351,10 @@ class WorkerReadablePathTests(unittest.TestCase):
         collect_paths.assert_called_once_with(
             {"PATH": ""},
             project_root=self.root,
+        )
+        self.assertEqual(
+            build_environment.call_args.kwargs["task_number"],
+            1,
         )
 
 
@@ -305,6 +410,7 @@ class WorkerExecutionTests(unittest.TestCase):
                 "task",
                 (".agents",),
                 (),
+                task_number=1,
                 project_root=self.root,
                 runner=run,
                 logger=lambda *_args: None,
@@ -332,6 +438,7 @@ class WorkerExecutionTests(unittest.TestCase):
                 "task",
                 (".agents",),
                 (),
+                task_number=1,
                 project_root=self.root,
                 runner=run,
                 logger=lambda *_args: None,
@@ -356,6 +463,7 @@ class WorkerExecutionTests(unittest.TestCase):
                 "task",
                 (".agents",),
                 (),
+                task_number=1,
                 project_root=self.root,
                 runner=run,
                 logger=lambda *_args: None,
@@ -379,6 +487,7 @@ class WorkerExecutionTests(unittest.TestCase):
                     "task",
                     (".agents",),
                     (),
+                    task_number=1,
                     project_root=self.root,
                     runner=run,
                     logger=lambda *_args: None,
@@ -387,6 +496,24 @@ class WorkerExecutionTests(unittest.TestCase):
 
         self.assertIn("timeout-marker", raised.exception.stderr)
         self.assertEqual(self.pending_files(), ())
+
+    def test_execute_worker_rejects_invalid_task_numbers_before_subprocess(self) -> None:
+        runner = mock.Mock()
+
+        for value in (None, True, 0, -1, "1"):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValueError, "Task number"):
+                    execute_worker(
+                        "task",
+                        (".agents",),
+                        (),
+                        task_number=value,
+                        project_root=self.root,
+                        runner=runner,
+                        logger=lambda *_args: None,
+                    )
+
+        runner.assert_not_called()
 
 
 class WorkerInvocationTests(unittest.TestCase):

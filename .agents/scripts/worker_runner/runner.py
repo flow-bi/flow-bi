@@ -16,6 +16,7 @@ from .codex import (
     build_codex_command,
     build_subprocess_environment,
     collect_worker_readable_paths,
+    validate_task_number,
 )
 
 
@@ -107,6 +108,7 @@ def execute_worker(
     prompt: str,
     allowed_paths: tuple[str, ...],
     forbidden_paths: tuple[str, ...],
+    task_number: object,
     project_root: Path = PROJECT_ROOT,
     executable: str | None = None,
     base_environment: dict[str, str] | None = None,
@@ -115,6 +117,8 @@ def execute_worker(
     timeout: int = DEFAULT_TIMEOUT_SECONDS,
 ) -> WorkerExecutionResult:
     """"Worker 하나를 실행하고 종료 결과를 반환한다."""
+
+    validate_task_number(task_number)
 
     # Worker 실행을 식별하기 위한 고유 ID
     run_id = str(uuid.uuid4())
@@ -139,7 +143,8 @@ def execute_worker(
     # Worker 실행 환경 구성
     environment = build_subprocess_environment(
         run_id,
-        base_environment,
+        task_number=task_number,
+        base_environment=base_environment,
         project_root=project_root,
     )
     
