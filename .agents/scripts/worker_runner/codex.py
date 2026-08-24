@@ -188,11 +188,25 @@ def _read_project_java_home(env_path: Path) -> Path | None:
     return None
 
 
+def validate_task_number(task_number: object) -> str:
+    """Return a validated Harness task number for subprocess environment use."""
+
+    if (
+        isinstance(task_number, bool)
+        or not isinstance(task_number, int)
+        or task_number <= 0
+    ):
+        raise ValueError("Task number must be a positive integer.")
+    return str(task_number)
+
+
 def build_subprocess_environment(
     run_id: str,
+    task_number: object,
     base_environment: dict[str, str] | None = None,
     project_root: Path = PROJECT_ROOT,
 ) -> dict[str, str]:
+    task_number_text = validate_task_number(task_number)
     environment = (
         base_environment
         if base_environment is not None
@@ -244,9 +258,9 @@ def build_subprocess_environment(
         )
 
     environment["FLOW_BI_RUN_ID"] = run_id
+    environment["FLOW_BI_TASK_NUMBER"] = task_number_text
     environment["FLOW_BI_PYTHON_EXECUTABLE"] = sys.executable
     environment.pop("FLOW_BI_NOTION_PARENT", None)
-    environment.pop("FLOW_BI_WORKER", None)
     environment.pop("CODEX_PERMISSION_PROFILE", None)
 
     parent_session_id = environment.get("CODEX_THREAD_ID")

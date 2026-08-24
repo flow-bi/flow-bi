@@ -27,7 +27,7 @@ if str(HARNESS_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(HARNESS_SCRIPTS))
 
 from harness_runner import cli, worker_gateway
-from harness_runner.models import ExecutionReport, TaskResult
+from harness_runner.models import ExecutionReport, Task, TaskInvocation, TaskResult
 
 
 class BrowserVerifierTests(unittest.TestCase):
@@ -209,7 +209,18 @@ class BrowserVerifierTests(unittest.TestCase):
         self.assertIn("`gradlew`를 직접 실행하지", prompt)
 
     def test_gateway_merges_verifier_connection_into_worker_environment(self) -> None:
-        invocation = mock.Mock()
+        invocation = TaskInvocation(
+            common_prompt="common",
+            additional_request="",
+            task=Task(
+                number=7,
+                title="gateway",
+                prerequisite_numbers=(),
+                allowed_paths=("frontend",),
+                forbidden_paths=("backend",),
+                task_prompt="work",
+            ),
+        )
         with (
             mock.patch.object(
                 worker_gateway,
@@ -250,6 +261,7 @@ class BrowserVerifierTests(unittest.TestCase):
             "token",
         )
         self.assertIn("PATH", base_environment)
+        self.assertEqual(execute_worker.call_args.kwargs["task_number"], 7)
 
     def test_harness_lifecycle_passes_both_verifier_environments_to_worker(self) -> None:
         browser_environment = {

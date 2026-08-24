@@ -11,6 +11,7 @@ extends = "worker-base"
 glob_scan_max_depth = 5
 
 [permissions.task-worker.filesystem.":workspace_roots"]
+".git/**" = "write"
 "frontend/node_modules/**" = "write"
 "frontend/dist/**" = "write"
 "backend/build/" = "write"

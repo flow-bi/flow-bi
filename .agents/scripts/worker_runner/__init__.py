@@ -6,6 +6,7 @@ from .codex import (
     build_subprocess_environment,
     resolve_codex_executable,
     resolve_codex_home,
+    validate_task_number,
 )
 from .config import (
     format_toml_key,
@@ -33,4 +34,5 @@ __all__ = (
     "resolve_codex_executable",
     "resolve_codex_home",
     "resolve_config_path",
+    "validate_task_number",
 )
