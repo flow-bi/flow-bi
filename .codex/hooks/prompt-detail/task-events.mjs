@@ -16,9 +16,11 @@ function captureUsage(sessionId, usageReader) {
 }
 
 function usageForTerminal(state, usageReader) {
+  const terminal = captureUsage(state.session_id, usageReader);
+  if (state.executor?.kind === "task" && !state.usage_baseline && terminal.usage) return terminal;
   return terminalUsage(
     { usage: state.usage_baseline ?? null, usage_status: state.usage_baseline_status },
-    captureUsage(state.session_id, usageReader),
+    terminal,
   );
 }
 

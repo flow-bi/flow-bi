@@ -9,6 +9,7 @@ const ALL_FIELDS = [...CORE_FIELDS, ...DETAIL_FIELDS];
 function totalTokenUsage(value) {
   return value?.token_count?.info?.total_token_usage
     ?? value?.payload?.token_count?.info?.total_token_usage
+    ?? (value?.payload?.type === "token_count" ? value.payload?.info?.total_token_usage : null)
     ?? null;
 }
 function numberAt(value, field) {
@@ -19,7 +20,12 @@ function numberAt(value, field) {
 export function normalizeCumulativeUsage(value) {
   const total = totalTokenUsage(value);
   if (!total || typeof total !== "object") return null;
-  const usage = Object.fromEntries(ALL_FIELDS.map((field) => [field, numberAt(total, field)]));
+  const usage = Object.fromEntries(ALL_FIELDS.map((field) => [
+    field,
+    field === "cache_creation_input_tokens"
+      ? numberAt(total, field) ?? numberAt(total, "cache_write_input_tokens")
+      : numberAt(total, field),
+  ]));
   return CORE_FIELDS.some((field) => usage[field] === null) ? null : usage;
 }
 

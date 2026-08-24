@@ -25,6 +25,13 @@ function totalUsage(input, cached, cacheWrite, output, reasoning, total) {
   } } } };
 }
 
+function rolloutUsage(input, cached, cacheWrite, output, reasoning, total) {
+  return { type: "event_msg", payload: { type: "token_count", info: { total_token_usage: {
+    input_tokens: input, cached_input_tokens: cached, cache_write_input_tokens: cacheWrite,
+    output_tokens: output, reasoning_output_tokens: reasoning, total_tokens: total,
+  } } } };
+}
+
 test("normalizes the final valid cumulative usage without double-counting cached or reasoning detail", () => {
   const usage = normalizeCumulativeUsage(totalUsage(100, 20, 5, 40, 10, 140));
   assert.deepEqual(usage, {
@@ -39,7 +46,7 @@ test("normalizes the final valid cumulative usage without double-counting cached
 
 test("reads only the requested session's last valid rollout usage", () => {
   const files = new Map([
-    ["sessions/rollout-target.jsonl", `${JSON.stringify({ type: "session_meta", payload: { id: "target" } })}\n${JSON.stringify({ payload: totalUsage(10, 1, 0, 5, 1, 15) })}\nnot json\n${JSON.stringify({ payload: totalUsage(20, 2, 1, 9, 2, 29) })}\n`],
+    ["sessions/rollout-target.jsonl", `${JSON.stringify({ type: "session_meta", payload: { id: "target" } })}\n${JSON.stringify(rolloutUsage(10, 1, 0, 5, 1, 15))}\nnot json\n${JSON.stringify(rolloutUsage(20, 2, 1, 9, 2, 29))}\n`],
   ]);
   const fileSystem = {
     readdirSync: () => [{ name: "rollout-target.jsonl", isDirectory: () => false }],
@@ -49,6 +56,30 @@ test("reads only the requested session's last valid rollout usage", () => {
     usage: { input_tokens: 20, output_tokens: 9, total_tokens: 29, cached_input_tokens: 2, cache_creation_input_tokens: 1, reasoning_output_tokens: 2 },
     usage_status: "AVAILABLE",
   });
+});
+
+test("uses a dedicated task session's terminal cumulative usage when no baseline exists", async () => {
+  const projectRoot = mkdtempSync(join(tmpdir(), "token-usage-new-task-"));
+  try {
+    const values = [
+      { usage: null, usage_status: "USAGE_MISSING" },
+      usageSnapshot(rolloutUsage(30, 4, 2, 10, 3, 40)),
+    ];
+    const options = {
+      projectRoot,
+      environment: { FLOW_BI_RUN_ID: "run-new", FLOW_BI_TASK_NUMBER: "1" },
+      usageReader: () => values.shift(),
+      now: () => new Date("2026-08-24T00:00:00.000Z"),
+    };
+    await handleUserPromptSubmit({ prompt: "task", session_id: "new-task", turn_id: "turn" }, options);
+    await recordWorkerEnd({ runId: "run-new", exitCode: 0, summary: "", status: "completed" }, options);
+    const [end] = readJson(storagePaths(projectRoot).logFile, []).filter((record) => record.record_type === "task_end");
+    assert.deepEqual(end.usage, {
+      input_tokens: 30, output_tokens: 10, total_tokens: 40,
+      cached_input_tokens: 4, cache_creation_input_tokens: 2, reasoning_output_tokens: 3,
+    });
+    assert.equal(end.usage_status, "AVAILABLE");
+  } finally { rmSync(projectRoot, { recursive: true, force: true }); }
 });
 
 test("records direct parent and task deltas independently and keeps equal task numbers isolated", async () => {
