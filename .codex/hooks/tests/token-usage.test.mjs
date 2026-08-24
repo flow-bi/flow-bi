@@ -82,6 +82,30 @@ test("uses a dedicated task session's terminal cumulative usage when no baseline
   } finally { rmSync(projectRoot, { recursive: true, force: true }); }
 });
 
+test("uses a primary session's terminal cumulative usage on its first turn", async () => {
+  const projectRoot = mkdtempSync(join(tmpdir(), "token-usage-new-primary-"));
+  try {
+    const values = [
+      { usage: null, usage_status: "USAGE_MISSING" },
+      usageSnapshot(rolloutUsage(30, 4, 2, 10, 3, 40)),
+    ];
+    const options = {
+      projectRoot,
+      environment: {},
+      usageReader: () => values.shift(),
+      now: () => new Date("2026-08-24T00:00:00.000Z"),
+    };
+    await handleUserPromptSubmit({ prompt: "primary", session_id: "new-primary", turn_id: "turn" }, options);
+    await handleStop({ session_id: "new-primary", turn_id: "turn" }, options);
+    const [end] = readJson(storagePaths(projectRoot).logFile, []).filter((record) => record.record_type === "task_end");
+    assert.deepEqual(end.usage, {
+      input_tokens: 30, output_tokens: 10, total_tokens: 40,
+      cached_input_tokens: 4, cache_creation_input_tokens: 2, reasoning_output_tokens: 3,
+    });
+    assert.equal(end.usage_status, "AVAILABLE");
+  } finally { rmSync(projectRoot, { recursive: true, force: true }); }
+});
+
 test("records direct parent and task deltas independently and keeps equal task numbers isolated", async () => {
   const projectRoot = mkdtempSync(join(tmpdir(), "token-usage-"));
   try {
@@ -107,9 +131,33 @@ test("records direct parent and task deltas independently and keeps equal task n
   } finally { rmSync(projectRoot, { recursive: true, force: true }); }
 });
 
+test("does not attribute a full primary session when a later turn's baseline is missing", async () => {
+  const projectRoot = mkdtempSync(join(tmpdir(), "token-usage-later-primary-"));
+  try {
+    const values = [
+      usageSnapshot(totalUsage(10, 1, 0, 5, 1, 15)),
+      usageSnapshot(totalUsage(20, 2, 0, 8, 2, 28)),
+      { usage: null, usage_status: "USAGE_MISSING" },
+      usageSnapshot(totalUsage(40, 4, 0, 15, 3, 55)),
+    ];
+    const options = {
+      projectRoot,
+      environment: {},
+      usageReader: () => values.shift(),
+      now: () => new Date("2026-08-24T00:00:00.000Z"),
+    };
+    await handleUserPromptSubmit({ prompt: "first", session_id: "primary", turn_id: "first" }, options);
+    await handleStop({ session_id: "primary", turn_id: "first" }, options);
+    await handleUserPromptSubmit({ prompt: "later", session_id: "primary", turn_id: "later" }, options);
+    await handleStop({ session_id: "primary", turn_id: "later" }, options);
+    const ends = readJson(storagePaths(projectRoot).logFile, []).filter((record) => record.record_type === "task_end");
+    assert.equal(ends[1].usage, null);
+    assert.equal(ends[1].usage_status, "BASELINE_USAGE_MISSING");
+  } finally { rmSync(projectRoot, { recursive: true, force: true }); }
+});
+
 test("preserves terminal cleanup when usage is missing, unreadable, partial, or regresses", async () => {
   for (const [baseline, terminal, expectedStatus] of [
-    [null, totalUsage(2, 0, 0, 1, 0, 3), "BASELINE_USAGE_MISSING"],
     [totalUsage(3, 0, 0, 2, 0, 5), null, "USAGE_MISSING"],
     [totalUsage(3, 0, 0, 2, 0, 5), { token_count: { info: { total_token_usage: { input_tokens: 4, total_tokens: 6 } } } }, "USAGE_PARTIAL"],
     [totalUsage(5, 0, 0, 3, 0, 8), totalUsage(4, 0, 0, 4, 0, 8), "USAGE_NEGATIVE_DELTA"],

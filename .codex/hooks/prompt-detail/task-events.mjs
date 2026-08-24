@@ -17,7 +17,8 @@ function captureUsage(sessionId, usageReader) {
 
 function usageForTerminal(state, usageReader) {
   const terminal = captureUsage(state.session_id, usageReader);
-  if (state.executor?.kind === "task" && !state.usage_baseline && terminal.usage) return terminal;
+  if (!state.usage_baseline && terminal.usage
+    && (state.executor?.kind === "task" || state.use_terminal_usage_directly)) return terminal;
   return terminalUsage(
     { usage: state.usage_baseline ?? null, usage_status: state.usage_baseline_status },
     terminal,
@@ -35,6 +36,7 @@ export async function handleUserPromptSubmit(
   const usageBaseline = captureUsage(input.session_id, usageReader);
   return withStorage(projectRoot, ({ records, pending }) => {
     const parent = parentSessionId ? pendingForSession(pending, parentSessionId) : null;
+    const isFirstRecordedSessionTurn = !records.some((record) => record.context?.session_id === input.session_id);
     const state = {
       kind: "task", turn_id: input.turn_id, session_id: input.session_id, node_id: `turn:${input.turn_id}`,
       parent_id: parent?.node_id ?? null, depth: parent ? parent.depth + 1 : 0,
@@ -42,6 +44,7 @@ export async function handleUserPromptSubmit(
       executor, tree_version: parent ? parent.tree_version : TREE_VERSION,
       run_id: environment.FLOW_BI_RUN_ID || null, summary_requested: false,
       usage_baseline: usageBaseline.usage, usage_baseline_status: usageBaseline.usage_status,
+      use_terminal_usage_directly: executor.kind === "primary" && !usageBaseline.usage && isFirstRecordedSessionTurn,
     };
     state.pending_key = pendingKey(state);
     const existing = pending.find((item) => item.pending_key === state.pending_key);
