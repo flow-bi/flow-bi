@@ -10,10 +10,13 @@ import com.flowbi.domain.schedule.repository.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.flowbi.domain.schedule.port.ScheduleAudienceLookup;
+import com.flowbi.domain.schedule.port.ScheduleRoomReservationLookup;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Set;
@@ -28,7 +31,9 @@ class ScheduleQueryServiceTest {
   void returnsOnlySchedulesVisibleToTheActorAndUsesOneAudienceLookupPerTargetKind() {
     ScheduleRepository repository = mock(ScheduleRepository.class);
     ScheduleAudienceLookup audienceLookup = mock(ScheduleAudienceLookup.class);
-    ScheduleQueryService service = new ScheduleQueryService(repository, audienceLookup);
+    ScheduleRoomReservationLookup roomReservationLookup = mock(ScheduleRoomReservationLookup.class);
+    ScheduleQueryService service = new ScheduleQueryService(repository, audienceLookup,
+        roomReservationLookup);
     Schedule personal = schedule(1L,ScheduleType.PERSONAL,List.of(7L),List.of(),List.of());
     Schedule team = schedule(3L,ScheduleType.TEAM,List.of(),List.of(10L,11L),List.of());
     Schedule project = schedule(4L,ScheduleType.PROJECT,List.of(),List.of(),List.of(20L,21L));
@@ -37,28 +42,59 @@ class ScheduleQueryServiceTest {
         .thenReturn(List.of(personal,team,project,hidden));
     when(audienceLookup.memberTeamIds(7L,Set.of(10L,11L))).thenReturn(Set.of(11L));
     when(audienceLookup.memberProjectIds(7L,Set.of(20L,21L))).thenReturn(Set.of(20L));
+    when(roomReservationLookup.managedScheduleIds(org.mockito.ArgumentMatchers.any()))
+        .thenReturn(Set.of());
 
     List<ScheduleListItem> result = service.query(ScheduleQuery.of(7L,FROM,TO));
 
-    assertThat(result).extracting(ScheduleListItem::title).containsExactly("PERSONAL 1","TEAM 3",
-        "PROJECT 4");
+    assertThat(result).extracting(ScheduleListItem::title).containsExactly("TEAM 3","PROJECT 4");
     verify(repository).findActiveOverlappingWithAssociations(FROM,TO);
     verify(audienceLookup).memberTeamIds(7L,Set.of(10L,11L));
     verify(audienceLookup).memberProjectIds(7L,Set.of(20L,21L));
+    verify(roomReservationLookup).managedScheduleIds(org.mockito.ArgumentMatchers.any());
   }
 
   @Test
   void acceptsSchedulesThatCrossEitherPeriodBoundary() {
     ScheduleRepository repository = mock(ScheduleRepository.class);
     ScheduleAudienceLookup audienceLookup = mock(ScheduleAudienceLookup.class);
-    ScheduleQueryService service = new ScheduleQueryService(repository, audienceLookup);
+    ScheduleRoomReservationLookup roomReservationLookup = mock(ScheduleRoomReservationLookup.class);
+    ScheduleQueryService service = new ScheduleQueryService(repository, audienceLookup,
+        roomReservationLookup);
     Schedule crossingStart = schedule(7L,ScheduleType.PERSONAL,List.of(),List.of(),List.of());
     when(repository.findActiveOverlappingWithAssociations(FROM,TO))
         .thenReturn(List.of(crossingStart));
     when(audienceLookup.memberTeamIds(7L,Set.of())).thenReturn(Set.of());
     when(audienceLookup.memberProjectIds(7L,Set.of())).thenReturn(Set.of());
+    when(roomReservationLookup.managedScheduleIds(org.mockito.ArgumentMatchers.any()))
+        .thenReturn(Set.of());
 
     assertThat(service.query(ScheduleQuery.of(7L,FROM,TO))).hasSize(1);
+  }
+
+  @Test
+  void looksUpRoomManagedScheduleIdsInOneBatchRatherThanOncePerSchedule() {
+    ScheduleRepository repository = mock(ScheduleRepository.class);
+    ScheduleAudienceLookup audienceLookup = mock(ScheduleAudienceLookup.class);
+    ScheduleRoomReservationLookup roomReservationLookup = mock(ScheduleRoomReservationLookup.class);
+    ScheduleQueryService service = new ScheduleQueryService(repository, audienceLookup,
+        roomReservationLookup);
+    Schedule creatorSchedule = spy(
+        schedule(7L,ScheduleType.PERSONAL,List.of(),List.of(),List.of()));
+    Schedule reservationSchedule = spy(
+        schedule(1L,ScheduleType.PERSONAL,List.of(7L),List.of(),List.of()));
+    when(creatorSchedule.getId()).thenReturn(201L);
+    when(reservationSchedule.getId()).thenReturn(202L);
+    when(repository.findActiveOverlappingWithAssociations(FROM,TO))
+        .thenReturn(List.of(creatorSchedule,reservationSchedule));
+    when(audienceLookup.memberTeamIds(7L,Set.of())).thenReturn(Set.of());
+    when(audienceLookup.memberProjectIds(7L,Set.of())).thenReturn(Set.of());
+    when(roomReservationLookup.managedScheduleIds(List.of(201L,202L))).thenReturn(Set.of(202L));
+
+    assertThat(service.query(ScheduleQuery.of(7L,FROM,TO))).hasSize(2);
+
+    verify(roomReservationLookup).managedScheduleIds(List.of(201L,202L));
+    verify(roomReservationLookup,never()).isManagedSchedule(org.mockito.ArgumentMatchers.anyLong());
   }
 
   @Test

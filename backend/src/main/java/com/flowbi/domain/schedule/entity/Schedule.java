@@ -159,7 +159,9 @@ public class Schedule {
   }
 
   public int attendeeCount() {
-    return participants.size() + (creatorAttends ? 1 : 0);
+    boolean creatorIsParticipant = participants.stream()
+        .anyMatch(participant -> participant.getUserId() == creatorId);
+    return participants.size() + (creatorAttends && !creatorIsParticipant ? 1 : 0);
   }
 
   public List<ScheduleTarget> getTargets() {

@@ -8,6 +8,7 @@ import com.flowbi.domain.schedule.exception.*;
 import com.flowbi.domain.schedule.repository.*;
 
 import com.flowbi.domain.schedule.port.ScheduleAudienceLookup;
+import com.flowbi.domain.schedule.port.ScheduleRoomReservationLookup;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Set;
@@ -22,12 +23,14 @@ public class ScheduleQueryService {
 
   private final ScheduleRepository scheduleRepository;
   private final ScheduleAudienceLookup audienceLookup;
+  private final ScheduleRoomReservationLookup roomReservationLookup;
   private final ScheduleAccessPolicy accessPolicy = new ScheduleAccessPolicy();
 
   public ScheduleQueryService(ScheduleRepository scheduleRepository,
-      ScheduleAudienceLookup audienceLookup) {
+      ScheduleAudienceLookup audienceLookup, ScheduleRoomReservationLookup roomReservationLookup) {
     this.scheduleRepository = scheduleRepository;
     this.audienceLookup = audienceLookup;
+    this.roomReservationLookup = roomReservationLookup;
   }
 
   @Transactional(readOnly = true)
@@ -35,8 +38,13 @@ public class ScheduleQueryService {
     List<Schedule> schedules = scheduleRepository
         .findActiveOverlappingWithAssociations(query.from(),query.to());
     AudienceMembership membership = audienceMembership(query.actorId(),schedules);
-    return schedules.stream().filter(schedule -> accessPolicy.isVisible(schedule,query.actorId(),
-        membership.teamIds(),membership.projectIds())).map(this::toListItem).toList();
+    Set<Long> managedScheduleIds = roomReservationLookup.managedScheduleIds(
+        schedules.stream().map(Schedule::getId).filter(java.util.Objects::nonNull).toList());
+    return schedules.stream()
+        .filter(schedule -> accessPolicy.isVisible(schedule,query.actorId(),membership.teamIds(),
+            membership.projectIds(),
+            schedule.getId() != null && managedScheduleIds.contains(schedule.getId())))
+        .map(this::toListItem).toList();
   }
 
   private AudienceMembership audienceMembership(long actorId,List<Schedule> schedules) {

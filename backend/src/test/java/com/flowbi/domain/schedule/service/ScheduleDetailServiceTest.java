@@ -23,28 +23,34 @@ import org.junit.jupiter.api.Test;
 class ScheduleDetailServiceTest {
 
   @Test
-  void returnsTargetsAndServerComputedManagementPermissionToAnExplicitParticipant() {
+  void returnsNamedParticipantsForRoomManagedSchedules() {
     ScheduleRepository repository = mock(ScheduleRepository.class);
     ScheduleAudienceLookup audienceLookup = mock(ScheduleAudienceLookup.class);
     ScheduleRoomReservationLookup roomReservationLookup = mock(ScheduleRoomReservationLookup.class);
+    ScheduleIdentityService identityService = mock(ScheduleIdentityService.class);
     ScheduleDetailService service = new ScheduleDetailService(repository, audienceLookup,
-        roomReservationLookup);
+        roomReservationLookup, identityService);
     Schedule schedule = Schedule
         .create(ScheduleCreateCommand.of(1L,"Private review",ScheduleType.PERSONAL,
             ScheduleVisibility.PRIVATE,OffsetDateTime.parse("2026-08-10T09:00:00+09:00"),
             OffsetDateTime.parse("2026-08-10T10:00:00+09:00"),false,ScheduleColorLabel.BLUE,
             "confidential","Room A",true,List.of(7L),List.of(8L),List.of(),List.of()));
     when(repository.findActiveByIdWithAssociations(100L)).thenReturn(Optional.of(schedule));
+    when(roomReservationLookup.isManagedSchedule(100L)).thenReturn(true);
+    when(identityService.findUserDisplayNames(List.of(7L)))
+        .thenReturn(List.of(new AttendeeCandidate(7L, "Attendee")));
 
     ScheduleDetailResponse result = service.find(7L,100L);
 
     assertThat(result.content()).isEqualTo("confidential");
     assertThat(result.location()).isEqualTo("Room A");
     assertThat(result.participantIds()).containsExactly(7L);
+    assertThat(result.participants()).containsExactly(new AttendeeCandidate(7L, "Attendee"));
+    assertThat(result.attendeeCount()).isEqualTo(2);
     assertThat(result.userTargetIds()).containsExactly(8L);
     assertThat(result.teamTargetIds()).isEmpty();
     assertThat(result.projectTargetIds()).isEmpty();
-    assertThat(result.meetingRoomManaged()).isFalse();
+    assertThat(result.meetingRoomManaged()).isTrue();
     assertThat(result.canManage()).isFalse();
   }
 
@@ -53,14 +59,16 @@ class ScheduleDetailServiceTest {
     ScheduleRepository repository = mock(ScheduleRepository.class);
     ScheduleAudienceLookup audienceLookup = mock(ScheduleAudienceLookup.class);
     ScheduleRoomReservationLookup roomReservationLookup = mock(ScheduleRoomReservationLookup.class);
+    ScheduleIdentityService identityService = mock(ScheduleIdentityService.class);
     ScheduleDetailService service = new ScheduleDetailService(repository, audienceLookup,
-        roomReservationLookup);
+        roomReservationLookup, identityService);
     Schedule schedule = Schedule
         .create(ScheduleCreateCommand.of(1L,"Creator schedule",ScheduleType.PERSONAL,
             ScheduleVisibility.PRIVATE,OffsetDateTime.parse("2026-08-10T09:00:00+09:00"),
             OffsetDateTime.parse("2026-08-10T10:00:00+09:00"),false,ScheduleColorLabel.BLUE,null,
             null,false,List.of(),List.of(),List.of(),List.of()));
     when(repository.findActiveByIdWithAssociations(100L)).thenReturn(Optional.of(schedule));
+    when(identityService.findUserDisplayNames(List.of())).thenReturn(List.of());
 
     ScheduleDetailResponse result = service.find(1L,100L);
 
@@ -73,8 +81,9 @@ class ScheduleDetailServiceTest {
     ScheduleRepository repository = mock(ScheduleRepository.class);
     ScheduleAudienceLookup audienceLookup = mock(ScheduleAudienceLookup.class);
     ScheduleRoomReservationLookup roomReservationLookup = mock(ScheduleRoomReservationLookup.class);
+    ScheduleIdentityService identityService = mock(ScheduleIdentityService.class);
     ScheduleDetailService service = new ScheduleDetailService(repository, audienceLookup,
-        roomReservationLookup);
+        roomReservationLookup, identityService);
     Schedule schedule = Schedule
         .create(ScheduleCreateCommand.of(1L,"Room schedule",ScheduleType.PERSONAL,
             ScheduleVisibility.PRIVATE,OffsetDateTime.parse("2026-08-10T09:00:00+09:00"),
@@ -82,6 +91,7 @@ class ScheduleDetailServiceTest {
             null,false,List.of(),List.of(),List.of(),List.of()));
     when(repository.findActiveByIdWithAssociations(100L)).thenReturn(Optional.of(schedule));
     when(roomReservationLookup.isManagedSchedule(100L)).thenReturn(true);
+    when(identityService.findUserDisplayNames(List.of())).thenReturn(List.of());
 
     ScheduleDetailResponse result = service.find(1L,100L);
 
@@ -90,12 +100,23 @@ class ScheduleDetailServiceTest {
   }
 
   @Test
+  void doesNotCountTheCreatorTwiceWhenTheCreatorIsAlsoAParticipant() {
+    Schedule schedule = Schedule.create(ScheduleCreateCommand.of(1L,"Team",ScheduleType.TEAM,
+        ScheduleVisibility.TEAM,OffsetDateTime.parse("2026-08-10T09:00:00+09:00"),
+        OffsetDateTime.parse("2026-08-10T10:00:00+09:00"),false,ScheduleColorLabel.BLUE,null,null,
+        true,List.of(1L),List.of(),List.of(10L),List.of()));
+
+    assertThat(schedule.attendeeCount()).isEqualTo(1);
+  }
+
+  @Test
   void returnsTheSameSafeNotFoundForMissingAndHiddenSchedules() {
     ScheduleRepository repository = mock(ScheduleRepository.class);
     ScheduleAudienceLookup audienceLookup = mock(ScheduleAudienceLookup.class);
     ScheduleRoomReservationLookup roomReservationLookup = mock(ScheduleRoomReservationLookup.class);
+    ScheduleIdentityService identityService = mock(ScheduleIdentityService.class);
     ScheduleDetailService service = new ScheduleDetailService(repository, audienceLookup,
-        roomReservationLookup);
+        roomReservationLookup, identityService);
     Schedule hidden = Schedule.create(ScheduleCreateCommand.of(1L,"Hidden",ScheduleType.TEAM,
         ScheduleVisibility.TEAM,OffsetDateTime.parse("2026-08-10T09:00:00+09:00"),
         OffsetDateTime.parse("2026-08-10T10:00:00+09:00"),false,ScheduleColorLabel.BLUE,null,null,

@@ -29,6 +29,10 @@ describe('calendar visual refinement', () => {
   beforeEach(() => {
     cy.intercept('GET', '/api/auth/session', { authenticated: true, mustChangePassword: false })
     cy.intercept('GET', '/api/schedules?*', [])
+    cy.intercept('GET', '/api/schedules/target-options', {
+      teams: [{ id: 10, name: '플랫폼팀' }],
+      projects: [],
+    })
   })
 
   it('emphasizes the current period and keeps desktop header controls aligned', () => {
@@ -189,6 +193,8 @@ describe('calendar visual refinement', () => {
       location: '',
       creatorAttends: true,
       participantIds: [],
+      participants: [],
+      attendeeCount: 1,
       userTargetIds: [],
       teamTargetIds: [10],
       projectTargetIds: [],
@@ -284,6 +290,8 @@ describe('calendar visual refinement', () => {
       location: '',
       creatorAttends: true,
       participantIds: [],
+      participants: [],
+      attendeeCount: 1,
       userTargetIds: [],
       teamTargetIds: [10],
       projectTargetIds: [],

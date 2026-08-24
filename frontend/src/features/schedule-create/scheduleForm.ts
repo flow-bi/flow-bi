@@ -70,6 +70,7 @@ export function formatNextDayOffset(date: string): string {
 }
 
 export function toScheduleRequest(values: ScheduleFormValues) {
+  const isPersonal = values.type === 'PERSONAL'
   return {
     title: values.title.trim(),
     type: values.type,
@@ -83,10 +84,10 @@ export function toScheduleRequest(values: ScheduleFormValues) {
     content: values.content.trim(),
     location: values.location.trim(),
     creatorAttends: values.creatorAttends,
-    participantIds: values.participantIds,
-    userTargetIds: values.userTargetIds,
-    teamTargetIds: values.teamTargetIds,
-    projectTargetIds: values.projectTargetIds,
+    participantIds: isPersonal ? [] : values.participantIds,
+    userTargetIds: isPersonal ? [] : values.userTargetIds,
+    teamTargetIds: isPersonal ? [] : values.teamTargetIds,
+    projectTargetIds: isPersonal ? [] : values.projectTargetIds,
   }
 }
 
