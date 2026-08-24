@@ -24,6 +24,7 @@ describe('productionMeetingRoomGateway', () => {
       title: '계약 검증',
       startAt: '2026-08-10T09:00:00',
       endAt: '2026-08-10T10:00:00',
+      creatorAttends: true,
       attendeeIds: [10, 11],
       description: '설명',
     })
@@ -33,6 +34,7 @@ describe('productionMeetingRoomGateway', () => {
       title: '수정',
       startAt: '2026-08-10T10:00:00',
       endAt: '2026-08-10T11:00:00',
+      creatorAttends: false,
       attendeeIds: [10],
       description: '',
     })
@@ -51,11 +53,11 @@ describe('productionMeetingRoomGateway', () => {
       ],
     ])
     for (const [, options] of fetch.mock.calls.slice(1, 3)) {
-      expect(JSON.parse((options as RequestInit).body as string)).not.toHaveProperty('userId')
-      expect(JSON.parse((options as RequestInit).body as string)).not.toHaveProperty('role')
-      expect(JSON.parse((options as RequestInit).body as string)).not.toHaveProperty(
-        'reservationId',
-      )
+      const body = JSON.parse((options as RequestInit).body as string) as Record<string, unknown>
+      expect(body).toHaveProperty('creatorAttends')
+      expect(body).not.toHaveProperty('userId')
+      expect(body).not.toHaveProperty('role')
+      expect(body).not.toHaveProperty('reservationId')
     }
   })
 
@@ -95,6 +97,34 @@ describe('productionMeetingRoomGateway', () => {
       '/api/schedules/attendee-candidates?query=%EA%B9%80%20%ED%95%98%EB%8A%98',
       expect.objectContaining({ credentials: 'include' }),
     )
+  })
+
+  it('maps the backend editable flag to the frontend edit permission', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            reservationId: 5,
+            roomId: 1,
+            title: '소유한 예약',
+            startAt: '2026-08-10T09:00:00',
+            endAt: '2026-08-10T10:00:00',
+            creatorAttends: true,
+            attendeeIds: [10],
+            attendees: [{ userId: 10, displayName: '김하늘' }],
+            description: '',
+            editable: true,
+          }),
+          { status: 200 },
+        ),
+      ),
+    )
+
+    await expect(productionMeetingRoomGateway.getReservationForEdit?.(5)).resolves.toMatchObject({
+      reservationId: 5,
+      canEdit: true,
+    })
   })
 
   it('cancels with a same-origin empty DELETE request and maps cancellation errors', async () => {

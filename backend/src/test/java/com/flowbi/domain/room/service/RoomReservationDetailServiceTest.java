@@ -75,6 +75,30 @@ class RoomReservationDetailServiceTest {
         new RoomReservationDetailResponse.Attendee(11L, "Lee"));
   }
 
+  @Test
+  void separatesTheCreatorAttendanceChoiceFromTheSearchableAttendees() {
+    RoomReservation reservation = mock(RoomReservation.class);
+    when(reservationRepository.findById(2L)).thenReturn(Optional.of(reservation));
+    when(reservation.getScheduleId()).thenReturn(20L);
+    when(reservation.getId()).thenReturn(2L);
+    when(reservation.getRoom()).thenReturn(mock(com.flowbi.domain.room.entity.Room.class));
+    when(reservation.getRoom().getId()).thenReturn(3L);
+    when(reservation.getTitle()).thenReturn("Planning");
+    when(reservation.getStatus())
+        .thenReturn(com.flowbi.domain.room.entity.ReservationStatus.RESERVED);
+    when(scheduleModificationService.findReservationScheduleDetails(20L))
+        .thenReturn(Optional.of(new ReservationScheduleDetails(10L, "Plan", List.of(10L,12L))));
+    when(scheduleIdentityService.findUserDisplayNames(List.of(12L)))
+        .thenReturn(List.of(new AttendeeCandidate(12L, "Kim")));
+
+    var response = service.findOwnedReservation(10L,2L);
+
+    assertThat(response.creatorAttends()).isTrue();
+    assertThat(response.attendeeIds()).containsExactly(12L);
+    assertThat(response.attendees())
+        .containsExactly(new RoomReservationDetailResponse.Attendee(12L, "Kim"));
+  }
+
   private void assertNotFound(Long reservationId) {
     assertThatThrownBy(() -> service.findOwnedReservation(10L,reservationId))
         .isInstanceOf(RoomReservationApplicationException.class)

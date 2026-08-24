@@ -110,6 +110,34 @@ class ScheduleDetailServiceTest {
   }
 
   @Test
+  void exposesAnActiveReservationCancellationReferenceOnlyToItsOwner() {
+    ScheduleRepository repository = mock(ScheduleRepository.class);
+    ScheduleAudienceLookup audienceLookup = mock(ScheduleAudienceLookup.class);
+    ScheduleRoomReservationLookup roomReservationLookup = mock(ScheduleRoomReservationLookup.class);
+    ScheduleIdentityService identityService = mock(ScheduleIdentityService.class);
+    ScheduleDetailService service = new ScheduleDetailService(repository, audienceLookup,
+        roomReservationLookup, identityService);
+    Schedule schedule = Schedule
+        .create(ScheduleCreateCommand.of(1L,"Room schedule",ScheduleType.PERSONAL,
+            ScheduleVisibility.PRIVATE,OffsetDateTime.parse("2026-08-10T09:00:00+09:00"),
+            OffsetDateTime.parse("2026-08-10T10:00:00+09:00"),false,ScheduleColorLabel.BLUE,null,
+            null,false,List.of(2L),List.of(),List.of(),List.of()));
+    when(repository.findActiveByIdWithAssociations(100L)).thenReturn(Optional.of(schedule));
+    when(roomReservationLookup.isManagedSchedule(100L)).thenReturn(true);
+    when(roomReservationLookup.findActiveReservationIdOwnedBy(100L,1L))
+        .thenReturn(Optional.of(77L));
+    when(identityService.findUserDisplayNames(List.of(2L))).thenReturn(List.of());
+
+    ScheduleDetailResponse ownerResult = service.find(1L,100L);
+    ScheduleDetailResponse otherResult = service.find(2L,100L);
+
+    assertThat(ownerResult.roomReservationId()).isEqualTo(77L);
+    assertThat(ownerResult.canCancelRoomReservation()).isTrue();
+    assertThat(otherResult.roomReservationId()).isNull();
+    assertThat(otherResult.canCancelRoomReservation()).isFalse();
+  }
+
+  @Test
   void returnsTheSameSafeNotFoundForMissingAndHiddenSchedules() {
     ScheduleRepository repository = mock(ScheduleRepository.class);
     ScheduleAudienceLookup audienceLookup = mock(ScheduleAudienceLookup.class);

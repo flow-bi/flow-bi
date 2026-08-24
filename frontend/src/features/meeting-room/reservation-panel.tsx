@@ -272,6 +272,14 @@ export function ReservationPanel({
               {errors.endTime}
             </p>
           ) : null}
+          <label className="flex items-center gap-2">
+            <input
+              checked={values.creatorAttends}
+              onChange={(event) => setValues({ ...values, creatorAttends: event.target.checked })}
+              type="checkbox"
+            />
+            등록자도 참석
+          </label>
           <fieldset
             aria-describedby={errors.attendeeIds ? 'reservation-attendees-error' : undefined}
           >

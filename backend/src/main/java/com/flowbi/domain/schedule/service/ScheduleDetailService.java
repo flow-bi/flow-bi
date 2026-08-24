@@ -51,6 +51,9 @@ public class ScheduleDetailService {
     }
     java.util.List<Long> participantIds = schedule.getParticipants().stream()
         .map(ScheduleParticipant::getUserId).toList();
+    Long roomReservationId = meetingRoomManaged && schedule.getCreatorId() == actorId
+        ? roomReservationLookup.findActiveReservationIdOwnedBy(scheduleId,actorId).orElse(null)
+        : null;
     return new ScheduleDetailResponse(schedule.getId(), schedule.getTitle(),
         schedule.getStartAt().atZoneSameInstant(DISPLAY_ZONE).toOffsetDateTime(),
         schedule.getEndAt().atZoneSameInstant(DISPLAY_ZONE).toOffsetDateTime(), schedule.isAllDay(),
@@ -60,7 +63,8 @@ public class ScheduleDetailService {
         identityService.findUserDisplayNames(participantIds), schedule.attendeeCount(),
         targetIds(schedule,ScheduleTargetType.USER).stream().toList(), teamIds.stream().toList(),
         projectIds.stream().toList(), meetingRoomManaged,
-        schedule.getCreatorId() == actorId && !meetingRoomManaged);
+        schedule.getCreatorId() == actorId && !meetingRoomManaged, roomReservationId,
+        roomReservationId != null);
   }
 
   private Set<Long> targetIds(Schedule schedule,ScheduleTargetType targetType) {

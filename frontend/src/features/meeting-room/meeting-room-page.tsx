@@ -291,6 +291,7 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
       date: reservation.startAt.slice(0, 10),
       startTime: reservation.startAt.slice(11, 16),
       endTime: reservation.endAt.slice(11, 16),
+      creatorAttends: reservation.creatorAttends ?? false,
       attendeeIds: reservation.attendeeIds,
       attendees: reservation.attendees,
       description: reservation.description,
@@ -661,7 +662,7 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
               <button
                 ref={cancelActionRef}
                 type="button"
-                className="rounded bg-(--color-danger) px-4 py-2 text-white disabled:opacity-60"
+                className="rounded bg-red-700 px-4 py-2 text-white disabled:opacity-60"
                 onClick={() => void cancelReservation()}
                 disabled={isCancelling}
               >

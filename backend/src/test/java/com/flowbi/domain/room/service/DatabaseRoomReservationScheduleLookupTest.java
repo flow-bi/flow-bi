@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 
 import com.flowbi.domain.room.repository.RoomReservationRepository;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
@@ -28,5 +29,16 @@ class DatabaseRoomReservationScheduleLookupTest {
     var lookup = new DatabaseRoomReservationScheduleLookup(reservations);
 
     assertThat(lookup.managedScheduleIds(List.of(10L,11L,12L))).isEqualTo(Set.of(10L,12L));
+  }
+
+  @Test
+  void returnsOnlyAnActiveReservationReferenceForAValidActor() {
+    RoomReservationRepository reservations = mock(RoomReservationRepository.class);
+    when(reservations.findActiveReservationIdByScheduleId(10L)).thenReturn(Optional.of(25L));
+    var lookup = new DatabaseRoomReservationScheduleLookup(reservations);
+
+    assertThat(lookup.findActiveReservationIdOwnedBy(10L,1L)).contains(25L);
+    assertThat(lookup.findActiveReservationIdOwnedBy(10L,0L)).isEmpty();
+    assertThat(lookup.findActiveReservationIdOwnedBy(0L,1L)).isEmpty();
   }
 }

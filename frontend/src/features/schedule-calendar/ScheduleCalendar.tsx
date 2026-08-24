@@ -16,6 +16,7 @@ import {
   getScheduleDetail as getScheduleDetailRequest,
   getSchedules as getSchedulesRequest,
   cancelSchedule as cancelScheduleRequest,
+  cancelRoomReservation as cancelRoomReservationRequest,
   updateSchedule as updateScheduleRequest,
   type ScheduleDetail,
   type ScheduleSummary,
@@ -70,6 +71,7 @@ export interface ScheduleCalendarProps {
   cancelSchedule?: (id: number) => Promise<void>
   searchAttendees?: (query: string) => Promise<AttendeeCandidate[]>
   getTargetOptions?: () => Promise<ScheduleTargetOptions>
+  cancelRoomReservation?: (reservationId: number) => Promise<void>
   onCreateSchedule?: () => void
   now?: () => Date
 }
@@ -221,19 +223,28 @@ function DayTimeline({
   )
 }
 
-function apiErrorText(error: unknown, action: 'update' | 'cancel'): string {
+function apiErrorText(
+  error: unknown,
+  action: 'update' | 'cancel' | 'roomReservationCancel',
+): string {
   const status = (error as { status?: number } | undefined)?.status
   if (status === 401) {
     return '로그인이 만료되었습니다. 다시 로그인해 주세요.'
   }
   if (status === 403) {
-    return `이 일정을 ${action === 'cancel' ? '취소' : '수정'}할 권한이 없습니다.`
+    return action === 'roomReservationCancel'
+      ? '이 예약을 취소할 권한이 없습니다.'
+      : `이 일정을 ${action === 'cancel' ? '취소' : '수정'}할 권한이 없습니다.`
   }
   if (status === 404) {
-    return '일정을 찾을 수 없습니다. 목록을 새로고침해 주세요.'
+    return action === 'roomReservationCancel'
+      ? '예약을 찾을 수 없습니다. 목록을 새로고침해 주세요.'
+      : '일정을 찾을 수 없습니다. 목록을 새로고침해 주세요.'
   }
   if (status === 409) {
-    return '회의실 예약 관리 일정입니다. 회의실 예약 취소 흐름을 사용해 주세요.'
+    return action === 'roomReservationCancel'
+      ? '예약 취소 중 충돌이 발생했습니다. 목록을 새로고침한 뒤 다시 시도해 주세요.'
+      : '회의실 예약 관리 일정입니다. 회의실 예약 취소 흐름을 사용해 주세요.'
   }
   return '네트워크 오류가 발생했습니다. 기존 일정은 유지됩니다. 다시 시도해 주세요.'
 }
@@ -251,7 +262,7 @@ function DetailModal({
   canManage: boolean
   onClose: () => void
   onEdit: () => void
-  onCancel: () => void
+  onCancel: (trigger: HTMLButtonElement) => void
   error: string | null
   hasConfirmation: boolean
 }) {
@@ -260,6 +271,8 @@ function DetailModal({
   const attendeeCount = detail.attendeeCount ?? participants.length + Number(detail.creatorAttends)
   useEffect(() => {
     closeRef.current?.focus()
+  }, [])
+  useEffect(() => {
     const escape = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !hasConfirmation) {
         onClose()
@@ -320,12 +333,7 @@ function DetailModal({
             )}
           </div>
         </section>
-        {detail.meetingRoomManaged && (
-          <>
-            <p className="font-bold text-orange-800">회의실 예약에서 관리하는 일정입니다.</p>
-            <p>회의실 예약 취소 흐름을 사용해 주세요.</p>
-          </>
-        )}
+        {detail.meetingRoomManaged}
         {error && <p role="alert">{error}</p>}
         {canManage && !detail.meetingRoomManaged && (
           <div className="mt-6 flex flex-wrap justify-end gap-3">
@@ -334,13 +342,26 @@ function DetailModal({
             </button>
             <button
               className="rounded-lg border border-red-700 bg-red-700 px-3 py-2 font-semibold text-white focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-2"
-              onClick={onCancel}
+              onClick={(event) => onCancel(event.currentTarget)}
               type="button"
             >
               일정 취소
             </button>
           </div>
         )}
+        {detail.meetingRoomManaged &&
+          detail.canCancelRoomReservation &&
+          detail.roomReservationId !== null && (
+            <div className="mt-6 flex flex-wrap justify-end gap-3">
+              <button
+                className="rounded-lg border border-red-700 bg-red-700 px-3 py-2 font-semibold text-white focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-2"
+                onClick={(event) => onCancel(event.currentTarget)}
+                type="button"
+              >
+                예약 취소
+              </button>
+            </div>
+          )}
       </section>
     </div>
   )
@@ -721,6 +742,7 @@ export function ScheduleCalendar({
   cancelSchedule = cancelScheduleRequest,
   searchAttendees = searchAttendeesRequest,
   getTargetOptions = getScheduleTargetOptionsRequest,
+  cancelRoomReservation = cancelRoomReservationRequest,
   onCreateSchedule,
   now = () => new Date(),
 }: ScheduleCalendarProps) {
@@ -734,6 +756,8 @@ export function ScheduleCalendar({
   const scheduleTrigger = useRef<HTMLElement | null>(null)
   const selectedDateTrigger = useRef<HTMLButtonElement | null>(null)
   const cancellationFocusFallback = useRef<HTMLButtonElement | null>(null)
+  const cancellationTrigger = useRef<HTMLButtonElement | null>(null)
+  const cancellationSubmitted = useRef(false)
   const cancelCloseRef = useRef<HTMLButtonElement>(null)
   const queryClient = useQueryClient()
   const period = getCalendarPeriod(state.view, state.date)
@@ -763,8 +787,10 @@ export function ScheduleCalendar({
     onError: (error) => setActionError(apiErrorText(error, 'update')),
   })
   const cancelMutation = useMutation({
-    mutationFn: (id: number) => cancelSchedule(id),
+    mutationFn: ({ id, kind }: { id: number; kind: 'schedule' | 'roomReservation' }) =>
+      kind === 'roomReservation' ? cancelRoomReservation(id) : cancelSchedule(id),
     onSuccess: () => {
+      cancellationSubmitted.current = false
       if (selectedSchedule !== null) {
         queryClient.setQueryData<ScheduleSummary[]>(scheduleListQueryKey, (schedules) =>
           schedules?.filter((schedule) => schedule.id !== selectedSchedule),
@@ -773,15 +799,28 @@ export function ScheduleCalendar({
       if (selectedSchedule !== null) {
         queryClient.removeQueries({ queryKey: ['schedule-detail', selectedSchedule] })
       }
+      void queryClient.invalidateQueries({ queryKey: ['schedules'] })
+      void queryClient.invalidateQueries({ queryKey: ['schedule-detail'] })
+      void queryClient.invalidateQueries({ queryKey: ['meeting-room'] })
       setCancelConfirmation(false)
       setActionError(null)
-      setNotice('일정이 취소되었습니다.')
+      setNotice(
+        detailQuery.data?.meetingRoomManaged
+          ? '회의실 예약과 연결 일정이 취소되었습니다.'
+          : '일정이 취소되었습니다.',
+      )
       closeDetail()
       window.setTimeout(() => cancellationFocusFallback.current?.focus(), 0)
     },
-    onError: (error) => {
+    onError: (error, variables) => {
+      cancellationSubmitted.current = false
       setCancelConfirmation(false)
-      setActionError(apiErrorText(error, 'cancel'))
+      setActionError(
+        apiErrorText(
+          error,
+          variables.kind === 'roomReservation' ? 'roomReservationCancel' : 'cancel',
+        ),
+      )
     },
   })
 
@@ -795,19 +834,6 @@ export function ScheduleCalendar({
     window.addEventListener('popstate', popstate)
     return () => window.removeEventListener('popstate', popstate)
   }, [now])
-  useEffect(() => {
-    if (!cancelConfirmation) {
-      return
-    }
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setCancelConfirmation(false)
-      }
-    }
-    document.addEventListener('keydown', escape)
-    return () => document.removeEventListener('keydown', escape)
-  }, [cancelConfirmation])
-
   const daySchedules = (schedulesQuery.data ?? []).filter(
     (schedule) => selectedDate && scheduleOnDate(schedule, selectedDate),
   )
@@ -826,6 +852,10 @@ export function ScheduleCalendar({
   const closeDatePanel = () => {
     setSelectedDate(null)
     window.setTimeout(() => selectedDateTrigger.current?.focus(), 0)
+  }
+  const dismissCancellation = () => {
+    setCancelConfirmation(false)
+    window.setTimeout(() => cancellationTrigger.current?.focus(), 0)
   }
   const errorStatus = (schedulesQuery.error as { status?: number } | undefined)?.status
   const errorText =
@@ -1046,7 +1076,10 @@ export function ScheduleCalendar({
           canManage={detailQuery.data.canManage}
           error={actionError}
           hasConfirmation={cancelConfirmation}
-          onCancel={() => setCancelConfirmation(true)}
+          onCancel={(trigger) => {
+            cancellationTrigger.current = trigger
+            setCancelConfirmation(true)
+          }}
           onClose={closeDetail}
           onEdit={() => {
             setActionError(null)
@@ -1071,30 +1104,53 @@ export function ScheduleCalendar({
       {detailQuery.data && cancelConfirmation && (
         <ConfirmationDialog
           closeButtonRef={cancelCloseRef}
-          description="취소한 일정은 캘린더와 상세에서 사라집니다."
+          description={
+            detailQuery.data.meetingRoomManaged
+              ? '취소한 예약과 연결된 일정이 함께 취소되어 캘린더와 회의실 예약 현황에서 사라집니다.'
+              : '취소한 일정은 캘린더와 상세에서 사라집니다.'
+          }
           footer={
             <>
               <button
                 className={confirmationSecondaryActionClass}
                 disabled={cancelMutation.isPending}
-                onClick={() => setCancelConfirmation(false)}
+                onClick={dismissCancellation}
                 type="button"
               >
-                계속 일정 보기
+                {detailQuery.data.meetingRoomManaged ? '계속 예약 보기' : '계속 일정 보기'}
               </button>
               <button
                 className={confirmationDangerActionClass}
                 disabled={cancelMutation.isPending}
-                onClick={() => cancelMutation.mutate(detailQuery.data.id)}
+                onClick={() => {
+                  if (cancellationSubmitted.current) {
+                    return
+                  }
+                  cancellationSubmitted.current = true
+                  cancelMutation.mutate(
+                    detailQuery.data.meetingRoomManaged
+                      ? {
+                          id: detailQuery.data.roomReservationId as number,
+                          kind: 'roomReservation',
+                        }
+                      : { id: detailQuery.data.id, kind: 'schedule' },
+                  )
+                }}
                 type="button"
               >
-                {cancelMutation.isPending ? '일정 취소 중' : '일정 취소 확정'}
+                {cancelMutation.isPending
+                  ? detailQuery.data.meetingRoomManaged
+                    ? '예약 취소 중'
+                    : '일정 취소 중'
+                  : detailQuery.data.meetingRoomManaged
+                    ? '예약 취소 확정'
+                    : '일정 취소 확정'}
               </button>
             </>
           }
           isCloseDisabled={cancelMutation.isPending}
-          onDismiss={() => setCancelConfirmation(false)}
-          title={`${detailQuery.data.title} 취소`}
+          onDismiss={dismissCancellation}
+          title={`${detailQuery.data.title}${detailQuery.data.meetingRoomManaged ? ' 예약' : ''} 취소`}
           titleId="cancel-title"
         />
       )}

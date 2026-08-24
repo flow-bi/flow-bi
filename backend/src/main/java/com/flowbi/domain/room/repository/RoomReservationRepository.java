@@ -60,6 +60,13 @@ public interface RoomReservationRepository
   @Query("select reservation.scheduleId from RoomReservation reservation where reservation.scheduleId in :scheduleIds")
   List<Long> findScheduleIdsIn(@Param("scheduleIds") Collection<Long> scheduleIds);
 
+  @Query("""
+      select reservation.id from RoomReservation reservation
+      where reservation.scheduleId = :scheduleId
+        and reservation.status = com.flowbi.domain.room.entity.ReservationStatus.RESERVED
+      """)
+  Optional<Long> findActiveReservationIdByScheduleId(@Param("scheduleId") long scheduleId);
+
   RoomReservation save(RoomReservation reservation);
 
   long count();

@@ -11,6 +11,7 @@ export interface ReservationFormValues {
   date: string
   startTime: string
   endTime: string
+  creatorAttends: boolean
   attendeeIds: number[]
   attendees?: RoomReservationAttendee[]
   description: string
@@ -28,6 +29,7 @@ export function initialReservationValuesFromSearch({
     date,
     startTime,
     endTime,
+    creatorAttends: false,
     attendeeIds: [],
     description: '',
   }
@@ -45,10 +47,11 @@ export function validateReservationForm(
     errors.date = '예약 날짜를 선택해 주세요.'
   }
   Object.assign(errors, validateMeetingTimes(values.startTime, values.endTime))
-  if (values.attendeeIds.length === 0) {
+  const attendeeCount = values.attendeeIds.length + Number(values.creatorAttends)
+  if (attendeeCount === 0) {
     errors.attendeeIds = '참석자를 한 명 이상 추가해 주세요.'
   }
-  if (values.attendeeIds.length > capacity) {
+  if (attendeeCount > capacity) {
     errors.attendeeIds = `참석자 수가 회의실 수용 인원(${capacity}명)을 초과했습니다.`
   }
   return errors
@@ -63,6 +66,7 @@ export function toReservationCommand(
     title: values.title.trim(),
     startAt: `${values.date}T${values.startTime}:00`,
     endAt: `${values.date}T${values.endTime}:00`,
+    creatorAttends: values.creatorAttends,
     attendeeIds: [...new Set(values.attendeeIds)],
     description: values.description.trim(),
   }

@@ -44,6 +44,7 @@ export interface CreateRoomReservationCommand {
   title: string
   startAt: string
   endAt: string
+  creatorAttends?: boolean
   attendeeIds: number[]
   description: string
 }
@@ -74,10 +75,15 @@ export interface EditableRoomReservation {
   title: string
   startAt: string
   endAt: string
+  creatorAttends?: boolean
   attendeeIds: number[]
   attendees: RoomReservationAttendee[]
   description: string
   canEdit: boolean
+}
+
+type RoomReservationDetailResponse = Omit<EditableRoomReservation, 'canEdit'> & {
+  editable: boolean
 }
 
 export interface MeetingRoomGateway {
@@ -189,6 +195,7 @@ function requestBody(command: CreateRoomReservationCommand): string {
     title: command.title,
     startAt: command.startAt,
     endAt: command.endAt,
+    creatorAttends: command.creatorAttends ?? false,
     attendeeIds: command.attendeeIds,
     description: command.description,
   })
@@ -231,8 +238,13 @@ export const productionMeetingRoomGateway: MeetingRoomGateway = {
       headers: { 'Content-Type': 'application/json' },
       body: requestBody(command),
     }),
-  getReservationForEdit: (reservationId) =>
-    requestJson<EditableRoomReservation>(`/api/room-reservations/${reservationId}`),
+  getReservationForEdit: async (reservationId) => {
+    const response = await requestJson<RoomReservationDetailResponse>(
+      `/api/room-reservations/${reservationId}`,
+    )
+    const { editable, ...reservation } = response
+    return { ...reservation, canEdit: editable }
+  },
   updateReservation: ({ reservationId, ...command }) =>
     requestJson<UpdateRoomReservationResult>(`/api/room-reservations/${reservationId}`, {
       method: 'PUT',

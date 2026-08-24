@@ -44,12 +44,12 @@ function validateCommand(
   if (
     !room ||
     command.startAt >= command.endAt ||
-    command.attendeeIds.length === 0 ||
+    command.attendeeIds.length + Number(command.creatorAttends ?? false) === 0 ||
     command.attendeeIds.some((attendeeId) => !Number.isInteger(attendeeId) || attendeeId < 1)
   ) {
     throw new MeetingRoomGatewayError('ROOM_RESERVATION_INVALID')
   }
-  if (new Set(command.attendeeIds).size > room.capacity) {
+  if (new Set(command.attendeeIds).size + Number(command.creatorAttends ?? false) > room.capacity) {
     throw new MeetingRoomGatewayError('ROOM_CAPACITY_EXCEEDED')
   }
   if (
@@ -107,6 +107,7 @@ export function createDevelopmentMeetingRoomGateway(): MeetingRoomGateway {
         title: '제품 검토',
         startAt: `${date}T10:00:00`,
         endAt: `${date}T11:00:00`,
+        creatorAttends: false,
         attendeeIds: [1],
         attendees: [attendeeCandidates[0]],
         description: '개발용 샘플 예약',

@@ -26,6 +26,8 @@ export interface ScheduleDetail extends ScheduleSummary {
   projectTargetIds: number[]
   meetingRoomManaged: boolean
   canManage: boolean
+  roomReservationId: number | null
+  canCancelRoomReservation: boolean
 }
 
 export interface UpdateScheduleRequest {
@@ -114,6 +116,19 @@ export async function cancelSchedule(id: number): Promise<void> {
     const body = (await response.json().catch(() => null)) as { message?: string } | null
     throw new ScheduleCalendarApiError(
       body?.message ?? '일정을 취소하지 못했습니다.',
+      response.status,
+    )
+  }
+}
+
+export async function cancelRoomReservation(reservationId: number): Promise<void> {
+  const response = await authenticatedFetch(`/api/room-reservations/${reservationId}`, {
+    method: 'DELETE',
+  })
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as { message?: string } | null
+    throw new ScheduleCalendarApiError(
+      body?.message ?? '회의실 예약을 취소하지 못했습니다.',
       response.status,
     )
   }

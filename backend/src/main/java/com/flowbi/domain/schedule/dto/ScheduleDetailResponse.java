@@ -15,5 +15,6 @@ public record ScheduleDetailResponse(Long id, String title, OffsetDateTime start
     ScheduleColorLabel colorLabel, String content, String location, boolean creatorAttends,
     List<Long> participantIds, List<AttendeeCandidate> participants, int attendeeCount,
     List<Long> userTargetIds, List<Long> teamTargetIds, List<Long> projectTargetIds,
-    boolean meetingRoomManaged, boolean canManage) {
+    boolean meetingRoomManaged, boolean canManage, Long roomReservationId,
+    boolean canCancelRoomReservation) {
 }

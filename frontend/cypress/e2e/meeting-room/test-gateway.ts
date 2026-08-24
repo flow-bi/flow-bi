@@ -37,6 +37,7 @@ export function meetingRoomTestGateway({
       title: '제품 검토',
       startAt: '2026-08-07T10:00:00',
       endAt: '2026-08-07T11:00:00',
+      creatorAttends: false,
       attendeeIds: [1],
       attendees: [attendeeCandidates[0]],
       description: '초기 설명',

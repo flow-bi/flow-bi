@@ -69,6 +69,25 @@ class RoomReservationServiceTest {
   }
 
   @Test
+  void addsTheAuthenticatedCreatorToTheScheduleOnlyWhenRequested() {
+    RoomReservationService service = service();
+    when(roomRepository.findByIdForUpdate(1L))
+        .thenReturn(Optional.of(Room.of(1L,"Orchid",1L,"3F")));
+    when(scheduleCreationService.create(any())).thenReturn(new CreatedSchedule(31L));
+    when(reservationRepository.save(any())).thenAnswer(invocation -> RoomReservation.of(21L,
+        invocation.getArgument(0,RoomReservation.class).getRoom(),31L,"Planning",START,END,
+        com.flowbi.domain.room.entity.ReservationStatus.RESERVED));
+
+    service.create(ACTOR,new CreateRoomReservationCommand(1L, "Planning", START, END, List.of(),
+        true, "Discuss roadmap"));
+
+    ArgumentCaptor<com.flowbi.domain.schedule.service.CreateScheduleCommand> schedule = ArgumentCaptor
+        .forClass(com.flowbi.domain.schedule.service.CreateScheduleCommand.class);
+    verify(scheduleCreationService).create(schedule.capture());
+    assertThat(schedule.getValue().attendeeIds()).containsExactly(10L);
+  }
+
+  @Test
   void rejectsMissingActorAndInvalidTimeBeforeWriting() {
     RoomReservationService service = service();
 
