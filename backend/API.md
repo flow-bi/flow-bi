@@ -205,39 +205,53 @@ the session or Redis; it is resolved from the authoritative user store for each 
 
 ### 8.2 Users and Organization
 
-| Method   | Path                  | 목적                              |
-| -------- | --------------------- | --------------------------------- |
-| `GET`    | `/api/users`          | 직원 목록·검색                    |
-| `POST`   | `/api/users`          | 관리자 직원 등록                  |
-| `GET`    | `/api/users/{userId}` | 직원 조회                         |
-| `PUT`    | `/api/users/{userId}` | 관리자 직원 수정                  |
-| `DELETE` | `/api/users/{userId}` | 직원 삭제 또는 비활성화 요청      |
-| `GET`    | `/api/teams`          | 팀 목록 또는 조직도 조회          |
-| `POST`   | `/api/teams`          | 관리자 팀 생성                    |
-| `PATCH`  | `/api/teams/{teamId}/name` | 관리자 팀 이름 변경          |
-| `PUT`    | `/api/teams/{teamId}/parent` | 관리자 팀 이동              |
-| `DELETE` | `/api/teams/{teamId}` | 관리자 leaf 팀 삭제               |
+| Method   | Path                         | 목적                         |
+| -------- | ---------------------------- | ---------------------------- |
+| `GET`    | `/api/users`                 | 직원 목록·검색               |
+| `POST`   | `/api/users`                 | 관리자 직원 등록             |
+| `GET`    | `/api/users/{userId}`        | 직원 조회                    |
+| `PUT`    | `/api/users/{userId}`        | 관리자 직원 수정             |
+| `DELETE` | `/api/users/{userId}`        | 직원 삭제 또는 비활성화 요청 |
+| `GET`    | `/api/teams`                 | 팀 목록 또는 조직도 조회     |
+| `POST`   | `/api/teams`                 | 관리자 팀 생성               |
+| `PATCH`  | `/api/teams/{teamId}/name`   | 관리자 팀 이름 변경          |
+| `PUT`    | `/api/teams/{teamId}/parent` | 관리자 팀 이동               |
+| `DELETE` | `/api/teams/{teamId}`        | 관리자 leaf 팀 삭제          |
 
-직원·팀의 구체적인 삭제·비활성화 방식은 관련 Product Spec과 Design Doc에서 결정한다.
+직원과 팀은 물리 삭제하지 않으며 직원·팀 `DELETE` Endpoint를 제공하지 않는다. 직원 등록, 비밀번호 초기화와 계정 재활성화 요청은 임시 비밀번호를 받지 않는다. 서버가 CSPRNG로 대문자·소문자·숫자·특수문자를 포함한 20자 값을 생성하고 BCrypt 해시만 저장한다. 성공 응답은 다음 값을 한 번만 반환하며 `Cache-Control: no-store`를 적용한다.
+
+```json
+{
+  "userId": 1,
+  "temporaryPassword": "one-time-generated-value",
+  "mustChangePassword": true
+}
+```
+
+응답을 잃어버리면 평문을 복구하지 않고 비밀번호 초기화를 다시 요청한다. 비밀번호 초기화·계정 재활성화·비활성화·퇴직은 대상의 모든 기존 세션을 무효화한다. 퇴직 요청은 `employmentStatus=TERMINATED`만 허용하며 같은 트랜잭션에서 `accountStatus=INACTIVE`로 만든다. `TERMINATED`는 되돌릴 수 없다.
+
+`ADMIN`, `SYSTEM_ADMIN`, `HR_ADMIN` 중 하나라도 가진 대상을 변경하거나 비밀번호를 초기화하려면 `USER_MANAGE`와 `PRIVILEGED_ACCOUNT_MANAGE`를 모두 요구한다. 역할은 `ACTIVE + EMPLOYED` 대상에게만 부여한다. 동일 역할 재부여와 미보유 역할 회수는 멱등 성공이고 성공한 역할 변경은 대상의 모든 세션을 무효화한다. 마지막 `ACTIVE + EMPLOYED + ADMIN`의 역할 회수·비활성화·퇴직은 `409 Conflict`와 `LAST_ADMIN_REQUIRED`로 거부한다. 역할 변경 이력 Endpoint는 제공하지 않는다.
+
+팀 비활성화는 활성 사용자와 활성 하위 팀이 모두 없을 때만 성공한다. 그렇지 않으면 `409 Conflict`와 `TEAM_IN_USE`를 반환한다. 재활성화는 상위 팀이 없거나 활성 상태일 때만 허용하며 하위 팀과 사용자를 자동 재활성화하지 않는다.
 
 #### Team hierarchy API (FR-005 to FR-008, NFR-001)
 
 All team endpoints require an authenticated user. Read endpoints are available to every authenticated user. `POST`, `PATCH`, `PUT`, and `DELETE` additionally require the current server-provided `AuthenticatedUser.Role.ADMIN` and a valid CSRF token; request bodies never contain or establish the acting user or role.
 
-| Method | Path | Response |
-| --- | --- | --- |
-| `GET` | `/api/teams` | `200` list of direct team responses |
-| `GET` | `/api/teams/{teamId}` | `200` team response |
-| `GET` | `/api/teams/{teamId}/parent` | `200` direct parent, or `204` for a root |
-| `GET` | `/api/teams/{teamId}/children` | `200` direct-child list |
-| `GET` | `/api/teams/{teamId}/ancestors` | `200` ancestor list excluding self |
-| `GET` | `/api/teams/{teamId}/descendants` | `200` descendant list excluding self |
-| `GET` | `/api/teams/{teamId}/path` | `200` root-to-team path |
-| `GET` | `/api/teams/{teamId}/tree` | `200` requested subtree |
-| `POST` | `/api/teams` | `201` created team |
-| `PATCH` | `/api/teams/{teamId}/name` | `200` renamed team |
-| `PUT` | `/api/teams/{teamId}/parent` | `200` moved team |
-| `DELETE` | `/api/teams/{teamId}` | `204` |
+| Method   | Path                              | Response                                 |
+| -------- | --------------------------------- | ---------------------------------------- |
+| `GET`    | `/api/teams`                      | `200` list of direct team responses      |
+| `GET`    | `/api/teams/{teamId}`             | `200` team response                      |
+| `GET`    | `/api/teams/{teamId}/parent`      | `200` direct parent, or `204` for a root |
+| `GET`    | `/api/teams/{teamId}/children`    | `200` direct-child list                  |
+| `GET`    | `/api/teams/{teamId}/ancestors`   | `200` ancestor list excluding self       |
+| `GET`    | `/api/teams/{teamId}/descendants` | `200` descendant list excluding self     |
+| `GET`    | `/api/teams/{teamId}/path`        | `200` root-to-team path                  |
+| `GET`    | `/api/teams/{teamId}/tree`        | `200` requested subtree                  |
+| `POST`   | `/api/teams`                      | `201` created team                       |
+| `PATCH`  | `/api/teams/{teamId}/name`        | `200` renamed team                       |
+| `PUT`    | `/api/teams/{teamId}/parent`      | `200` moved team                         |
+| `DELETE` | `/api/teams/{teamId}`             | `204`                                    |
 
 `TeamCreateRequest` is `{ "teamName": "Platform", "parentTeamId": 1 }`; `parentTeamId` may be `null` for a root. `TeamNameUpdateRequest` is `{ "teamName": "Platform" }` and `TeamMoveRequest` is `{ "newParentTeamId": 1 }`, where `null` moves the team to the root. Names are trimmed, must be 1-50 non-control characters, and IDs must be positive when present. The normal response is `{ "teamId": 1, "teamName": "Platform", "parentTeamId": null }`.
 
@@ -247,13 +261,13 @@ Errors use `{ "code", "message", "fieldErrors" }` without internal exception det
 
 ### 8.3 Profile
 
-| Method  | Path                            | 목적                           |
-| ------- | ------------------------------- | ------------------------------ |
+| Method  | Path                            | 목적                                |
+| ------- | ------------------------------- | ----------------------------------- |
 | `GET`   | `/api/me`                       | 내 정보 조회 (마이페이지 확장 지점) |
-| `GET`   | `/api/me/header`                | 현재 인증 사용자의 이름만 조회 |
-| `PATCH` | `/api/me`                       | 이메일·전화번호·업무 상태 수정 |
-| `GET`   | `/api/me/notification-settings` | 알림 설정 조회                 |
-| `PUT`   | `/api/me/notification-settings` | 알림 설정 변경                 |
+| `GET`   | `/api/me/header`                | 현재 인증 사용자의 이름만 조회      |
+| `PATCH` | `/api/me`                       | 이메일·전화번호·업무 상태 수정      |
+| `GET`   | `/api/me/notification-settings` | 알림 설정 조회                      |
+| `PUT`   | `/api/me/notification-settings` | 알림 설정 변경                      |
 
 ### 8.4 Schedules
 
@@ -276,7 +290,10 @@ Errors use `{ "code", "message", "fieldErrors" }` without internal exception det
   "code": "SCHEDULE_PERSONAL_RELATIONS_FORBIDDEN",
   "message": "개인 일정에는 참석자 또는 사용자 공유 대상을 지정할 수 없습니다.",
   "fieldErrors": [
-    { "field": "participantIds", "message": "개인 일정에서는 빈 배열이어야 합니다." }
+    {
+      "field": "participantIds",
+      "message": "개인 일정에서는 빈 배열이어야 합니다."
+    }
   ]
 }
 ```
@@ -441,15 +458,15 @@ Calendar Core의 조회 경계 DTO는 검증 가능한 Actor ID를 명시적으�
 
 ### 8.5 Rooms and Reservations
 
-| Method | Path | 목적 |
-| --- | --- | --- |
-| `GET` | `/api/rooms` | 인증 사용자 회의실 목록·예약 현황 조회 |
-| `GET` | `/api/rooms/{roomId}` | 인증 사용자 회의실 상세 |
-| `GET` | `/api/room-reservations/{reservationId}` | 인증 사용자가 소유한 예약 수정 상세 |
-| `GET` | `/api/room-reservations?from=&to=` | 예약 현황 조회 |
-| `POST` | `/api/room-reservations` | 회의실 예약과 일정 생성 |
-| `PUT` | `/api/room-reservations/{reservationId}` | 예약 수정 |
-| `DELETE` | `/api/room-reservations/{reservationId}` | 예약과 연결 일정 취소(Soft Cancel) |
+| Method   | Path                                     | 목적                                   |
+| -------- | ---------------------------------------- | -------------------------------------- |
+| `GET`    | `/api/rooms`                             | 인증 사용자 회의실 목록·예약 현황 조회 |
+| `GET`    | `/api/rooms/{roomId}`                    | 인증 사용자 회의실 상세                |
+| `GET`    | `/api/room-reservations/{reservationId}` | 인증 사용자가 소유한 예약 수정 상세    |
+| `GET`    | `/api/room-reservations?from=&to=`       | 예약 현황 조회                         |
+| `POST`   | `/api/room-reservations`                 | 회의실 예약과 일정 생성                |
+| `PUT`    | `/api/room-reservations/{reservationId}` | 예약 수정                              |
+| `DELETE` | `/api/room-reservations/{reservationId}` | 예약과 연결 일정 취소(Soft Cancel)     |
 
 중복 예약은 `409 Conflict`와 안정적인 Error Code로 반환한다.
 
@@ -577,7 +594,26 @@ Calendar Core의 조회 경계 DTO는 검증 가능한 Actor ID를 명시적으�
 
 ### 8.6 Roles and Permissions
 
-관리 API 경로와 세부 기능은 RBAC Design Doc에서 확정한다. 일반 사용자 API와 분리된 권한을 요구한다.
+고정 역할과 권한은 다음과 같다. 역할 상속이나 `ADMIN` 우회는 없으며 최종 권한은 보유 역할에 명시적으로 매핑된 권한의 합집합이다.
+
+| 역할           | 권한                                                                                                                                                      |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ADMIN`        | `SYSTEM_MONITOR`, `ACCOUNT_STATUS_READ`, `THEME_MANAGE`, `ROOM_RESOURCE_MANAGE`, `USER_MANAGE`, `TEAM_MANAGE`, `ROLE_MANAGE`, `PRIVILEGED_ACCOUNT_MANAGE` |
+| `SYSTEM_ADMIN` | `SYSTEM_MONITOR`, `ACCOUNT_STATUS_READ`, `THEME_MANAGE`, `ROOM_RESOURCE_MANAGE`                                                                           |
+| `HR_ADMIN`     | `USER_MANAGE`, `TEAM_MANAGE`                                                                                                                              |
+
+시스템 운영 v1 Endpoint 계약은 다음 권한 경계를 사용한다. 상세 Request·Response Schema는 각 기능 구현 Active Plan에서 확정하되 반환 범위를 넓힐 수 없다.
+
+| Method          | Path                           | 목적                       | 권한                   |
+| --------------- | ------------------------------ | -------------------------- | ---------------------- |
+| `GET`           | `/api/system/status`           | 서비스 상태 조회           | `SYSTEM_MONITOR`       |
+| `GET`           | `/api/system/logs`             | 필터링된 시스템 로그 조회  | `SYSTEM_MONITOR`       |
+| `GET`           | `/api/system/errors`           | 오류 상태 조회             | `SYSTEM_MONITOR`       |
+| `GET`           | `/api/system/account-statuses` | 사번·계정·재직 상태만 조회 | `ACCOUNT_STATUS_READ`  |
+| `GET`, `PUT`    | `/api/system/theme`            | 회사 대표 테마 조회·변경   | `THEME_MANAGE`         |
+| 기능별 Endpoint | 회의실 사진·장비 자원          | 조회·변경                  | `ROOM_RESOURCE_MANAGE` |
+
+기능 토글, 임의 전역 설정, 직원·팀·비밀번호·역할 변경은 `SYSTEM_ADMIN` 범위가 아니다.
 
 ### 8.7 AI Assistant
 
@@ -623,7 +659,6 @@ AI 모델과 Action Routing이 미확정이므로 Endpoint를 아직 확정하�
 - 공통 성공 Envelope 사용 여부
 - Cursor와 Page Pagination 선택
 - Session Cookie 이름, `SameSite` 값과 CSRF Token 전달 방식
-- 직원·팀의 삭제·비활성화 정책과 관련 상태값 및 응답 DTO
 - 상세 DTO와 Error Code 목록
 
 ## Development employee account adapter
