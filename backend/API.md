@@ -288,6 +288,7 @@ Errors use `{ "code", "message", "fieldErrors" }` without internal exception det
 - `query`는 연속 공백을 단일 공백으로 정규화한 1~50자 문자열이어야 하며 이름 또는 사번의 부분 일치 검색어로 사용한다.
 - 결과는 최대 20건이며 서버가 정한 안정적인 순서로 반환한다.
 - 응답 항목은 `userId`, `displayName`만 포함하고 이메일, 전화번호, 조직 내 민감정보는 반환하지 않는다.
+- 현재 인증 사용자는 등록자 참석 여부를 나타내는 `creatorAttends`로 별도 관리하므로, 참석자 후보 결과에서 사용자 ID 기준으로 제외한다. 같은 이름의 다른 활성 사용자는 유지한다.
 - 현재 사용자가 일정 참석자로 지정할 수 없는 비활성·퇴사·접근 불가 사용자는 결과에서 제외한다.
 - 인증 주체가 없으면 `401 Unauthorized`, 팀·프로젝트 일정의 참석자 검색 권한이 없으면 `403 Forbidden`과 `SCHEDULE_ATTENDEE_SEARCH_FORBIDDEN`, 잘못된 검색어는 `400 Bad Request`를 반환한다. Client는 이 응답을 Loading·Empty·Error와 구분되는 Permission 상태로 표시한다.
 - 검색 결과가 없으면 빈 배열을 반환하며, 사용자 존재 여부를 오류 응답으로 구분해 노출하지 않는다.
