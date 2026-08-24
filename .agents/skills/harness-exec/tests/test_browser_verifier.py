@@ -27,6 +27,7 @@ if str(HARNESS_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(HARNESS_SCRIPTS))
 
 from harness_runner import cli, worker_gateway
+from harness_runner.models import ExecutionReport, TaskResult
 
 
 class BrowserVerifierTests(unittest.TestCase):
@@ -270,7 +271,7 @@ class BrowserVerifierTests(unittest.TestCase):
 
         def run_worker(_tasks, _request, *, call_worker):
             call_worker(invocation)
-            return mock.Mock(succeeded=True)
+            return ExecutionReport((TaskResult(1, "lifecycle", "succeeded"),))
 
         with (
             mock.patch.object(cli, "parse_invocation", return_value=mock.Mock()),
@@ -296,6 +297,11 @@ class BrowserVerifierTests(unittest.TestCase):
                 side_effect=run_worker,
             ),
             mock.patch.object(cli, "invoke_task") as invoke_task,
+            mock.patch.object(
+                cli,
+                "publish_report",
+                return_value=mock.Mock(page_url="https://notion.example/report"),
+            ),
             mock.patch.object(
                 cli,
                 "complete_plan",

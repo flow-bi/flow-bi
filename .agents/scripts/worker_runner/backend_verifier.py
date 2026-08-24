@@ -45,6 +45,12 @@ class FormatterScope:
     forbidden_paths: tuple[Path, ...]
 
 
+@dataclass
+class _InFlightVerification:
+    completed: threading.Event
+    result: BackendVerificationResult | None = None
+
+
 class BackendVerifierClientError(RuntimeError):
     """Worker가 부모의 Backend 검증기를 호출할 수 없을 때 발생한다."""
 
@@ -118,6 +124,8 @@ class BackendVerifier:
         self._token = secrets.token_urlsafe(32)
         self._formatter_tokens: dict[str, FormatterScope] = {}
         self._execution_lock = threading.Lock()
+        self._in_flight_lock = threading.Lock()
+        self._in_flight: dict[tuple[object, ...], _InFlightVerification] = {}
         self._server: ThreadingHTTPServer | None = None
         self._server_thread: threading.Thread | None = None
 
@@ -195,42 +203,77 @@ class BackendVerifier:
                 targets.append(target)
         return tuple(targets)
 
-    def _format_java(self, targets: tuple[Path, ...]) -> BackendVerificationResult | None:
-        if not self._execution_lock.acquire(blocking=False):
-            return None
+    def _run_single_flight(
+        self,
+        key: tuple[object, ...],
+        operation: Callable[[], BackendVerificationResult],
+    ) -> BackendVerificationResult | None:
+        with self._in_flight_lock:
+            in_flight = self._in_flight.get(key)
+            if in_flight is not None:
+                is_owner = False
+            elif not self._execution_lock.acquire(blocking=False):
+                return None
+            else:
+                in_flight = _InFlightVerification(threading.Event())
+                self._in_flight[key] = in_flight
+                is_owner = True
+
+        if not is_owner:
+            in_flight.completed.wait()
+            if in_flight.result is None:
+                return BackendVerificationResult(1, "Backend 검증 실행이 완료되지 않았습니다.")
+            return in_flight.result
+
         try:
-            with tempfile.TemporaryDirectory(prefix="flow-bi-spotless-") as temporary:
-                workspace = Path(temporary) / "backend"
-                try:
-                    self._create_formatter_workspace(workspace, targets)
-                    result = self._runner(
-                        [str(workspace / self._wrapper_name), "spotlessApply", "--no-daemon"],
-                        cwd=workspace,
-                        env=self._subprocess_environment(),
-                        timeout=DEFAULT_FORMATTER_TIMEOUT_SECONDS,
-                        text=True,
-                        encoding="utf-8",
-                        errors="replace",
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.STDOUT,
-                        check=False,
-                    )
-                except subprocess.TimeoutExpired as error:
-                    return BackendVerificationResult(124, _output_from_timeout(error), timed_out=True)
-                except (OSError, shutil.Error) as error:
-                    return BackendVerificationResult(
-                        1,
-                        self._process_start_failure("Backend Java formatter", error),
-                    )
-                if result.returncode != 0:
-                    return BackendVerificationResult(result.returncode, result.stdout or "")
-                try:
-                    self._apply_formatted_targets(workspace, targets)
-                except OSError:
-                    return BackendVerificationResult(1, "포맷 결과를 안전하게 반영할 수 없습니다.")
-                return BackendVerificationResult(0, result.stdout or "")
+            try:
+                in_flight.result = operation()
+            except Exception:
+                in_flight.result = BackendVerificationResult(1, "Backend 검증 실행 중 예외가 발생했습니다.")
+            return in_flight.result
         finally:
-            self._execution_lock.release()
+            with self._in_flight_lock:
+                self._execution_lock.release()
+                self._in_flight.pop(key, None)
+                in_flight.completed.set()
+
+    def _format_java(self, targets: tuple[Path, ...]) -> BackendVerificationResult | None:
+        return self._run_single_flight(
+            ("format-java", *(str(target) for target in targets)),
+            lambda: self._format_java_once(targets),
+        )
+
+    def _format_java_once(self, targets: tuple[Path, ...]) -> BackendVerificationResult:
+        with tempfile.TemporaryDirectory(prefix="flow-bi-spotless-") as temporary:
+            workspace = Path(temporary) / "backend"
+            try:
+                self._create_formatter_workspace(workspace, targets)
+                result = self._runner(
+                    [str(workspace / self._wrapper_name), "spotlessApply", "--no-daemon"],
+                    cwd=workspace,
+                    env=self._subprocess_environment(),
+                    timeout=DEFAULT_FORMATTER_TIMEOUT_SECONDS,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired as error:
+                return BackendVerificationResult(124, _output_from_timeout(error), timed_out=True)
+            except (OSError, shutil.Error) as error:
+                return BackendVerificationResult(
+                    1,
+                    self._process_start_failure("Backend Java formatter", error),
+                )
+            if result.returncode != 0:
+                return BackendVerificationResult(result.returncode, result.stdout or "")
+            try:
+                self._apply_formatted_targets(workspace, targets)
+            except OSError:
+                return BackendVerificationResult(1, "포맷 결과를 안전하게 반영할 수 없습니다.")
+            return BackendVerificationResult(0, result.stdout or "")
 
     def _subprocess_environment(self) -> dict[str, str]:
         environment = os.environ.copy()
@@ -281,32 +324,32 @@ class BackendVerifier:
                 staged.unlink(missing_ok=True)
 
     def _verify_gradle(self, arguments: tuple[str, ...]) -> BackendVerificationResult | None:
-        if not self._execution_lock.acquire(blocking=False):
-            return None
+        return self._run_single_flight(
+            ("gradle", *arguments), lambda: self._verify_gradle_once(arguments)
+        )
+
+    def _verify_gradle_once(self, arguments: tuple[str, ...]) -> BackendVerificationResult:
         try:
-            try:
-                result = self._runner(
-                    [str(self._gradlew), *arguments],
-                    cwd=self._backend_directory,
-                    env=self._subprocess_environment(),
-                    timeout=self._timeout,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace",
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    check=False,
-                )
-            except subprocess.TimeoutExpired as error:
-                return BackendVerificationResult(124, _output_from_timeout(error), timed_out=True)
-            except OSError as error:
-                return BackendVerificationResult(
-                    1,
-                    self._process_start_failure("Backend Gradle", error),
-                )
-            return BackendVerificationResult(result.returncode, result.stdout or "")
-        finally:
-            self._execution_lock.release()
+            result = self._runner(
+                [str(self._gradlew), *arguments],
+                cwd=self._backend_directory,
+                env=self._subprocess_environment(),
+                timeout=self._timeout,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as error:
+            return BackendVerificationResult(124, _output_from_timeout(error), timed_out=True)
+        except OSError as error:
+            return BackendVerificationResult(
+                1,
+                self._process_start_failure("Backend Gradle", error),
+            )
+        return BackendVerificationResult(result.returncode, result.stdout or "")
 
     def _process_start_failure(self, operation: str, error: OSError) -> str:
         error_code = getattr(error, "winerror", None) or error.errno
