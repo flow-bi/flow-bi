@@ -66,8 +66,8 @@ class ScheduleController {
   @Operation(summary = "일정 참석자 후보 검색")
   @GetMapping("/attendee-candidates")
   AttendeeCandidates attendees(@RequestParam String query,Authentication authentication) {
-    actorId(authentication);
-    return new AttendeeCandidates(identityService.searchActiveUsers(query));
+    long actorId = actorId(authentication);
+    return new AttendeeCandidates(identityService.searchActiveUsers(query,actorId));
   }
 
   @Operation(summary = "일정 대상 선택지 조회")

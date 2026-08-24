@@ -32,18 +32,19 @@ public class JdbcScheduleIdentityAdapter {
     }
   }
 
-  public List<AttendeeCandidate> searchActiveUsers(String rawQuery) {
+  public List<AttendeeCandidate> searchActiveUsers(String rawQuery,long actorId) {
     String query = normalizeQuery(rawQuery);
     return jdbcTemplate.query("""
         SELECT user_id, name
         FROM users
-        WHERE status = 'ACTIVE' AND (LOWER(name) LIKE ? OR LOWER(employee_number) LIKE ?)
+        WHERE status = 'ACTIVE' AND user_id <> ?
+            AND (LOWER(name) LIKE ? OR LOWER(employee_number) LIKE ?)
         ORDER BY name ASC, user_id ASC
         LIMIT 20
         """,
         (resultSet,rowNumber) -> new AttendeeCandidate(resultSet.getLong("user_id"),
             resultSet.getString("name")),
-        "%" + query.toLowerCase() + "%","%" + query.toLowerCase() + "%");
+        actorId,"%" + query.toLowerCase() + "%","%" + query.toLowerCase() + "%");
   }
 
   public List<AttendeeCandidate> findUserDisplayNames(List<Long> userIds) {
