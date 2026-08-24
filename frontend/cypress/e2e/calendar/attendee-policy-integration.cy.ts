@@ -11,6 +11,7 @@ const teamSummary = {
 interface ScheduleWritePayload {
   type: string
   visibility: string
+  creatorAttends: boolean
   participantIds: number[]
   userTargetIds: number[]
 }
@@ -59,6 +60,49 @@ describe('calendar attendee policy integration', () => {
     cy.get('input[type="date"]').type('2026-08-12')
     cy.contains('button', '일정 저장').click()
     cy.wait('@createPersonal')
+  })
+
+  it('does not offer the creator as another attendee when searching for a namesake', () => {
+    cy.viewport(390, 844)
+    interceptSessionAndSchedules([])
+    cy.intercept('GET', '/api/schedules/target-options', {
+      teams: [{ id: 10, name: '플랫폼팀' }],
+      projects: [],
+    }).as('getTargetOptions')
+    // The API contract excludes the authenticated creator (201) by ID while retaining a namesake.
+    cy.intercept('GET', '**/api/schedules/attendee-candidates?*', {
+      body: {
+        data: [{ userId: 202, displayName: '김민지' }],
+      },
+    }).as('searchCreatorAndNamesake')
+    cy.intercept('POST', '/api/schedules', (request) => {
+      const body = request.body as ScheduleWritePayload
+      expect(body).to.include({ type: 'TEAM', visibility: 'TEAM', creatorAttends: true })
+      expect(body.participantIds).to.deep.equal([202])
+      expect(body.userTargetIds).to.deep.equal([])
+      request.reply({ statusCode: 201, body: {} })
+    }).as('createTeam')
+
+    cy.visit('/?view=month&date=2026-08-10')
+    cy.contains('button', '일정 추가').click()
+    cy.contains('label', '일정 유형').find('select').select('TEAM')
+    cy.wait('@getTargetOptions')
+    cy.contains('label', '플랫폼팀').find('input').check()
+    cy.contains('label', '등록자도 참석').find('input').focus().should('be.focused').check()
+    cy.contains('label', '참석자 검색').find('input').focus().should('be.focused').type('김민지')
+    cy.wait('@searchCreatorAndNamesake')
+
+    cy.contains('자동 참석 인원: 1명').should('be.visible')
+    cy.get('button').filter(':contains("김민지 참석자로 추가")').should('have.length', 1)
+    cy.contains('button', '김민지 참석자로 추가').click()
+    cy.contains('자동 참석 인원: 2명').should('be.visible')
+    cy.get('#schedule-title').type('등록자 제외 참석자 검색')
+    cy.get('input[type="date"]').type('2026-08-12')
+    cy.contains('button', '일정 저장').click()
+    cy.wait('@createTeam')
+    cy.document().then((document) => {
+      expect(document.documentElement.scrollWidth).to.be.at.most(390)
+    })
   })
 
   it('edits team attendees by name or employee number and shows the saved names and count', () => {

@@ -54,6 +54,16 @@ class ScheduleUserIntegrationTest {
         new AttendeeCandidate(9602L, "User 9602"),new AttendeeCandidate(9601L, "User 9601"));
   }
 
+  @Test
+  void excludesOnlyTheActorFromActiveAttendeeSearchResults() {
+    insertUser(9701L,9711L,"ACTIVE","동명이인");
+    insertUser(9702L,9712L,"ACTIVE","동명이인");
+    insertUser(9703L,9713L,"INACTIVE","동명이인");
+
+    assertThat(adapter.searchActiveUsers("동명이인",9701L))
+        .containsExactly(new AttendeeCandidate(9702L, "동명이인"));
+  }
+
   private ScheduleCreateCommand command(long creatorId,List<Long> projectIds) {
     return ScheduleCreateCommand.of(creatorId,"Project",ScheduleType.PROJECT,
         ScheduleVisibility.PROJECT,OffsetDateTime.parse("2026-08-10T09:00:00+09:00"),
@@ -62,6 +72,10 @@ class ScheduleUserIntegrationTest {
   }
 
   private void insertUser(long userId,long teamId,String status) {
+    insertUser(userId,teamId,status,"User " + userId);
+  }
+
+  private void insertUser(long userId,long teamId,String status,String name) {
     jdbcTemplate.update("INSERT INTO positions (position_id, position_name) VALUES (?, ?)",userId,
         "Position " + userId);
     jdbcTemplate.update("INSERT INTO teams (team_id, team_name) VALUES (?, ?)",teamId,
@@ -70,6 +84,6 @@ class ScheduleUserIntegrationTest {
         INSERT INTO users (user_id, position_id, team_id, employee_number, email, name, status)
         VALUES (?, ?, ?, ?, ?, ?, ?)
         """,userId,userId,teamId,"user-integration-" + userId,
-        "user-integration-" + userId + "@example.test","User " + userId,status);
+        "user-integration-" + userId + "@example.test",name,status);
   }
 }

@@ -82,6 +82,20 @@ class ScheduleAttendeeControllerTest {
   }
 
   @Test
+  void excludesTheAuthenticatedCreatorWhileKeepingAnotherActiveUserWithTheSameName()
+      throws Exception {
+    insertUser(9361L,"ACTIVE","creator-9361","동명이인");
+    insertUser(9362L,"ACTIVE","colleague-9362","동명이인");
+
+    mockMvc
+        .perform(get("/api/schedules/attendee-candidates").with(user(principal(9361L)))
+            .session(authenticatedSession()).param("query","동명이인"))
+        .andExpect(status().isOk()).andExpect(jsonPath("$.data.length()").value(1))
+        .andExpect(jsonPath("$.data[0].userId").value(9362L))
+        .andExpect(jsonPath("$.data[0].displayName").value("동명이인"));
+  }
+
+  @Test
   void rejectsBlankAndOverlongQueries() throws Exception {
     insertUser(9401L,"ACTIVE","query-actor","Query Actor");
 
