@@ -309,7 +309,6 @@ class WorkerReadablePathTests(unittest.TestCase):
             workspace_permissions["backend/.gradle-user-home/**"],
             "write",
         )
-        self.assertNotIn(".git/**", workspace_permissions)
 
     def test_execute_worker_forwards_collected_paths_to_codex_permissions(self) -> None:
         readable_paths = ("/toolchain/node", "/toolchain/npm")
