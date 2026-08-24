@@ -23,10 +23,11 @@ export async function handleSubagentStart(
       parent_session_id: input.session_id,
       depth: parent ? parent.depth + 1 : 0,
       hierarchy_resolved: Boolean(parent),
-      worker: parent?.worker ?? "primary",
+      executor: parent?.executor ?? { kind: "primary", task_number: null },
       tree_version: parent ? parent.tree_version : TREE_VERSION,
       agent_type: input.agent_type,
       agent_id: input.agent_id,
+      run_id: parent?.run_id ?? null,
     };
     records.push({
       record_type: "agent_start",

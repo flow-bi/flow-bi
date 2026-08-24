@@ -3,7 +3,7 @@ import {
   commonRecord,
   isSyntheticPrompt,
   pendingForSession,
-  resolveWorker,
+  resolveExecutor,
 } from "./records.mjs";
 import { withStorage } from "./storage.mjs";
 
@@ -30,7 +30,7 @@ export async function handleUserPromptSubmit(
     return null;
 
   // 작업을 수행하는 worker의 종류를 확인
-  const worker = resolveWorker(environment);
+  const executor = resolveExecutor(environment);
 
   // 작업을 실행한 부모 세션의 ID 가져오기
   const parentSessionId = environment.FLOW_BI_PARENT_SESSION_ID || null;
@@ -56,7 +56,7 @@ export async function handleUserPromptSubmit(
       parent_session_id: parentSessionId,
 
       hierarchy_resolved: hierarchyResolved,
-      worker,
+      executor,
       tree_version: parent ? parent.tree_version : TREE_VERSION,
 
       run_id: environment.FLOW_BI_RUN_ID || null,
@@ -87,7 +87,7 @@ export async function handleStop(
         item.session_id === input.session_id &&
         item.turn_id === input.turn_id,
     );
-    if (index < 0 || pending[index].worker !== "primary") return {};
+    if (index < 0 || pending[index].executor?.kind !== "primary") return {};
 
     const state = pending[index];
 

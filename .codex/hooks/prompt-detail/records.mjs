@@ -1,11 +1,32 @@
 import { SUMMARY_REQUEST } from "./config.mjs";
 
 // 하네스가 명시적으로 전달한 worker 환경변수를 먼저 확인하고 없으면 primary
-export function resolveWorker(environment = process.env) {
-  if (["fe-worker", "be-worker"].includes(environment.FLOW_BI_WORKER)) {
-    return environment.FLOW_BI_WORKER;
+export class ExecutorValidationError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "ExecutorValidationError";
+    this.code = "INVALID_TASK_EXECUTOR";
   }
-  return "primary";
+}
+
+export function resolveExecutor(environment = process.env) {
+  const taskNumber = environment.FLOW_BI_TASK_NUMBER;
+  const runId = environment.FLOW_BI_RUN_ID;
+  if (taskNumber === undefined && !runId) {
+    return { kind: "primary", task_number: null };
+  }
+  if (typeof taskNumber !== "string" || !/^[1-9]\d*$/.test(taskNumber)) {
+    throw new ExecutorValidationError(
+      "Task executions require FLOW_BI_TASK_NUMBER as a positive integer",
+    );
+  }
+  const parsedTaskNumber = Number.parseInt(taskNumber, 10);
+  if (!Number.isSafeInteger(parsedTaskNumber)) {
+    throw new ExecutorValidationError(
+      "FLOW_BI_TASK_NUMBER must be a safe positive integer",
+    );
+  }
+  return { kind: "task", task_number: parsedTaskNumber };
 }
 
 // 훅이나 시스템이 생성하면 pass
@@ -28,6 +49,7 @@ export function pendingForSession(pending, sessionId) {
 export function commonRecord(state, occurredAt) {
   return {
     occurred_at: occurredAt,
+    run_id: state.run_id ?? null,
 
     context: {
       session_id: state.session_id,
@@ -41,7 +63,8 @@ export function commonRecord(state, occurredAt) {
       resolved: state.hierarchy_resolved,
     },
     executor: {
-      worker: state.worker,
+      kind: state.executor.kind,
+      task_number: state.executor.task_number,
       agent_type: state.agent_type ?? null,
     },
   };

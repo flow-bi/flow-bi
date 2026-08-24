@@ -3,7 +3,11 @@ import { pathToFileURL } from "node:url";
 import { runCli } from "./prompt-detail/cli.mjs";
 
 export { SUMMARY_REQUEST } from "./prompt-detail/config.mjs";
-export { isSyntheticPrompt, resolveWorker } from "./prompt-detail/records.mjs";
+export {
+  ExecutorValidationError,
+  isSyntheticPrompt,
+  resolveExecutor,
+} from "./prompt-detail/records.mjs";
 export {
   handleStop,
   handleUserPromptSubmit,

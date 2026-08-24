@@ -35,17 +35,27 @@ function contextFor(record) {
   };
 }
 
+function executorFor(record) {
+  return {
+    kind: record.executor?.kind === "task" ? "task" : "primary",
+    task_number:
+      Number.isSafeInteger(record.executor?.task_number) &&
+      record.executor.task_number > 0
+        ? record.executor.task_number
+        : null,
+    agent_type: record.executor?.agent_type ?? null,
+  };
+}
+
 function nodeFor(record, kind) {
   return {
     kind,
     id: nodeId(record),
     started_at: record.occurred_at ?? null,
     ended_at: null,
+    run_id: record.run_id ?? null,
     context: contextFor(record),
-    executor: {
-      worker: record.executor?.worker ?? "primary",
-      agent_type: record.executor?.agent_type ?? null,
-    },
+    executor: executorFor(record),
     request: { prompt: record.prompt ?? null },
     result: normalizedResult(null),
     children: [],
@@ -88,7 +98,7 @@ export function buildPromptDetailTree(records) {
     if (
       !parent &&
       entry.parentSessionId &&
-      (entry.node.kind === "agent" || entry.node.executor.worker !== "primary")
+      (entry.node.kind === "agent" || entry.node.executor.kind !== "primary")
     ) {
       parent = [...entries.values()]
         .filter(
@@ -110,7 +120,11 @@ export function buildPromptDetailTree(records) {
     }
 
     if (entry.node.kind === "agent") {
-      entry.node.executor.worker = parent.node.executor.worker;
+      entry.node.executor = {
+        ...parent.node.executor,
+        agent_type: entry.node.executor.agent_type,
+      };
+      entry.node.run_id = parent.node.run_id;
     }
     parent.node.children.push(entry.node);
   }
