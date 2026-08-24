@@ -51,8 +51,16 @@ BACKEND_VERIFICATION_GUIDANCE = (
     "Windows PowerShell에서는 "
     "`& $env:FLOW_BI_PYTHON_EXECUTABLE .agents/scripts/worker_runner/backend_verifier.py test`를 "
     "사용하십시오. 부모 서비스는 `test`, `spotlessCheck`, `build`, `assemble`, `compileJava`와 "
-    "안전한 `--tests` 필터만 허용하며 출력과 종료 코드를 반환합니다. 실패하면 로그를 분석해 "
-    "허용 범위 구현 또는 테스트를 수정한 뒤 같은 명령을 재실행하여 Green을 확인하십시오."
+    "안전한 `--tests` 필터만 허용하며 출력과 종료 코드를 반환합니다. shell 도구가 이 Backend "
+    "verifier 명령에 진행 중 상태 또는 실행 session을 반환하면 같은 verifier CLI를 새 shell 명령으로 "
+    "시작하지 마십시오. 기존 실행을 wait/poll하여 최종 종료 코드와 출력을 확인하십시오. 동일 "
+    "요청은 부모 verifier에서 single-flight로 결합됩니다. 이전 실행이 확정적으로 종료된 뒤에만, 실패 "
+    "원인을 수정했거나 명시적인 재검증이 필요한 경우에 같은 명령을 재실행하십시오. HTTP 429 등 실행 "
+    "중 충돌 응답만으로 필수 검증을 실패 처리하지 말고 기존 실행의 최종 결과를 먼저 확인하십시오. "
+    "최종 JSON에는 완료된 최신 검증 결과만 반영하고, 나중에 도착한 완료 결과와 모순되는 "
+    "`automated_verification` 또는 `decision`을 제출하지 마십시오. "
+    "실패하면 로그를 분석해 허용 범위 구현 또는 테스트를 수정한 뒤 같은 명령을 재실행하여 Green을 "
+    "확인하십시오."
 )
 
 BACKEND_FORMATTING_GUIDANCE = (

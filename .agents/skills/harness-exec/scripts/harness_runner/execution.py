@@ -363,17 +363,70 @@ def execute_workers(
         return ExecutionReport((failure,))
     _, plan_number = states._parts(request.plan_id)
     saved_plan = state_document.get(plan_number, {})
-    for task in plan.tasks:
-        record = saved_plan.get(f"task{task.number}")
-        if record and record["status"] == "succeeded":
+    if request.start_task_number is None:
+        for task in plan.tasks:
+            record = saved_plan.get(f"task{task.number}")
+            if record and record["status"] == "succeeded":
+                statuses[task.number] = "succeeded"
+                results[task.number] = TaskResult(
+                    task_number=task.number,
+                    title=task.title,
+                    status="succeeded",
+                    message="이전 실행의 완료 상태를 복원했습니다.",
+                    restored=True,
+                )
+    else:
+        for task in plan.tasks:
+            if task.number >= request.start_task_number:
+                continue
+            fingerprint = revision_fingerprint(
+                root,
+                request.plan_id,
+                task,
+                plan.common_prompt,
+            )
+            try:
+                prior_record = store.load(request.plan_id, task.number, fingerprint)
+            except EvidenceRecordError as error:
+                prior_record = None
+                failure_detail = str(error)
+            else:
+                failure_detail = "현재 Task 계약과 일치하는 기록이 없습니다."
+            if prior_record is None:
+                statuses[task.number] = "failed"
+                results[task.number] = TaskResult(
+                    task_number=task.number,
+                    title=task.title,
+                    status="failed",
+                    message=(
+                        "이전 PASS 실행 기록을 신뢰할 수 없습니다: "
+                        f"{failure_detail}"
+                    ),
+                )
+                states.update(
+                    request.plan_id,
+                    task,
+                    "failed",
+                    reason=results[task.number].message,
+                )
+                continue
             statuses[task.number] = "succeeded"
             results[task.number] = TaskResult(
                 task_number=task.number,
                 title=task.title,
                 status="succeeded",
-                message="이전 실행의 완료 상태를 복원했습니다.",
+                message="이전 PASS 실행 기록을 검증해 선행 Task를 복원했습니다.",
+                work_summary="이전 PASS 실행 기록을 재사용했습니다.",
                 restored=True,
             )
+
+        _block_failed_descendants(
+            tasks_by_number,
+            statuses,
+            results,
+            states,
+            request.plan_id,
+        )
     ready = [
         task.number
         for task in plan.tasks
