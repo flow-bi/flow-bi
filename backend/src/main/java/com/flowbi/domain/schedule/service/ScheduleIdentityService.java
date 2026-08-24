@@ -18,8 +18,8 @@ public class ScheduleIdentityService {
     identityAdapter.requireActiveActor(actorId);
   }
 
-  public List<AttendeeCandidate> searchActiveUsers(String query) {
-    return identityAdapter.searchActiveUsers(query);
+  public List<AttendeeCandidate> searchActiveUsers(String query,long actorId) {
+    return identityAdapter.searchActiveUsers(query,actorId);
   }
 
   public List<AttendeeCandidate> findUserDisplayNames(List<Long> userIds) {
