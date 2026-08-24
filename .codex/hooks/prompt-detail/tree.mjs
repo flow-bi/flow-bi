@@ -64,6 +64,19 @@ function nodeFor(record, kind) {
   };
 }
 
+function compareChildren(left, right) {
+  const leftTaskNumber = left.executor.task_number;
+  const rightTaskNumber = right.executor.task_number;
+  if (leftTaskNumber !== null && rightTaskNumber !== null && leftTaskNumber !== rightTaskNumber) {
+    return leftTaskNumber - rightTaskNumber;
+  }
+  if (leftTaskNumber !== null && rightTaskNumber === null) return -1;
+  if (leftTaskNumber === null && rightTaskNumber !== null) return 1;
+  const startedAt = (left.started_at ?? "").localeCompare(right.started_at ?? "");
+  if (startedAt !== 0) return startedAt;
+  return (left.run_id ?? "").localeCompare(right.run_id ?? "");
+}
+
 export function buildPromptDetailTree(records) {
   const tree = { schema_version: 1, roots: [], unresolved: [] };
   const entries = new Map();
@@ -132,6 +145,11 @@ export function buildPromptDetailTree(records) {
     }
     parent.node.children.push(entry.node);
   }
+
+  for (const entry of entries.values()) {
+    entry.node.children.sort(compareChildren);
+  }
+  tree.roots.sort(compareChildren);
 
   return tree;
 }
