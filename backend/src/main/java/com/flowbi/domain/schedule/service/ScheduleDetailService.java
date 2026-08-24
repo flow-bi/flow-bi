@@ -23,13 +23,16 @@ public class ScheduleDetailService {
   private final ScheduleRepository scheduleRepository;
   private final ScheduleAudienceLookup audienceLookup;
   private final ScheduleRoomReservationLookup roomReservationLookup;
+  private final ScheduleIdentityService identityService;
   private final ScheduleAccessPolicy accessPolicy = new ScheduleAccessPolicy();
 
   public ScheduleDetailService(ScheduleRepository scheduleRepository,
-      ScheduleAudienceLookup audienceLookup, ScheduleRoomReservationLookup roomReservationLookup) {
+      ScheduleAudienceLookup audienceLookup, ScheduleRoomReservationLookup roomReservationLookup,
+      ScheduleIdentityService identityService) {
     this.scheduleRepository = scheduleRepository;
     this.audienceLookup = audienceLookup;
     this.roomReservationLookup = roomReservationLookup;
+    this.identityService = identityService;
   }
 
   @Transactional(readOnly = true)
@@ -41,18 +44,20 @@ public class ScheduleDetailService {
         .orElseThrow(ScheduleNotFoundException::new);
     Set<Long> teamIds = targetIds(schedule,ScheduleTargetType.TEAM);
     Set<Long> projectIds = targetIds(schedule,ScheduleTargetType.PROJECT);
+    boolean meetingRoomManaged = roomReservationLookup.isManagedSchedule(scheduleId);
     if (!accessPolicy.isVisible(schedule,actorId,audienceLookup.memberTeamIds(actorId,teamIds),
-        audienceLookup.memberProjectIds(actorId,projectIds))) {
+        audienceLookup.memberProjectIds(actorId,projectIds),meetingRoomManaged)) {
       throw new ScheduleNotFoundException();
     }
-    boolean meetingRoomManaged = roomReservationLookup.isManagedSchedule(scheduleId);
+    java.util.List<Long> participantIds = schedule.getParticipants().stream()
+        .map(ScheduleParticipant::getUserId).toList();
     return new ScheduleDetailResponse(schedule.getId(), schedule.getTitle(),
         schedule.getStartAt().atZoneSameInstant(DISPLAY_ZONE).toOffsetDateTime(),
         schedule.getEndAt().atZoneSameInstant(DISPLAY_ZONE).toOffsetDateTime(), schedule.isAllDay(),
         schedule.getType(), schedule.getVisibility(), schedule.getColorLabel(),
         schedule.getDetail().getContent(), schedule.getDetail().getLocation(),
-        schedule.isCreatorAttends(),
-        schedule.getParticipants().stream().map(ScheduleParticipant::getUserId).toList(),
+        schedule.isCreatorAttends(), participantIds,
+        identityService.findUserDisplayNames(participantIds), schedule.attendeeCount(),
         targetIds(schedule,ScheduleTargetType.USER).stream().toList(), teamIds.stream().toList(),
         projectIds.stream().toList(), meetingRoomManaged,
         schedule.getCreatorId() == actorId && !meetingRoomManaged);

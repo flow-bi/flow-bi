@@ -12,7 +12,10 @@ import java.util.Set;
 final class ScheduleAccessPolicy {
 
   boolean isVisible(Schedule schedule,long actorId,Set<Long> memberTeamIds,
-      Set<Long> memberProjectIds) {
+      Set<Long> memberProjectIds,boolean meetingRoomManaged) {
+    if (schedule.getType() == ScheduleType.PERSONAL && !meetingRoomManaged) {
+      return schedule.getCreatorId() == actorId;
+    }
     return schedule.getCreatorId() == actorId || isParticipant(schedule,actorId)
         || isExplicitUserTarget(schedule,actorId)
         || hasTypeBasedAccess(schedule,memberTeamIds,memberProjectIds);

@@ -149,7 +149,10 @@ def execute_worker(
         forbidden_paths,
         output_path,
         executable,
-        readable_paths=collect_worker_readable_paths(environment),
+        readable_paths=collect_worker_readable_paths(
+            environment,
+            project_root=project_root,
+        ),
     )
 
     try:

@@ -19,6 +19,15 @@ const developmentRooms: Omit<RoomSummary, 'reservations'>[] = [
   { id: 2, name: '남산 회의실', capacity: 4, location: '2층', usesDefaultImage: true },
 ]
 
+const attendeeCandidates = [
+  { userId: 1, displayName: '김하늘' },
+  { userId: 2, displayName: '이바다' },
+]
+
+function attendeesFor(attendeeIds: number[]) {
+  return attendeeCandidates.filter(({ userId }) => attendeeIds.includes(userId))
+}
+
 function overlaps(
   candidate: Pick<CreateRoomReservationCommand, 'startAt' | 'endAt'>,
   existing: Pick<DevelopmentReservation, 'startAt' | 'endAt'>,
@@ -99,6 +108,7 @@ export function createDevelopmentMeetingRoomGateway(): MeetingRoomGateway {
         startAt: `${date}T10:00:00`,
         endAt: `${date}T11:00:00`,
         attendeeIds: [1],
+        attendees: [attendeeCandidates[0]],
         description: '개발용 샘플 예약',
         canEdit: true,
         displayStatus: 'IN_USE',
@@ -109,6 +119,7 @@ export function createDevelopmentMeetingRoomGateway(): MeetingRoomGateway {
   return {
     isReservationCreationAvailable: true,
     isReservationUpdateAvailable: true,
+    isReservationCancellationAvailable: true,
     findAvailability: (query) => {
       ensureInitialReservation(query.date)
       const queryPeriod =
@@ -133,6 +144,12 @@ export function createDevelopmentMeetingRoomGateway(): MeetingRoomGateway {
         rooms: rooms.filter((room) => matchesQuery(room, query)),
       })
     },
+    findAttendeeCandidates: (query) => {
+      const normalizedQuery = query.trim().replace(/\s+/g, ' ')
+      return Promise.resolve(
+        attendeeCandidates.filter(({ displayName }) => displayName.includes(normalizedQuery)),
+      )
+    },
     createReservation: (command) => {
       try {
         validateCommand(command, reservations)
@@ -145,7 +162,14 @@ export function createDevelopmentMeetingRoomGateway(): MeetingRoomGateway {
       const scheduleId = nextScheduleId++
       reservations = [
         ...reservations,
-        { ...command, reservationId, scheduleId, canEdit: true, displayStatus: 'UPCOMING' },
+        {
+          ...command,
+          attendees: attendeesFor(command.attendeeIds),
+          reservationId,
+          scheduleId,
+          canEdit: true,
+          displayStatus: 'UPCOMING',
+        },
       ]
       return Promise.resolve({ reservationId, scheduleId })
     },
@@ -174,13 +198,23 @@ export function createDevelopmentMeetingRoomGateway(): MeetingRoomGateway {
       }
       reservations = reservations.map((reservation) =>
         reservation.reservationId === command.reservationId
-          ? { ...reservation, ...command }
+          ? { ...reservation, ...command, attendees: attendeesFor(command.attendeeIds) }
           : reservation,
       )
       return Promise.resolve({
         reservationId: command.reservationId,
         scheduleId: current.scheduleId,
       })
+    },
+    cancelReservation: (reservationId) => {
+      const current = reservations.find((candidate) => candidate.reservationId === reservationId)
+      if (!current || !current.canEdit) {
+        return Promise.reject(new MeetingRoomGatewayError('ROOM_RESERVATION_NOT_FOUND'))
+      }
+      reservations = reservations.filter(
+        (reservation) => reservation.reservationId !== reservationId,
+      )
+      return Promise.resolve()
     },
   }
 }

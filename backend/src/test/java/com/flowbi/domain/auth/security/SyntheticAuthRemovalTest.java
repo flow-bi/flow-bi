@@ -35,6 +35,14 @@ class SyntheticAuthRemovalTest {
         .contains("Development account creation is not a migration or a startup fixture.");
   }
 
+  @Test
+  void attendeeSearchMigrationContainsNoAuthenticationOrAuthorizationData() throws IOException {
+    String migration = Files.readString(Path.of("src/main/resources/db/migration/"
+        + "V20260823081843_00__user_insert_calendar_attendee_test_data.sql"));
+
+    assertThat(migration).doesNotContain("user_credentials","password","role","token","session");
+  }
+
   @Configuration(proxyBeanMethods = false)
   static class EmptyConfiguration {
   }

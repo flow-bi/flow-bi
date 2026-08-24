@@ -16,10 +16,10 @@ import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
+import com.flowbi.test.H2SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
-@SpringBootTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
+@H2SpringBootTest
 class ScheduleUserIntegrationTest {
 
   @Autowired
@@ -43,6 +43,15 @@ class ScheduleUserIntegrationTest {
     ScheduleCreateCommand inaccessible = command(9502L,List.of(9510L));
     assertThatThrownBy(() -> adapter.validateForCreation(inaccessible))
         .isInstanceOf(InvalidScheduleReferenceException.class);
+  }
+
+  @Test
+  void resolvesOnlyDisplayNamesInTheRequestedAttendeeOrder() {
+    insertUser(9601L,9611L,"ACTIVE");
+    insertUser(9602L,9612L,"INACTIVE");
+
+    assertThat(adapter.findUserDisplayNames(List.of(9602L,9601L))).containsExactly(
+        new AttendeeCandidate(9602L, "User 9602"),new AttendeeCandidate(9601L, "User 9601"));
   }
 
   private ScheduleCreateCommand command(long creatorId,List<Long> projectIds) {

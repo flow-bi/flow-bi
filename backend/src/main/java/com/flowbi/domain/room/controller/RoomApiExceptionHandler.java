@@ -48,7 +48,8 @@ public class RoomApiExceptionHandler {
     return switch (code) {
       case "ROOM_NOT_FOUND", "ROOM_RESERVATION_NOT_FOUND" -> HttpStatus.NOT_FOUND;
       case "RESERVATION_PARTICIPANT_FORBIDDEN" -> HttpStatus.FORBIDDEN;
-      case "ROOM_CAPACITY_EXCEEDED", "ROOM_RESERVATION_CONFLICT", "ROOM_RESERVATION_NOT_EDITABLE" ->
+      case "ROOM_CAPACITY_EXCEEDED", "ROOM_RESERVATION_CONFLICT", "ROOM_RESERVATION_NOT_EDITABLE",
+          "ROOM_RESERVATION_CANCEL_CONFLICT" ->
         HttpStatus.CONFLICT;
       default -> HttpStatus.BAD_REQUEST;
     };
@@ -62,6 +63,7 @@ public class RoomApiExceptionHandler {
       case "ROOM_RESERVATION_CONFLICT" -> "선택한 시간에 회의실을 예약할 수 없습니다.";
       case "ROOM_RESERVATION_NOT_FOUND" -> "요청한 회의실 예약을 찾을 수 없습니다.";
       case "ROOM_RESERVATION_NOT_EDITABLE" -> "수정할 수 없는 회의실 예약입니다.";
+      case "ROOM_RESERVATION_CANCEL_CONFLICT" -> "회의실 예약을 취소할 수 없습니다.";
       default -> "회의실 예약 입력이 올바르지 않습니다.";
     };
   }

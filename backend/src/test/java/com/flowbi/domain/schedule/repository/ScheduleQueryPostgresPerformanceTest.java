@@ -43,6 +43,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @Import(ScheduleQueryPostgresPerformanceTest.CalendarPortConfiguration.class)
 class ScheduleQueryPostgresPerformanceTest {
 
+  private static final long FIXTURE_USER_ID = 9_900_001L;
   private static final OffsetDateTime FROM = OffsetDateTime.parse("2026-08-01T00:00:00+09:00");
   private static final OffsetDateTime TO = OffsetDateTime.parse("2026-09-01T00:00:00+09:00");
 
@@ -73,13 +74,13 @@ class ScheduleQueryPostgresPerformanceTest {
         .queryForObject("SELECT position_id FROM positions WHERE position_name = '사원'",Long.class);
     jdbcTemplate.update("""
         INSERT INTO users (user_id, position_id, team_id, employee_number, email, name, status)
-        VALUES (1, ?, ?, 'performance-fixture', 'performance-fixture@example.test',
+        VALUES (?, ?, ?, 'performance-fixture', 'performance-fixture@example.test',
           'Performance Fixture', 'ACTIVE')
-        """,positionId,teamId);
+        """,FIXTURE_USER_ID,positionId,teamId);
     jdbcTemplate.batchUpdate("""
         INSERT INTO schedules (title, schedule_type, visibility, start_at, end_at, creator_id,
         is_all_day, color_label, creator_attends)
-        VALUES (?, 'TEAM', 'TEAM', ?, ?, 1, false, 'BLUE', false)
+        VALUES (?, 'TEAM', 'TEAM', ?, ?, ?, false, 'BLUE', false)
         """,scheduleRows());
     jdbcTemplate.batchUpdate("""
         INSERT INTO schedule_targets (schedule_id, team_id, target_type)
@@ -123,6 +124,7 @@ class ScheduleQueryPostgresPerformanceTest {
       statement.setString(1,"Schedule " + index);
       statement.setObject(2,FROM.plusMinutes(index));
       statement.setObject(3,FROM.plusMinutes(index + 30));
+      statement.setLong(4,FIXTURE_USER_ID);
     });
   }
 

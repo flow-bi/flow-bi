@@ -4,7 +4,7 @@
 
 > **상태: Reviewed Baseline Draft**
 >
-> 이 문서는 초기 ERD를 기준으로 하되 승인된 인증 결정인 Redis 기반 서버 세션과 최초 로그인 비밀번호 변경 상태를 반영한다. 나머지 미검토 구조는 초기 기준선으로 유지한다.
+> 이 문서는 초기 ERD를 기준으로 하되 승인된 인증 결정인 Redis 기반 서버 세션과 최초 로그인 비밀번호 변경 상태, PostgreSQL 팀 계층 Migration을 반영한다. 나머지 미검토 구조는 초기 기준선으로 유지한다.
 
 인증 영역을 제외한 ERD의 명칭, 타입, 오탈자와 예비 필드는 원본 추적을 위해 그대로 기록한다. 실제 PostgreSQL Migration을 작성하기 전 별도 Schema Review와 승인이 필요하다.
 
@@ -54,30 +54,36 @@
 
 조직 계층의 팀을 관리한다.
 
-| 컬럼             | 타입          | 제약                                | 설명       |
-| ---------------- | ------------- | ----------------------------------- | ---------- |
-| `team_id`        | `BIGINT`      | PK                                  | 팀 ID      |
-| `parent_team_id` | `BIGINT`      | NULL                                | 상위 팀 ID |
-| `team_name`      | `VARCHAR(50)` | NOT NULL                            | 팀 이름    |
-| `status`         | `VARCHAR(30)` | NOT NULL                            | 팀 상태    |
-| `created_at`     | `TIMESTAMPTZ` | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 생성일시   |
-| `updated_at`     | `TIMESTAMPTZ` | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 수정일시   |
+| 컬럼             | PostgreSQL 타입            | 제약                                        | 설명       |
+| ---------------- | -------------------------- | ------------------------------------------- | ---------- |
+| `team_id`        | `BIGINT`                   | PK, identity                                | 팀 ID      |
+| `parent_team_id` | `BIGINT`                   | NULL, FK → `teams.team_id`, self 제외 CHECK | 상위 팀 ID |
+| `team_name`      | `VARCHAR(50)`              | NOT NULL                                    | 팀 이름    |
+| `created_at`     | `TIMESTAMP WITH TIME ZONE` | NOT NULL, DEFAULT `CURRENT_TIMESTAMP`       | 생성일시   |
+| `updated_at`     | `TIMESTAMP WITH TIME ZONE` | NOT NULL, DEFAULT `CURRENT_TIMESTAMP`       | 수정일시   |
 
-`status`는 `ACTIVE`, `INACTIVE`만 허용하는 CHECK를 둔다. 팀은 물리 삭제하지 않는다. 비활성화는 활성 사용자와 활성 하위 팀이 모두 없을 때만 가능하고, 재활성화는 상위 팀이 없거나 상위 팀이 `ACTIVE`일 때만 가능하다. 비활성 팀과 Closure 경로는 보존하며 일반 조직도·배정·이동·하위 팀 생성 후보에서 제외한다. 일반 조회를 위한 `status` Index를 추가한다.
+`parent_team_id`에는 `idx_teams_parent_team_id`를 둔다. 이름은 `lower(btrim(team_name))`으로
+정규화하며, 최상위 팀은 `uk_teams_root_normalized_name` partial unique index로, 하위 팀은
+`uk_teams_parent_normalized_name` partial unique index로 같은 부모 아래 중복을 막는다.
+기존 팀은 Migration에서 `parent_team_id = NULL`인 최상위 팀으로 보존한다.
 
 ### 2.4 `teams_closure`
 
 팀 계층을 Closure Table Pattern으로 관리한다.
 
-| 컬럼                 | 타입          | 제약                                | 설명                |
-| -------------------- | ------------- | ----------------------------------- | ------------------- |
-| `ancestor_team_id`   | `BIGINT`      | PK, FK                              | 조상 팀 ID          |
-| `descendant_team_id` | `BIGINT`      | PK, FK                              | 자손 팀 ID          |
-| `depth`              | `INT`         | NOT NULL                            | 계층 거리; 자신은 0 |
-| `created_at`         | `TIMESTAMPTZ` | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 생성일시            |
-| `updated_at`         | `TIMESTAMPTZ` | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 수정일시            |
+| 컬럼                 | PostgreSQL 타입            | 제약                                    | 설명                      |
+| -------------------- | -------------------------- | --------------------------------------- | ------------------------- |
+| `ancestor_team_id`   | `BIGINT`                   | 복합 PK, FK → `teams.team_id`, NOT NULL | 조상 팀 ID                |
+| `descendant_team_id` | `BIGINT`                   | 복합 PK, FK → `teams.team_id`, NOT NULL | 자손 팀 ID                |
+| `depth`              | `INTEGER`                  | NOT NULL, Closure depth CHECK           | 조상에서 자손까지 간선 수 |
+| `created_at`         | `TIMESTAMP WITH TIME ZONE` | NOT NULL, DEFAULT `CURRENT_TIMESTAMP`   | 생성일시                  |
+| `updated_at`         | `TIMESTAMP WITH TIME ZONE` | NOT NULL, DEFAULT `CURRENT_TIMESTAMP`   | 수정일시                  |
 
-2.1~2.4절의 `updated_at`은 `DEFAULT CURRENT_TIMESTAMP`만으로 수정 시각이 자동 갱신되지 않는다. 구현에서는 프로젝트의 `Instant`와 JPA Auditing 또는 `@PreUpdate` 정책으로 실제 변경 시각을 갱신한다.
+`depth`는 조상에서 자손까지의 간선 수다. 동일 팀 행은 반드시 `depth = 0`, 서로 다른 팀 행은
+반드시 `depth > 0`이다. Migration은 모든 기존 팀에 `(team_id, team_id, 0)` 행을 backfill한다.
+조회용 인덱스는 `idx_teams_closure_ancestor_depth_descendant(ancestor_team_id, depth,
+descendant_team_id)` 및 `idx_teams_closure_descendant_depth_ancestor(descendant_team_id, depth,
+ancestor_team_id)`이며, 복합 PK 선두 컬럼과 중복되는 단일 인덱스는 만들지 않는다.
 
 ### 2.5 `positions`
 
@@ -101,25 +107,25 @@
 
 ### 3.1 `roles`
 
-| 컬럼         | 타입          | 제약                                        | 설명          |
-| ------------ | ------------- | ------------------------------------------- | ------------- |
-| `role_id`    | `BIGINT`      | PK, IDENTITY                                | 역할 ID       |
-| `role_code`  | `VARCHAR(50)` | UNIQUE, NOT NULL                            | 역할 식별 코드 |
-| `role_name`  | `VARCHAR(50)` | UNIQUE, NOT NULL                            | 역할 표시 이름 |
-| `created_at` | `TIMESTAMPTZ` | NOT NULL, DEFAULT CURRENT_TIMESTAMP         | 생성일시      |
-| `updated_at` | `TIMESTAMPTZ` | NOT NULL, DEFAULT CURRENT_TIMESTAMP         | 수정일시      |
+| 컬럼         | 타입          | 제약                                | 설명           |
+| ------------ | ------------- | ----------------------------------- | -------------- |
+| `role_id`    | `BIGINT`      | PK, IDENTITY                        | 역할 ID        |
+| `role_code`  | `VARCHAR(50)` | UNIQUE, NOT NULL                    | 역할 식별 코드 |
+| `role_name`  | `VARCHAR(50)` | UNIQUE, NOT NULL                    | 역할 표시 이름 |
+| `created_at` | `TIMESTAMPTZ` | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 생성일시       |
+| `updated_at` | `TIMESTAMPTZ` | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 수정일시       |
 
 `role_code`는 `^[A-Z][A-Z0-9_]*$` 형식만 허용하고 `role_name`은 앞뒤 공백을 제거한 결과가 빈 문자열일 수 없다. 인가 판정은 `role_name`이 아니라 `role_code`를 사용한다.
 
 ### 3.2 `permissions`
 
-| 컬럼              | 타입          | 제약                                        | 설명          |
-| ----------------- | ------------- | ------------------------------------------- | ------------- |
-| `permission_id`   | `BIGINT`      | PK, IDENTITY                                | 권한 ID       |
-| `permission_code` | `VARCHAR(50)` | UNIQUE, NOT NULL                            | 권한 식별 코드 |
-| `permission_name` | `VARCHAR(50)` | UNIQUE, NOT NULL                            | 권한 표시 이름 |
-| `created_at`      | `TIMESTAMPTZ` | NOT NULL, DEFAULT CURRENT_TIMESTAMP         | 생성일시      |
-| `updated_at`      | `TIMESTAMPTZ` | NOT NULL, DEFAULT CURRENT_TIMESTAMP         | 수정일시      |
+| 컬럼              | 타입          | 제약                                | 설명           |
+| ----------------- | ------------- | ----------------------------------- | -------------- |
+| `permission_id`   | `BIGINT`      | PK, IDENTITY                        | 권한 ID        |
+| `permission_code` | `VARCHAR(50)` | UNIQUE, NOT NULL                    | 권한 식별 코드 |
+| `permission_name` | `VARCHAR(50)` | UNIQUE, NOT NULL                    | 권한 표시 이름 |
+| `created_at`      | `TIMESTAMPTZ` | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 생성일시       |
+| `updated_at`      | `TIMESTAMPTZ` | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 수정일시       |
 
 `permission_code`는 `^[A-Z][A-Z0-9_]*$` 형식만 허용하고 `permission_name`은 앞뒤 공백을 제거한 결과가 빈 문자열일 수 없다. Spring Security의 세부 권한은 `permission_code`를 `GrantedAuthority` 값으로 사용한다.
 
@@ -127,11 +133,11 @@
 
 Role과 Permission의 N:M Mapping이다.
 
-| 컬럼                 | 타입          | 제약                                | 설명       |
-| -------------------- | ------------- | ----------------------------------- | ---------- |
-| `role_permission_id` | `BIGINT`      | PK, IDENTITY                        | Mapping ID |
-| `role_id`            | `BIGINT`      | FK, NOT NULL                        | 역할 ID    |
-| `permission_id`      | `BIGINT`      | FK, NOT NULL                        | 권한 ID    |
+| 컬럼                 | 타입     | 제약         | 설명       |
+| -------------------- | -------- | ------------ | ---------- |
+| `role_permission_id` | `BIGINT` | PK, IDENTITY | Mapping ID |
+| `role_id`            | `BIGINT` | FK, NOT NULL | 역할 ID    |
+| `permission_id`      | `BIGINT` | FK, NOT NULL | 권한 ID    |
 
 `UNIQUE(role_id, permission_id)`로 같은 권한의 중복 연결을 막는다. 역할 기준 권한 조회는 이 UNIQUE Index를 사용하고, 권한 기준 역할 조회를 위해 `permission_id` Index를 추가한다.
 
@@ -255,8 +261,11 @@ Project와 User의 N:M Mapping이다.
 | `start_at`       | `TIMESTAMP`    | NOT NULL     | 시작일시               |
 | `end_at`         | `TIMESTAMP`    | NOT NULL     | 종료일시               |
 | `status`         | `VARCHAR(30)`  | NOT NULL     | `RESERVED`, `CANCELED` |
+| `cancelled_at`   | `TIMESTAMP`    | NULL         | 예약 취소 시각         |
 
-`rooms_reservations`의 시간 구간은 `end_at > start_at`이어야 한다. `room_id`, `status`,
+`rooms_reservations`의 시간 구간은 `end_at > start_at`이어야 한다. `RESERVED`는
+`cancelled_at`이 `NULL`이고 `CANCELED`는 `cancelled_at`이 반드시 존재해야 한다. 기존 취소
+예약은 Migration 적용 시 현재 시각으로 취소 시각을 보완해 이력을 보존한다. `room_id`, `status`,
 `start_at`, `end_at`의 복합 Index로 활성 예약 중복 조회를 지원하고, `schedule_id` Index로
 연결 일정 여부 조회를 지원한다.
 
@@ -332,6 +341,12 @@ ADR-0001, ADR-0002와 ADR-0003 승인에 따라 Migration은 UTC Timestamp 기�
 - `backend/src/main/resources/db/migration/V20260812000001_00__auth_create_authentication_tables.sql` creates the minimal `positions`, `teams`, `users`, and `user_credentials` tables required by the authentication baseline.
 - `users.employee_number` is unique; `user_credentials.user_id` is unique and required; both user reference keys are required foreign keys. `must_change_password` defaults to `TRUE`, and `password_hash` is required with a maximum length of 255.
 - 공유 개발 DB는 `개발팀`, `기획팀`, `디자인팀`, `인사팀`, `마케팅팀`과 `인턴`, `사원`, `대리`, `과장`, `차장`, `부장`을 조직 기준 데이터로 Migration한다. 이름이 이미 존재하면 중복 삽입하지 않으며, 생성된 ID는 외부 계약으로 고정하지 않는다.
+- `V20260823081843_00__user_insert_calendar_attendee_test_data.sql` adds the non-authenticating
+  attendee-search profiles `CAL-ATTENDEE-TEST-001` through `CAL-ATTENDEE-TEST-003`. They use the
+  reserved `calendar-attendee.test` domain, use the test names `김안녕`, `박잘가`, and `최반갑`, reference the existing
+  `개발팀` and `사원` rows by name, and remain `ACTIVE` so calendar attendee search can find them.
+  The migration creates no authentication record or authorization assignment. If these profiles must
+  be removed or changed, add a new corrective migration; do not edit an applied migration.
 - Development account creation is not a migration or a startup fixture. The optional adapter is
   registered only when the `local` or `test` profile and
   `auth.dev-employee-account.enabled=true` (or

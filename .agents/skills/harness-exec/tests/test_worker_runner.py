@@ -21,6 +21,7 @@ from worker_runner.codex import (
 from worker_runner.runner import execute_worker
 import worker_runner.runner as worker_runner_module
 from worker_runner.invocation import parse_invocation
+from worker_runner.config import load_config
 
 
 class WorkerReadablePathTests(unittest.TestCase):
@@ -95,24 +96,24 @@ class WorkerReadablePathTests(unittest.TestCase):
         self.assertIn(str(python_opt_root), paths)
 
     def test_collects_package_json_for_project_ancestors(self) -> None:
-      project_root = self.root / "workspace" / "repository"
-      project_root.mkdir(parents=True)
+        project_root = self.root / "workspace" / "repository"
+        project_root.mkdir(parents=True)
 
-      paths = set(
-          collect_worker_readable_paths(
-              {"PATH": ""},
-              home_dir=self.root / "home",
-              platform_name="linux",
-              project_root=project_root,
-          )
-      )
+        paths = set(
+            collect_worker_readable_paths(
+                {"PATH": ""},
+                home_dir=self.root / "home",
+                platform_name="linux",
+                project_root=project_root,
+            )
+        )
 
-      expected_paths = {
-          str(directory / "package.json")
-          for directory in (project_root, *project_root.parents)
-      }
+        expected_paths = {
+            str(directory / "package.json")
+            for directory in (project_root, *project_root.parents)
+        }
 
-      self.assertTrue(expected_paths.issubset(paths))
+        self.assertTrue(expected_paths.issubset(paths))
 
     def test_collects_platform_specific_git_support_paths(self) -> None:
         home = self.root / "home"
@@ -199,6 +200,16 @@ class WorkerReadablePathTests(unittest.TestCase):
             sys.executable,
         )
 
+    def test_worker_temp_directory_keeps_recursive_write_permission(self) -> None:
+        config = load_config((), ("backend",))
+        workspace_permissions = config["permissions"]["task-worker"]["filesystem"][":workspace_roots"]
+
+        self.assertEqual(workspace_permissions["backend"], "read")
+        self.assertEqual(
+            workspace_permissions["backend/.gradle-user-home/**"],
+            "write",
+        )
+
 
     def test_execute_worker_forwards_collected_paths_to_codex_permissions(self) -> None:
         readable_paths = ("/toolchain/node", "/toolchain/npm")
@@ -216,7 +227,7 @@ class WorkerReadablePathTests(unittest.TestCase):
                 worker_runner_module,
                 "collect_worker_readable_paths",
                 return_value=readable_paths,
-            ),
+            ) as collect_paths,
             mock.patch.object(
                 worker_runner_module,
                 "build_codex_command",
@@ -235,6 +246,10 @@ class WorkerReadablePathTests(unittest.TestCase):
         self.assertEqual(
             build_command.call_args.kwargs["readable_paths"],
             readable_paths,
+        )
+        collect_paths.assert_called_once_with(
+            {"PATH": ""},
+            project_root=self.root,
         )
 
 
@@ -408,6 +423,7 @@ class WorkerInvocationTests(unittest.TestCase):
         self.assertIn("Red → Green → Refactor", prompt)
         self.assertIn("과거 TDD 증거를 재사용하지 마십시오", prompt)
 
+
     def test_worker_guidance_limits_repeated_discovery_patches_and_diff_output(self) -> None:
         prompt, _allowed, _forbidden = parse_invocation(
             self.payload(
@@ -425,6 +441,38 @@ class WorkerInvocationTests(unittest.TestCase):
         self.assertIn("patch가 실패한 경우에만 해당 구간을 다시 조회", prompt)
         self.assertIn("최종 `git diff`는 한 번만", prompt)
         self.assertIn("긴 테스트 로그는 실패 원인 주변의 제한된 구간", prompt)
+
+    def test_backend_verifier_prompt_waits_for_in_flight_execution_before_rerunning(self) -> None:
+        contexts = (
+            {
+                "plan_id": "rerun-01",
+                "fingerprint": "new-fingerprint",
+                "mode": "new_or_changed",
+                "prior_tdd_evidence": None,
+            },
+            {
+                "plan_id": "rerun-01",
+                "fingerprint": "same-fingerprint",
+                "mode": "rerun",
+                "prior_tdd_evidence": {
+                    "result": "PASS",
+                    "evidence": "red-green-refactor record",
+                },
+            },
+        )
+
+        for context in contexts:
+            with self.subTest(mode=context["mode"]):
+                prompt, _allowed, _forbidden = parse_invocation(self.payload(context))
+
+                self.assertIn("기존 실행을 wait/poll", prompt)
+                self.assertIn("같은 verifier CLI를 새 shell 명령으로 시작하지 마십시오", prompt)
+                self.assertIn("확정적으로 종료", prompt)
+                self.assertIn("실패 원인을 수정했거나 명시적인 재검증이 필요한 경우", prompt)
+                self.assertIn("HTTP 429 등 실행 중 충돌 응답만으로", prompt)
+                self.assertIn("기존 실행의 최종 결과를 먼저 확인", prompt)
+                self.assertIn("automated_verification` 또는 `decision`", prompt)
+                self.assertIn("최종 JSON에는 완료된 최신 검증 결과만", prompt)
 
     def test_same_revision_rerun_references_prior_evidence_and_current_regression(self) -> None:
         prompt, _allowed, _forbidden = parse_invocation(

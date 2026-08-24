@@ -23,6 +23,8 @@ public class ScheduleCreateService {
   }
 
   public Schedule create(ScheduleCreateCommand command) {
+    PersonalScheduleRelationValidator.reject(command.type(),command.participantIds(),
+        command.userTargetIds(),command.teamTargetIds(),command.projectTargetIds());
     referenceValidator.validateForCreation(command);
     return transaction.create(command);
   }

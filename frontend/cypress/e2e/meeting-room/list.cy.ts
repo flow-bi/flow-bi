@@ -3,12 +3,20 @@ import { meetingRoomTestGateway } from './test-gateway'
 function visitMeetingRooms() {
   cy.visit('/', {
     onBeforeLoad(window) {
+      window.__FLOW_BI_MEETING_ROOM_TEST_HARNESS__ = true
       window.__FLOW_BI_MEETING_ROOM_GATEWAY__ = meetingRoomTestGateway()
     },
   })
 }
 
 describe('meeting room availability', () => {
+  beforeEach(() => {
+    cy.intercept('GET', '/api/auth/session', {
+      body: { authenticated: true, mustChangePassword: false },
+      statusCode: 200,
+    })
+  })
+
   it('shows rooms and the 09:00 to 18:00 reservation timetable on desktop', () => {
     cy.viewport(1280, 800)
     visitMeetingRooms()

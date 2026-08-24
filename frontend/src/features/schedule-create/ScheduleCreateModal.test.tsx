@@ -37,6 +37,37 @@ function renderModal(onClose = vi.fn()) {
 }
 
 describe('ScheduleCreateModal', () => {
+  it('does not expose attendee or user-sharing controls for a personal schedule and submits empty relations', async () => {
+    const user = userEvent.setup()
+    const createSchedule = vi.fn<(request: CreateScheduleRequest) => Promise<void>>(() =>
+      Promise.resolve(),
+    )
+    render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <ScheduleCreateModal
+          createSchedule={createSchedule}
+          onClose={vi.fn()}
+          searchAttendees={() =>
+            Promise.resolve([{ userId: 99, displayName: '노출되면 안 되는 사용자' }])
+          }
+        />
+      </QueryClientProvider>,
+    )
+
+    expect(screen.queryByLabelText('참석자 검색')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('공유 사용자 ID')).not.toBeInTheDocument()
+    await user.type(screen.getByLabelText('제목'), '개인 일정')
+    await user.type(screen.getByLabelText('날짜'), '2026-08-10')
+    await user.click(screen.getByRole('button', { name: '일정 저장' }))
+
+    await waitFor(() => expect(createSchedule).toHaveBeenCalledTimes(1))
+    expect(createSchedule.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({ participantIds: [], userTargetIds: [] }),
+    )
+  })
+
   it('selects accessible team names and submits their IDs without exposing raw ID inputs', async () => {
     const user = userEvent.setup()
     const createSchedule = vi.fn<(request: CreateScheduleRequest) => Promise<void>>(() =>
@@ -420,6 +451,7 @@ describe('ScheduleCreateModal', () => {
       </QueryClientProvider>,
     )
 
+    await user.selectOptions(screen.getByLabelText('일정 유형'), 'TEAM')
     await user.type(screen.getByLabelText('참석자 검색'), '민지')
 
     expect(await screen.findByText('참석자 검색 권한이 없습니다.')).toBeVisible()
@@ -431,11 +463,13 @@ describe('ScheduleCreateModal', () => {
     const { queryClient } = renderModal()
 
     await user.click(screen.getByRole('button', { name: '일정 추가' }))
+    await user.selectOptions(screen.getByLabelText('일정 유형'), 'TEAM')
     await user.type(screen.getByLabelText('참석자 검색'), '민지')
     await screen.findByText('일치하는 참석자가 없습니다.')
     expect(queryClient.getQueryData(['schedule', 'attendee-candidates', '민지'])).toEqual([])
 
     await user.keyboard('{Escape}')
+    await user.click(screen.getByRole('button', { name: '입력 취소하고 닫기' }))
 
     expect(queryClient.getQueryData(['schedule', 'attendee-candidates', '민지'])).toBeUndefined()
   })

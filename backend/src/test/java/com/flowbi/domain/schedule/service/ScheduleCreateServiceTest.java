@@ -8,6 +8,7 @@ import com.flowbi.domain.schedule.exception.*;
 import com.flowbi.domain.schedule.repository.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -18,6 +19,21 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class ScheduleCreateServiceTest {
+
+  @Test
+  void rejectsPersonalRelationsBeforeReferenceValidationOrPersistence() {
+    ScheduleReferenceValidator referenceValidator = mock(ScheduleReferenceValidator.class);
+    ScheduleCreateTransaction transaction = mock(ScheduleCreateTransaction.class);
+    ScheduleCreateService service = new ScheduleCreateService(referenceValidator, transaction);
+    ScheduleCreateCommand command = ScheduleCreateCommand.of(1L,"Personal",ScheduleType.PERSONAL,
+        ScheduleVisibility.PRIVATE,OffsetDateTime.parse("2026-08-10T09:00:00+09:00"),
+        OffsetDateTime.parse("2026-08-10T10:00:00+09:00"),false,ScheduleColorLabel.BLUE,null,null,
+        true,List.of(2L),List.of(3L),List.of(),List.of());
+
+    assertThatThrownBy(() -> service.create(command))
+        .isInstanceOf(PersonalScheduleRelationsForbiddenException.class);
+    org.mockito.Mockito.verifyNoInteractions(referenceValidator,transaction);
+  }
 
   @Test
   void validatesReferencesBeforePersistingTheCompleteScheduleAggregate() {

@@ -19,6 +19,7 @@ import {
   updateSchedule as updateScheduleRequest,
   type ScheduleDetail,
   type ScheduleSummary,
+  type ScheduleType,
   type UpdateScheduleRequest,
 } from './scheduleCalendarApi'
 import { getScheduleColorClasses } from './scheduleColor'
@@ -27,8 +28,15 @@ import {
   confirmationDangerActionClass,
   confirmationSecondaryActionClass,
 } from '../../shared/ui/ConfirmationDialog'
+import { AttendeeSelector } from '../schedule-create/AttendeeSelector'
 import {
-  parseIdList,
+  getScheduleTargetOptions as getScheduleTargetOptionsRequest,
+  searchAttendees as searchAttendeesRequest,
+  type AttendeeCandidate,
+  type ScheduleTargetOption,
+  type ScheduleTargetOptions,
+} from '../schedule-create/scheduleCreateApi'
+import {
   scheduleFormSchema,
   scheduleTypeDefaults,
   toScheduleRequest,
@@ -43,6 +51,9 @@ const chipBaseClass =
   'mt-1 block w-full overflow-hidden rounded-md border px-2 py-1 text-left text-xs font-medium text-ellipsis whitespace-nowrap focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-1 sm:text-sm'
 const fieldClass =
   'w-full rounded-md border border-border bg-surface px-3 py-2 text-text-primary focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:bg-background'
+const labelClass = 'grid gap-1.5 font-semibold text-text-primary'
+const checkboxLabelClass = 'flex items-center gap-2 font-semibold text-text-primary'
+const checkboxClass = 'h-4 w-4 shrink-0 accent-primary'
 const modalCloseButtonClass =
   'absolute top-4 right-4 rounded p-1 text-text-secondary transition hover:bg-secondary focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50'
 const modalFooterClass = 'mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:flex-wrap sm:justify-end'
@@ -57,6 +68,8 @@ export interface ScheduleCalendarProps {
   getScheduleDetail?: (id: number, signal?: AbortSignal) => Promise<ScheduleDetail>
   updateSchedule?: (id: number, request: UpdateScheduleRequest) => Promise<ScheduleDetail>
   cancelSchedule?: (id: number) => Promise<void>
+  searchAttendees?: (query: string) => Promise<AttendeeCandidate[]>
+  getTargetOptions?: () => Promise<ScheduleTargetOptions>
   onCreateSchedule?: () => void
   now?: () => Date
 }
@@ -243,6 +256,8 @@ function DetailModal({
   hasConfirmation: boolean
 }) {
   const closeRef = useRef<HTMLButtonElement>(null)
+  const participants = detail.participants ?? []
+  const attendeeCount = detail.attendeeCount ?? participants.length + Number(detail.creatorAttends)
   useEffect(() => {
     closeRef.current?.focus()
     const escape = (event: KeyboardEvent) => {
@@ -286,6 +301,25 @@ function DetailModal({
         <p>{formatScheduleTimeRange(detail.startAt, detail.endAt, detail.allDay)}</p>
         {detail.location && <p>위치: {detail.location}</p>}
         {detail.content && <p>{detail.content}</p>}
+        <section
+          aria-label="참석자 정보"
+          className="mt-4 grid gap-2 rounded-md border border-border p-3"
+        >
+          <p className="font-semibold">참석 인원: {attendeeCount}명</p>
+          <p>등록자 참석: {detail.creatorAttends ? '예' : '아니요'}</p>
+          <div>
+            <p className="font-semibold">다른 참석자</p>
+            {participants.length === 0 ? (
+              <p>다른 참석자가 없습니다.</p>
+            ) : (
+              <ul aria-label="다른 참석자 목록" className="grid gap-1">
+                {participants.map((participant) => (
+                  <li key={participant.userId}>{participant.displayName}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
         {detail.meetingRoomManaged && (
           <>
             <p className="font-bold text-orange-800">회의실 예약에서 관리하는 일정입니다.</p>
@@ -318,12 +352,16 @@ function EditModal({
   onSave,
   error,
   isSaving,
+  searchAttendees,
+  getTargetOptions,
 }: {
   detail: ScheduleDetail
   onClose: () => void
   onSave: (request: UpdateScheduleRequest) => void
   error: string | null
   isSaving: boolean
+  searchAttendees: (query: string) => Promise<AttendeeCandidate[]>
+  getTargetOptions: () => Promise<ScheduleTargetOptions>
 }) {
   const [confirmClose, setConfirmClose] = useState(false)
   const closeRef = useRef<HTMLButtonElement>(null)
@@ -352,12 +390,47 @@ function EditModal({
   })
   const scheduleType = useWatch({ control: form.control, name: 'type' })
   const allDay = useWatch({ control: form.control, name: 'allDay' })
+  const creatorAttends = useWatch({ control: form.control, name: 'creatorAttends' })
+  const teamTargetIds = useWatch({ control: form.control, name: 'teamTargetIds' })
+  const projectTargetIds = useWatch({ control: form.control, name: 'projectTargetIds' })
+  const [selectedAttendees, setSelectedAttendees] = useState<AttendeeCandidate[]>(
+    detail.participants ?? [],
+  )
+  const [personalRelationNotice, setPersonalRelationNotice] = useState('')
+  const targetOptions = useQuery({
+    queryKey: ['schedule', 'target-options'],
+    queryFn: getTargetOptions,
+    enabled: scheduleType === 'TEAM' || scheduleType === 'PROJECT',
+    retry: false,
+  })
   useEffect(() => {
     closeRef.current?.focus()
   }, [])
   useEffect(() => {
     form.setValue('visibility', scheduleTypeDefaults[scheduleType], { shouldValidate: true })
   }, [form, scheduleType])
+  const handleScheduleTypeChange = (nextType: ScheduleType) => {
+    if (nextType !== scheduleType) {
+      form.setValue('teamTargetIds', [], { shouldDirty: teamTargetIds.length > 0 })
+      form.setValue('projectTargetIds', [], { shouldDirty: projectTargetIds.length > 0 })
+    }
+    if (nextType === 'PERSONAL' && scheduleType !== 'PERSONAL') {
+      setSelectedAttendees([])
+      form.setValue('participantIds', [], { shouldDirty: true })
+      form.setValue('userTargetIds', [], { shouldDirty: true })
+      setPersonalRelationNotice(
+        '개인 일정은 등록자 전용이므로 참석자와 사용자 공유 대상을 제거했습니다.',
+      )
+    }
+  }
+  const changeAttendees = (attendees: AttendeeCandidate[]) => {
+    setSelectedAttendees(attendees)
+    form.setValue(
+      'participantIds',
+      attendees.map(({ userId }) => userId),
+      { shouldDirty: true },
+    )
+  }
   const close = useCallback(() => {
     if (form.formState.isDirty && !isSaving) {
       setConfirmClose(true)
@@ -368,6 +441,31 @@ function EditModal({
   const submit = (values: ScheduleFormValues) => {
     onSave(toScheduleRequest(values))
   }
+  const toggleTarget = (targetField: 'teamTargetIds' | 'projectTargetIds', targetId: number) => {
+    const currentTargetIds = form.getValues(targetField)
+    form.setValue(
+      targetField,
+      currentTargetIds.includes(targetId)
+        ? currentTargetIds.filter((id) => id !== targetId)
+        : [...currentTargetIds, targetId],
+      { shouldDirty: true, shouldValidate: true },
+    )
+  }
+  const totalAttendees = selectedAttendees.length + (creatorAttends ? 1 : 0)
+  const targetField = scheduleType === 'TEAM' ? 'teamTargetIds' : 'projectTargetIds'
+  const targetOptionsForType: ScheduleTargetOption[] =
+    scheduleType === 'TEAM'
+      ? (targetOptions.data?.teams ?? [])
+      : (targetOptions.data?.projects ?? [])
+  const selectedTargetIds = scheduleType === 'TEAM' ? teamTargetIds : projectTargetIds
+  const targetLabel = scheduleType === 'TEAM' ? '팀 대상' : '프로젝트 대상'
+  const targetEmptyMessage =
+    scheduleType === 'TEAM' ? '선택 가능한 팀이 없습니다.' : '선택 가능한 프로젝트가 없습니다.'
+  const targetErrorId =
+    scheduleType === 'TEAM'
+      ? 'schedule-edit-team-targets-error'
+      : 'schedule-edit-project-targets-error'
+  const targetError = form.formState.errors[targetField]
   useEffect(() => {
     const escape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') {
@@ -386,7 +484,7 @@ function EditModal({
     <div
       aria-labelledby="schedule-edit-title"
       aria-modal="true"
-      className="fixed inset-0 z-10 grid place-items-center overflow-auto bg-slate-950/55 p-4"
+      className="fixed inset-0 z-10 overflow-auto bg-slate-950/55 p-4"
       onClick={(event) => {
         if (event.target === event.currentTarget) {
           close()
@@ -394,7 +492,10 @@ function EditModal({
       }}
       role="dialog"
     >
-      <section className="relative w-full max-w-2xl rounded-xl bg-surface p-6 shadow-2xl">
+      <section
+        className="relative mx-auto my-0 w-full max-w-2xl rounded-xl bg-surface p-4 shadow-2xl sm:my-8 sm:p-6"
+        data-testid="schedule-edit-panel"
+      >
         <h2 className="m-0 text-xl font-bold text-text-primary" id="schedule-edit-title">
           일정 수정
         </h2>
@@ -413,7 +514,9 @@ function EditModal({
           noValidate
           onSubmit={(event) => void form.handleSubmit(submit)(event)}
         >
-          <label htmlFor="schedule-edit-title-input">제목</label>
+          <label className={labelClass} htmlFor="schedule-edit-title-input">
+            제목
+          </label>
           <input
             aria-describedby={form.formState.errors.title ? 'schedule-edit-title-error' : undefined}
             aria-invalid={Boolean(form.formState.errors.title)}
@@ -426,12 +529,20 @@ function EditModal({
               {form.formState.errors.title.message}
             </p>
           )}
-          <div className="grid gap-3 sm:grid-cols-3">
-            <label>
+          <div className="grid gap-3 sm:grid-cols-3" data-testid="schedule-edit-form-grid">
+            <label className={labelClass}>
               날짜
-              <input className={fieldClass} type="date" {...form.register('date')} />
+              <input
+                aria-describedby={
+                  form.formState.errors.date ? 'schedule-edit-date-error' : undefined
+                }
+                aria-invalid={Boolean(form.formState.errors.date)}
+                className={fieldClass}
+                type="date"
+                {...form.register('date')}
+              />
             </label>
-            <label>
+            <label className={labelClass}>
               시작 시간
               <input
                 className={fieldClass}
@@ -440,7 +551,7 @@ function EditModal({
                 {...form.register('startTime')}
               />
             </label>
-            <label>
+            <label className={labelClass}>
               종료 시간
               <input
                 className={fieldClass}
@@ -450,77 +561,99 @@ function EditModal({
               />
             </label>
           </div>
+          {form.formState.errors.date && (
+            <p id="schedule-edit-date-error" role="alert">
+              {form.formState.errors.date.message}
+            </p>
+          )}
           {form.formState.errors.endTime && (
             <p role="alert">{form.formState.errors.endTime.message}</p>
           )}
-          <label>
-            <input type="checkbox" {...form.register('allDay')} /> 하루종일
+          <label className={checkboxLabelClass} data-testid="schedule-edit-all-day-field">
+            <input className={checkboxClass} type="checkbox" {...form.register('allDay')} />
+            하루종일
           </label>
-          <label>
+          <label className={labelClass}>
             위치
-            <input {...form.register('location')} />
+            <input className={fieldClass} {...form.register('location')} />
           </label>
-          <label>
+          <label className={labelClass}>
             일정 유형
-            <select {...form.register('type')}>
+            <select
+              className={fieldClass}
+              {...form.register('type', {
+                onChange: (event: { target: HTMLSelectElement }) =>
+                  handleScheduleTypeChange(event.target.value as ScheduleType),
+              })}
+            >
               <option value="PERSONAL">개인</option>
               <option value="TEAM">팀</option>
               <option value="PROJECT">프로젝트</option>
             </select>
           </label>
-          <label>
+          <label className={labelClass}>
             공개 범위
-            <select disabled value={scheduleTypeDefaults[scheduleType]}>
+            <select
+              aria-label="공개 범위"
+              className={fieldClass}
+              disabled
+              value={scheduleTypeDefaults[scheduleType]}
+            >
               <option value={scheduleTypeDefaults[scheduleType]}>
-                {scheduleTypeDefaults[scheduleType]}
+                {typeLabel(scheduleType)} 공개
               </option>
             </select>
           </label>
-          {scheduleType === 'PERSONAL' && (
-            <label>
-              공유 사용자 ID
-              <input
-                defaultValue={detail.userTargetIds.join(', ')}
-                inputMode="numeric"
-                onChange={(event) =>
-                  form.setValue('userTargetIds', parseIdList(event.target.value), {
-                    shouldDirty: true,
-                  })
-                }
-              />
-            </label>
+          {(scheduleType === 'TEAM' || scheduleType === 'PROJECT') && (
+            <fieldset
+              aria-describedby={targetError ? targetErrorId : undefined}
+              aria-invalid={Boolean(targetError)}
+              className="grid min-w-0 gap-2 rounded-md border border-border p-3"
+            >
+              <legend className="px-1 font-semibold text-text-primary">{targetLabel}</legend>
+              {targetOptions.isLoading && <p role="status">일정 대상 목록을 불러오고 있습니다.</p>}
+              {targetOptions.isError && (
+                <div className="grid gap-2" role="alert">
+                  <p>일정 대상 목록을 불러오지 못했습니다. 다시 시도해 주세요.</p>
+                  <button
+                    className={controlButtonClass}
+                    onClick={() => void targetOptions.refetch()}
+                    type="button"
+                  >
+                    대상 목록 다시 시도
+                  </button>
+                </div>
+              )}
+              {!targetOptions.isLoading &&
+                !targetOptions.isError &&
+                targetOptionsForType.length === 0 && <p role="status">{targetEmptyMessage}</p>}
+              {!targetOptions.isLoading &&
+                !targetOptions.isError &&
+                targetOptionsForType.length > 0 && (
+                  <div className="grid gap-2">
+                    {targetOptionsForType.map((option) => (
+                      <label className={checkboxLabelClass} key={option.id}>
+                        <input
+                          checked={selectedTargetIds.includes(option.id)}
+                          className={checkboxClass}
+                          onChange={() => toggleTarget(targetField, option.id)}
+                          type="checkbox"
+                        />
+                        {option.name}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              {targetError && (
+                <p id={targetErrorId} role="alert">
+                  {targetError.message}
+                </p>
+              )}
+            </fieldset>
           )}
-          {scheduleType === 'TEAM' && (
-            <label>
-              팀 대상 ID
-              <input
-                defaultValue={detail.teamTargetIds.join(', ')}
-                inputMode="numeric"
-                onChange={(event) =>
-                  form.setValue('teamTargetIds', parseIdList(event.target.value), {
-                    shouldDirty: true,
-                  })
-                }
-              />
-            </label>
-          )}
-          {scheduleType === 'PROJECT' && (
-            <label>
-              프로젝트 대상 ID
-              <input
-                defaultValue={detail.projectTargetIds.join(', ')}
-                inputMode="numeric"
-                onChange={(event) =>
-                  form.setValue('projectTargetIds', parseIdList(event.target.value), {
-                    shouldDirty: true,
-                  })
-                }
-              />
-            </label>
-          )}
-          <label>
+          <label className={labelClass}>
             색상 라벨
-            <select {...form.register('colorLabel')}>
+            <select className={fieldClass} {...form.register('colorLabel')}>
               {(['RED', 'ORANGE', 'YELLOW', 'GREEN', 'BLUE', 'PURPLE'] as const).map((color) => (
                 <option key={color} value={color}>
                   {colorOptionLabel(color)}
@@ -528,24 +661,24 @@ function EditModal({
               ))}
             </select>
           </label>
-          <label>
-            참석자 ID
-            <input
-              defaultValue={detail.participantIds.join(', ')}
-              inputMode="numeric"
-              onChange={(event) =>
-                form.setValue('participantIds', parseIdList(event.target.value), {
-                  shouldDirty: true,
-                })
-              }
-            />
+          {(scheduleType === 'TEAM' || scheduleType === 'PROJECT') && (
+            <>
+              <AttendeeSelector
+                onChange={changeAttendees}
+                searchAttendees={searchAttendees}
+                selected={selectedAttendees}
+              />
+              <p>자동 참석 인원: {totalAttendees}명</p>
+            </>
+          )}
+          {personalRelationNotice && <p role="status">{personalRelationNotice}</p>}
+          <label className={checkboxLabelClass} data-testid="schedule-edit-creator-attends-field">
+            <input className={checkboxClass} type="checkbox" {...form.register('creatorAttends')} />
+            등록자도 참석
           </label>
-          <label>
-            <input type="checkbox" {...form.register('creatorAttends')} /> 등록자도 참석
-          </label>
-          <label>
+          <label className={labelClass}>
             상세 설명
-            <textarea {...form.register('content')} />
+            <textarea className={fieldClass} {...form.register('content')} />
           </label>
           {error && <p role="alert">{error}</p>}
           <div className={modalFooterClass}>
@@ -586,6 +719,8 @@ export function ScheduleCalendar({
   getScheduleDetail = getScheduleDetailRequest,
   updateSchedule = updateScheduleRequest,
   cancelSchedule = cancelScheduleRequest,
+  searchAttendees = searchAttendeesRequest,
+  getTargetOptions = getScheduleTargetOptionsRequest,
   onCreateSchedule,
   now = () => new Date(),
 }: ScheduleCalendarProps) {
@@ -684,6 +819,7 @@ export function ScheduleCalendar({
     setSelectedSchedule(schedule.id)
   }
   const closeDetail = () => {
+    queryClient.removeQueries({ queryKey: ['schedule', 'attendee-candidates'] })
     setSelectedSchedule(null)
     scheduleTrigger.current?.focus()
   }
@@ -923,8 +1059,13 @@ export function ScheduleCalendar({
           detail={detailQuery.data}
           error={actionError}
           isSaving={updateMutation.isPending}
-          onClose={() => setEditing(false)}
+          onClose={() => {
+            queryClient.removeQueries({ queryKey: ['schedule', 'attendee-candidates'] })
+            setEditing(false)
+          }}
           onSave={(request) => updateMutation.mutate({ id: detailQuery.data.id, request })}
+          searchAttendees={searchAttendees}
+          getTargetOptions={getTargetOptions}
         />
       )}
       {detailQuery.data && cancelConfirmation && (

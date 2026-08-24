@@ -205,22 +205,18 @@ the session or Redis; it is resolved from the authoritative user store for each 
 
 ### 8.2 Users and Organization
 
-| Method | Path                                            | 목적                                  | 권한 |
-| ------ | ----------------------------------------------- | ------------------------------------- | ---- |
-| `GET` | `/api/users` | 직원 목록·검색 | `USER_MANAGE` |
-| `POST` | `/api/users` | 직원 등록과 임시 비밀번호 발급 | `USER_MANAGE` |
-| `GET` | `/api/users/{userId}` | 직원 조회 | `USER_MANAGE` |
-| `PUT` | `/api/users/{userId}` | 직원 일반 정보 수정 | `USER_MANAGE` |
-| `PATCH` | `/api/users/{userId}/account-status` | `ACTIVE`·`INACTIVE` 변경 | 대상별 사용자 관리 권한 |
-| `PATCH` | `/api/users/{userId}/employment-status` | 퇴직 처리 | 대상별 사용자 관리 권한 |
-| `POST` | `/api/users/{userId}/password-reset` | 관리자 비밀번호 초기화 | 대상별 사용자 관리 권한 |
-| `GET` | `/api/users/{userId}/roles` | 현재 고정 역할 조회 | `ROLE_MANAGE` |
-| `POST` | `/api/users/{userId}/roles/{roleCode}` | 역할 하나 부여 | `ROLE_MANAGE` |
-| `DELETE` | `/api/users/{userId}/roles/{roleCode}` | 역할 하나 회수 | `ROLE_MANAGE` |
-| `GET` | `/api/teams` | 팀 목록 또는 조직도 조회 | `TEAM_MANAGE` |
-| `POST` | `/api/teams` | 팀 생성 | `TEAM_MANAGE` |
-| `PUT` | `/api/teams/{teamId}` | 팀 이름·계층 수정 | `TEAM_MANAGE` |
-| `PATCH` | `/api/teams/{teamId}/status` | 팀 비활성화·재활성화 | `TEAM_MANAGE` |
+| Method   | Path                         | 목적                         |
+| -------- | ---------------------------- | ---------------------------- |
+| `GET`    | `/api/users`                 | 직원 목록·검색               |
+| `POST`   | `/api/users`                 | 관리자 직원 등록             |
+| `GET`    | `/api/users/{userId}`        | 직원 조회                    |
+| `PUT`    | `/api/users/{userId}`        | 관리자 직원 수정             |
+| `DELETE` | `/api/users/{userId}`        | 직원 삭제 또는 비활성화 요청 |
+| `GET`    | `/api/teams`                 | 팀 목록 또는 조직도 조회     |
+| `POST`   | `/api/teams`                 | 관리자 팀 생성               |
+| `PATCH`  | `/api/teams/{teamId}/name`   | 관리자 팀 이름 변경          |
+| `PUT`    | `/api/teams/{teamId}/parent` | 관리자 팀 이동               |
+| `DELETE` | `/api/teams/{teamId}`        | 관리자 leaf 팀 삭제          |
 
 직원과 팀은 물리 삭제하지 않으며 직원·팀 `DELETE` Endpoint를 제공하지 않는다. 직원 등록, 비밀번호 초기화와 계정 재활성화 요청은 임시 비밀번호를 받지 않는다. 서버가 CSPRNG로 대문자·소문자·숫자·특수문자를 포함한 20자 값을 생성하고 BCrypt 해시만 저장한다. 성공 응답은 다음 값을 한 번만 반환하며 `Cache-Control: no-store`를 적용한다.
 
@@ -238,15 +234,40 @@ the session or Redis; it is resolved from the authoritative user store for each 
 
 팀 비활성화는 활성 사용자와 활성 하위 팀이 모두 없을 때만 성공한다. 그렇지 않으면 `409 Conflict`와 `TEAM_IN_USE`를 반환한다. 재활성화는 상위 팀이 없거나 활성 상태일 때만 허용하며 하위 팀과 사용자를 자동 재활성화하지 않는다.
 
+#### Team hierarchy API (FR-005 to FR-008, NFR-001)
+
+All team endpoints require an authenticated user. Read endpoints are available to every authenticated user. `POST`, `PATCH`, `PUT`, and `DELETE` additionally require the current server-provided `AuthenticatedUser.Role.ADMIN` and a valid CSRF token; request bodies never contain or establish the acting user or role.
+
+| Method   | Path                              | Response                                 |
+| -------- | --------------------------------- | ---------------------------------------- |
+| `GET`    | `/api/teams`                      | `200` list of direct team responses      |
+| `GET`    | `/api/teams/{teamId}`             | `200` team response                      |
+| `GET`    | `/api/teams/{teamId}/parent`      | `200` direct parent, or `204` for a root |
+| `GET`    | `/api/teams/{teamId}/children`    | `200` direct-child list                  |
+| `GET`    | `/api/teams/{teamId}/ancestors`   | `200` ancestor list excluding self       |
+| `GET`    | `/api/teams/{teamId}/descendants` | `200` descendant list excluding self     |
+| `GET`    | `/api/teams/{teamId}/path`        | `200` root-to-team path                  |
+| `GET`    | `/api/teams/{teamId}/tree`        | `200` requested subtree                  |
+| `POST`   | `/api/teams`                      | `201` created team                       |
+| `PATCH`  | `/api/teams/{teamId}/name`        | `200` renamed team                       |
+| `PUT`    | `/api/teams/{teamId}/parent`      | `200` moved team                         |
+| `DELETE` | `/api/teams/{teamId}`             | `204`                                    |
+
+`TeamCreateRequest` is `{ "teamName": "Platform", "parentTeamId": 1 }`; `parentTeamId` may be `null` for a root. `TeamNameUpdateRequest` is `{ "teamName": "Platform" }` and `TeamMoveRequest` is `{ "newParentTeamId": 1 }`, where `null` moves the team to the root. Names are trimmed, must be 1-50 non-control characters, and IDs must be positive when present. The normal response is `{ "teamId": 1, "teamName": "Platform", "parentTeamId": null }`.
+
+Ancestor and descendant entries return `{ "teamId", "teamName", "distance" }`; `distance` is the Closure Table edge distance (the direct relation is `1`). Path entries return `{ "teamId", "teamName", "depth" }`, where display `depth` starts at `0` for the root. Tree entries return `{ "teamId", "teamName", "depth", "children" }`, where display `depth` starts at `0` for the requested tree root. Thus Closure distance and display depth are distinct.
+
+Errors use `{ "code", "message", "fieldErrors" }` without internal exception details. Malformed input is `400 TEAM_INVALID`; missing authentication is `401 UNAUTHENTICATED`; a non-admin mutation is `403 TEAM_ADMIN_REQUIRED`; missing team or parent is `404 TEAM_NOT_FOUND`; duplicate names, self/cyclic/same-parent moves, non-leaf deletion, and assigned users are `409` with `TEAM_NAME_CONFLICT`, `TEAM_MOVE_CONFLICT`, `TEAM_HAS_CHILDREN`, or `TEAM_IN_USE`. Detected Closure/adjacency inconsistency is `500 TEAM_HIERARCHY_INCONSISTENT`. OpenAPI is available only in the `local` and `harness` profiles; it remains unavailable by default.
+
 ### 8.3 Profile
 
-| Method  | Path                            | 목적                           |
-| ------- | ------------------------------- | ------------------------------ |
+| Method  | Path                            | 목적                                |
+| ------- | ------------------------------- | ----------------------------------- |
 | `GET`   | `/api/me`                       | 내 정보 조회 (마이페이지 확장 지점) |
-| `GET`   | `/api/me/header`                | 현재 인증 사용자의 이름만 조회 |
-| `PATCH` | `/api/me`                       | 이메일·전화번호·업무 상태 수정 |
-| `GET`   | `/api/me/notification-settings` | 알림 설정 조회                 |
-| `PUT`   | `/api/me/notification-settings` | 알림 설정 변경                 |
+| `GET`   | `/api/me/header`                | 현재 인증 사용자의 이름만 조회      |
+| `PATCH` | `/api/me`                       | 이메일·전화번호·업무 상태 수정      |
+| `GET`   | `/api/me/notification-settings` | 알림 설정 조회                      |
+| `PUT`   | `/api/me/notification-settings` | 알림 설정 변경                      |
 
 ### 8.4 Schedules
 
@@ -260,17 +281,32 @@ the session or Redis; it is resolved from the authoritative user store for each 
 | `PUT`    | `/api/schedules/{scheduleId}`               | 일정 수정                   |
 | `DELETE` | `/api/schedules/{scheduleId}`               | 일반 일정 취소(Soft Delete) |
 
-일정 생성·수정 요청은 유형을 정확히 하나만 가져야 한다. `TEAM` 일정은 하나 이상의 팀 ID, `PROJECT` 일정은 하나 이상의 프로젝트 ID를 가질 수 있고 모든 유형은 여러 참석자 ID와 명시적 사용자 공유 대상 ID를 가질 수 있다. 유형과 맞지 않는 팀·프로젝트 대상 조합은 `400 Bad Request`로 거부한다.
+일정 생성·수정 요청은 유형을 정확히 하나만 가져야 한다. 일반 `PERSONAL`/`PRIVATE` 일정은 등록자 전용이며 `participantIds`, `userTargetIds`, `teamTargetIds`, `projectTargetIds`가 모두 빈 배열이어야 한다. `TEAM` 일정은 하나 이상의 팀 ID, `PROJECT` 일정은 하나 이상의 프로젝트 ID를 가지며 여러 참석자 ID와 명시적 사용자 공유 대상 ID를 가질 수 있다. 유형과 맞지 않는 팀·프로젝트 대상 조합은 `400 Bad Request`로 거부한다.
+
+일반 `PERSONAL`/`PRIVATE` 요청에 `participantIds` 또는 `userTargetIds`가 하나라도 포함되면 서버는 저장·관계 갱신 전에 `400 Bad Request`와 `SCHEDULE_PERSONAL_RELATIONS_FORBIDDEN`을 반환한다. 같은 요청에서 팀·프로젝트 대상이 포함된 경우도 같은 입력 오류로 거부한다. 이 오류는 생성과 전체 교체 수정에 동일하게 적용되며, 실패한 요청은 일정 행이나 기존 관계에 부분 변경을 남기지 않는다. (`CAL-11-R2`)
+
+```json
+{
+  "code": "SCHEDULE_PERSONAL_RELATIONS_FORBIDDEN",
+  "message": "개인 일정에는 참석자 또는 사용자 공유 대상을 지정할 수 없습니다.",
+  "fieldErrors": [
+    {
+      "field": "participantIds",
+      "message": "개인 일정에서는 빈 배열이어야 합니다."
+    }
+  ]
+}
+```
 
 참석자와 명시적 사용자 공유 대상은 별도 관계로 관리한다. 명시적 사용자 공유 대상은 일정 조회 권한을 갖지만 참석 인원에는 포함하지 않는다. 같은 사용자가 참석자와 공유 대상에 모두 포함되면 조회 권한은 한 번만 판정한다.
 
-일정 참석자 후보 검색은 인증된 사용자가 일정 등록·수정 화면에서 접근 가능한 활성 사내 사용자를 찾는 용도로만 사용한다.
+일정 참석자 후보 검색은 인증된 사용자가 팀·프로젝트 일정 등록·수정 화면에서 접근 가능한 활성 사내 사용자를 찾는 용도로만 사용한다. 일반 `PERSONAL`/`PRIVATE` 일정 화면은 이 입력을 제공하지 않는다. (`CAL-11-R1`, `CAL-11-R4`)
 
 - `query`는 연속 공백을 단일 공백으로 정규화한 1~50자 문자열이어야 하며 이름 또는 사번의 부분 일치 검색어로 사용한다.
 - 결과는 최대 20건이며 서버가 정한 안정적인 순서로 반환한다.
 - 응답 항목은 `userId`, `displayName`만 포함하고 이메일, 전화번호, 조직 내 민감정보는 반환하지 않는다.
 - 현재 사용자가 일정 참석자로 지정할 수 없는 비활성·퇴사·접근 불가 사용자는 결과에서 제외한다.
-- 인증 주체가 없으면 `401 Unauthorized`, 잘못된 검색어는 `400 Bad Request`를 반환한다.
+- 인증 주체가 없으면 `401 Unauthorized`, 팀·프로젝트 일정의 참석자 검색 권한이 없으면 `403 Forbidden`과 `SCHEDULE_ATTENDEE_SEARCH_FORBIDDEN`, 잘못된 검색어는 `400 Bad Request`를 반환한다. Client는 이 응답을 Loading·Empty·Error와 구분되는 Permission 상태로 표시한다.
 - 검색 결과가 없으면 빈 배열을 반환하며, 사용자 존재 여부를 오류 응답으로 구분해 노출하지 않는다.
 
 `GET /api/schedules/target-options`는 인증된 사용자가 일정 등록 화면에서 선택할 수 있는 대상의
@@ -316,13 +352,15 @@ the session or Redis; it is resolved from the authoritative user store for each 
 }
 ```
 
-`startAt`과 `endAt`은 Offset을 포함하는 ISO 8601 시각이며 `[startAt, endAt)` 구간으로 해석한다. `endAt`은 반드시 `startAt` 뒤여야 한다. `PERSONAL`/`PRIVATE`는 팀·프로젝트 대상이 없어야 하고, `TEAM`/`TEAM`은 하나 이상의 팀 대상만, `PROJECT`/`PROJECT`는 하나 이상의 프로젝트 대상만 가져야 한다. 색상은 `RED`, `ORANGE`, `YELLOW`, `GREEN`, `BLUE`, `PURPLE` 중 하나다. 사용자·팀·프로젝트의 존재·활성·접근성은 Calendar Adapter가 실제 원장 데이터를 기준으로 판정하며 실패는 `SCHEDULE_REFERENCE_INVALID` 계약으로 변환한다.
+`startAt`과 `endAt`은 Offset을 포함하는 ISO 8601 시각이며 `[startAt, endAt)` 구간으로 해석한다. `endAt`은 반드시 `startAt` 뒤여야 한다. `PERSONAL`/`PRIVATE`는 `participantIds`, `userTargetIds`, 팀·프로젝트 대상이 모두 빈 배열이어야 한다. `TEAM`/`TEAM`은 하나 이상의 팀 대상만, `PROJECT`/`PROJECT`는 하나 이상의 프로젝트 대상만 가져야 한다. 팀·프로젝트 일정의 참석자 검색·선택 결과는 `userId`, `displayName`만 사용하며 이름 또는 사번으로 검색하고 중복 없이 추가·개별 제거한다. 색상은 `RED`, `ORANGE`, `YELLOW`, `GREEN`, `BLUE`, `PURPLE` 중 하나다. 사용자·팀·프로젝트의 존재·활성·접근성은 Calendar Adapter가 실제 원장 데이터를 기준으로 판정하며 실패는 `SCHEDULE_REFERENCE_INVALID` 계약으로 변환한다.
 
 조회 결과는 다음 공개 규칙을 적용한다.
 
-- `PERSONAL`: 작성자, 참석자와 명시적 사용자 공유 대상
+- 일반 `PERSONAL`/`PRIVATE`: 작성자만. 과거 데이터에 남은 참석자·명시적 사용자 공유 관계는 등록자 외 공개 근거로 사용하지 않는다.
 - `TEAM`: 연결된 팀 소속 사용자, 참석자와 명시적 사용자 공유 대상
 - `PROJECT`: 연결된 프로젝트 참여자, 참석자와 명시적 사용자 공유 대상
+
+기존 일반 개인 일정 관계는 승인 없는 Migration으로 삭제하지 않는다. 등록자가 해당 일정을 전체 수정·저장하면 `participantIds`, `userTargetIds`, `teamTargetIds`, `projectTargetIds`를 빈 배열로 제출하여 새 계약에 맞게 관계를 정리한다. 회의실 예약에서 관리되는 연결 일정은 예약자·참석자 연동과 공개 정책을 유지하는 예외이며 Calendar에서는 직접 수정할 수 없다. (`CAL-11-R9`, `CAL-11-R10`)
 
 Calendar Core의 조회 경계 DTO는 검증 가능한 Actor ID를 명시적으로 받는다. 이 DTO는 HTTP Request나
 인증 우회 수단이 아니며, 보호 Controller에서는 검증된 Principal만 Actor ID를 제공한다.
@@ -355,6 +393,11 @@ Calendar Core의 조회 경계 DTO는 검증 가능한 Actor ID를 명시적으�
   "location": "회의실 A",
   "creatorAttends": true,
   "participantIds": [2, 3],
+  "participants": [
+    { "userId": 2, "displayName": "김하늘" },
+    { "userId": 3, "displayName": "이바다" }
+  ],
+  "attendeeCount": 3,
   "userTargetIds": [4],
   "teamTargetIds": [10],
   "projectTargetIds": [],
@@ -362,6 +405,8 @@ Calendar Core의 조회 경계 DTO는 검증 가능한 Actor ID를 명시적으�
   "canManage": true
 }
 ```
+
+`participantIds`는 기존 Client 호환성을 위해 유지한다. `participants`는 화면 표시에 필요한 최소 객체 목록으로 `participantIds`와 같은 순서의 `{ "userId", "displayName" }`만 포함하며 이메일, 전화번호, 조직·직급·상태 등 추가 개인정보를 포함하지 않는다. `attendeeCount`는 중복 없는 다른 참석자 수에 등록자가 참석하는 경우의 1명을 더해 계산한다. 등록자는 다른 참석자와 중복 계산하지 않고, `creatorAttends`는 등록자의 참석 여부를 별도로 나타낸다. 따라서 상세 모달은 등록자 참석 여부를 별도 표시하고, 다른 참석자가 없을 때도 `attendeeCount`와 빈 목록 상태를 표시할 수 있다. (`CAL-11-R6`, `CAL-11-R7`)
 
 `canManage`는 현재 Actor가 Calendar에서 일반 일정을 수정·취소할 수 있는지를 서버가 계산한 UI 계약이다.
 등록자이면서 회의실 예약에서 관리하지 않는 일정에만 `true`이며, 실제 변경 요청은 서버에서 권한과 관리
@@ -392,7 +437,7 @@ Calendar Core의 조회 경계 DTO는 검증 가능한 Actor ID를 명시적으�
 }
 ```
 
-성공 시 `200 OK`와 `GET /api/schedules/{scheduleId}`의 상세 응답 형식을 반환한다. 잘못된 유형·대상·시간·색상·중복
+성공 시 `200 OK`와 `GET /api/schedules/{scheduleId}`의 상세 응답 형식을 반환한다. `TEAM` 또는 `PROJECT`에서 `PERSONAL`/`PRIVATE`로 유형을 바꾸는 Client는 참석자와 명시적 사용자 공유 대상을 제거했음을 사용자에게 알리고 `participantIds`, `userTargetIds`, `teamTargetIds`, `projectTargetIds`를 모두 빈 배열로 전송해야 한다. 비어 있지 않은 배열은 `400 Bad Request`와 `SCHEDULE_PERSONAL_RELATIONS_FORBIDDEN`으로 거부하며 기존 일정·관계에 부분 변경을 남기지 않는다. 잘못된 유형·대상·시간·색상·중복
 참석자 또는 참조는 생성과 같은 `400 Bad Request` 계약으로 거부한다. 존재하지 않거나 Actor가 등록자가 아닌
 일정, 이미 취소된 일정 및 공개 정책상 노출할 수 없는 일정은 모두 `404 Not Found`와 `SCHEDULE_NOT_FOUND`로
 처리한다. 회의실 예약 연결 일정은 어떤 필드도 직접 수정하지 않으며 `409 Conflict`와
@@ -412,15 +457,15 @@ Calendar Core의 조회 경계 DTO는 검증 가능한 Actor ID를 명시적으�
 
 ### 8.5 Rooms and Reservations
 
-| Method | Path | 목적 |
-| --- | --- | --- |
-| `GET` | `/api/rooms` | 인증 사용자 회의실 목록·예약 현황 조회 |
-| `GET` | `/api/rooms/{roomId}` | 인증 사용자 회의실 상세 |
-| `GET` | `/api/room-reservations/{reservationId}` | 인증 사용자가 소유한 예약 수정 상세 |
-| `GET` | `/api/room-reservations?from=&to=` | 예약 현황 조회 |
-| `POST` | `/api/room-reservations` | 회의실 예약과 일정 생성 |
-| `PUT` | `/api/room-reservations/{reservationId}` | 예약 수정 |
-| `DELETE` | `/api/room-reservations/{reservationId}` | 예약 취소 후보(일정 도메인 경계 확정 후 구현) |
+| Method   | Path                                     | 목적                                   |
+| -------- | ---------------------------------------- | -------------------------------------- |
+| `GET`    | `/api/rooms`                             | 인증 사용자 회의실 목록·예약 현황 조회 |
+| `GET`    | `/api/rooms/{roomId}`                    | 인증 사용자 회의실 상세                |
+| `GET`    | `/api/room-reservations/{reservationId}` | 인증 사용자가 소유한 예약 수정 상세    |
+| `GET`    | `/api/room-reservations?from=&to=`       | 예약 현황 조회                         |
+| `POST`   | `/api/room-reservations`                 | 회의실 예약과 일정 생성                |
+| `PUT`    | `/api/room-reservations/{reservationId}` | 예약 수정                              |
+| `DELETE` | `/api/room-reservations/{reservationId}` | 예약과 연결 일정 취소(Soft Cancel)     |
 
 중복 예약은 `409 Conflict`와 안정적인 Error Code로 반환한다.
 
@@ -439,9 +484,20 @@ Calendar Core의 조회 경계 DTO는 검증 가능한 Actor ID를 명시적으�
 `usesDefaultImage`만 반환한다.
 
 `GET /api/room-reservations/{reservationId}`는 예약 수정 화면에 필요한
-`reservationId`, `roomId`, `title`, `startAt`, `endAt`, `attendeeIds`, `description`,
-`editable`만 반환한다. 연결 일정 ID, 예약 Entity, 인증 사용자 정보 및 참석자 이외의
-개인정보는 반환하지 않는다.
+`reservationId`, `roomId`, `title`, `startAt`, `endAt`, `attendeeIds`, `attendees`,
+`description`, `editable`만 반환한다. `attendees`의 각 항목은 `userId`와 `displayName`만
+포함하며 `attendeeIds`와 같은 ID를 같은 순서로 제공한다. 연결 일정 ID, 예약 Entity, 인증
+사용자 정보 및 이메일·전화번호·조직 정보·재직 상태 등 불필요한 개인정보는 반환하지 않는다.
+
+```json
+{
+  "attendeeIds": [10, 11],
+  "attendees": [
+    { "userId": 10, "displayName": "김하늘" },
+    { "userId": 11, "displayName": "이바다" }
+  ]
+}
+```
 
 세 Endpoint 모두 인증된 사용자 경계를 요구한다. 현재 실제 인증 Adapter가 없으므로
 인증 사용자 공급 없이 실행되는 요청은 Use Case를 호출하지 않고 `401 Unauthorized`와
@@ -521,26 +577,40 @@ Calendar Core의 조회 경계 DTO는 검증 가능한 Actor ID를 명시적으�
 `409`와 `ROOM_RESERVATION_NOT_EDITABLE`, 수용 인원 초과는 `409`와
 `ROOM_CAPACITY_EXCEEDED`, 시간 충돌은 `409`와 `ROOM_RESERVATION_CONFLICT`를 반환한다.
 
+#### 구현된 예약 취소 계약
+
+`DELETE /api/room-reservations/{reservationId}`는 인증된 예약 소유자만 호출할 수 있다. 성공 시
+응답 Body 없이 `204 No Content`를 반환하며, 예약과 연결 일정은 하나의 트랜잭션에서 각각
+`CANCELED` 및 취소 시각으로 전환된다. 취소된 예약은 회의실 예약 현황과 충돌 검사에서,
+취소된 일정은 기본 Calendar 기간·상세 조회에서 제외된다.
+
+인증 정보가 없으면 Service 호출 전에 `401 Unauthorized`와 `AUTHENTICATION_REQUIRED`를
+반환한다. 존재하지 않는 예약과 소유하지 않은 예약은 모두 `404 Not Found`와
+`ROOM_RESERVATION_NOT_FOUND`를 반환한다. 이미 취소된 예약은 같은 소유자의 반복 요청에
+상태를 다시 변경하지 않고 `204`를 반환한다. 동시 취소·연결 일정 상태 충돌 등 상태 전이
+충돌은 `409 Conflict`와 `ROOM_RESERVATION_CANCEL_CONFLICT`로 반환한다. 취소 감사는 Actor,
+시각, 예약·일정 식별자와 결과만 기록하며 제목·설명·참석자·Session 정보는 포함하지 않는다.
+
 ### 8.6 Roles and Permissions
 
 고정 역할과 권한은 다음과 같다. 역할 상속이나 `ADMIN` 우회는 없으며 최종 권한은 보유 역할에 명시적으로 매핑된 권한의 합집합이다.
 
-| 역할 | 권한 |
-| --- | --- |
-| `ADMIN` | `SYSTEM_MONITOR`, `ACCOUNT_STATUS_READ`, `THEME_MANAGE`, `ROOM_RESOURCE_MANAGE`, `USER_MANAGE`, `TEAM_MANAGE`, `ROLE_MANAGE`, `PRIVILEGED_ACCOUNT_MANAGE` |
-| `SYSTEM_ADMIN` | `SYSTEM_MONITOR`, `ACCOUNT_STATUS_READ`, `THEME_MANAGE`, `ROOM_RESOURCE_MANAGE` |
-| `HR_ADMIN` | `USER_MANAGE`, `TEAM_MANAGE` |
+| 역할           | 권한                                                                                                                                                      |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ADMIN`        | `SYSTEM_MONITOR`, `ACCOUNT_STATUS_READ`, `THEME_MANAGE`, `ROOM_RESOURCE_MANAGE`, `USER_MANAGE`, `TEAM_MANAGE`, `ROLE_MANAGE`, `PRIVILEGED_ACCOUNT_MANAGE` |
+| `SYSTEM_ADMIN` | `SYSTEM_MONITOR`, `ACCOUNT_STATUS_READ`, `THEME_MANAGE`, `ROOM_RESOURCE_MANAGE`                                                                           |
+| `HR_ADMIN`     | `USER_MANAGE`, `TEAM_MANAGE`                                                                                                                              |
 
 시스템 운영 v1 Endpoint 계약은 다음 권한 경계를 사용한다. 상세 Request·Response Schema는 각 기능 구현 Active Plan에서 확정하되 반환 범위를 넓힐 수 없다.
 
-| Method | Path | 목적 | 권한 |
-| --- | --- | --- | --- |
-| `GET` | `/api/system/status` | 서비스 상태 조회 | `SYSTEM_MONITOR` |
-| `GET` | `/api/system/logs` | 필터링된 시스템 로그 조회 | `SYSTEM_MONITOR` |
-| `GET` | `/api/system/errors` | 오류 상태 조회 | `SYSTEM_MONITOR` |
-| `GET` | `/api/system/account-statuses` | 사번·계정·재직 상태만 조회 | `ACCOUNT_STATUS_READ` |
-| `GET`, `PUT` | `/api/system/theme` | 회사 대표 테마 조회·변경 | `THEME_MANAGE` |
-| 기능별 Endpoint | 회의실 사진·장비 자원 | 조회·변경 | `ROOM_RESOURCE_MANAGE` |
+| Method          | Path                           | 목적                       | 권한                   |
+| --------------- | ------------------------------ | -------------------------- | ---------------------- |
+| `GET`           | `/api/system/status`           | 서비스 상태 조회           | `SYSTEM_MONITOR`       |
+| `GET`           | `/api/system/logs`             | 필터링된 시스템 로그 조회  | `SYSTEM_MONITOR`       |
+| `GET`           | `/api/system/errors`           | 오류 상태 조회             | `SYSTEM_MONITOR`       |
+| `GET`           | `/api/system/account-statuses` | 사번·계정·재직 상태만 조회 | `ACCOUNT_STATUS_READ`  |
+| `GET`, `PUT`    | `/api/system/theme`            | 회사 대표 테마 조회·변경   | `THEME_MANAGE`         |
+| 기능별 Endpoint | 회의실 사진·장비 자원          | 조회·변경                  | `ROOM_RESOURCE_MANAGE` |
 
 기능 토글, 임의 전역 설정, 직원·팀·비밀번호·역할 변경은 `SYSTEM_ADMIN` 범위가 아니다.
 

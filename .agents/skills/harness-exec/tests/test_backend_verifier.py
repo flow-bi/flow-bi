@@ -154,18 +154,20 @@ class BackendVerifierTests(unittest.TestCase):
         self.assertEqual((failed.returncode, failed.output, failed.timed_out), (7, "failed", False))
         self.assertEqual((timed_out.returncode, timed_out.output, timed_out.timed_out), (124, "timed out", True))
 
-    def test_serializes_one_request_and_rejects_concurrent_request(self) -> None:
+    def test_joins_identical_concurrent_gradle_requests_and_reuses_no_completed_result(self) -> None:
         started = threading.Event()
         release = threading.Event()
         active = 0
         maximum_active = 0
+        executions = 0
         lock = threading.Lock()
 
         def slow_runner(*_args, **_kwargs):
-            nonlocal active, maximum_active
+            nonlocal active, maximum_active, executions
             with lock:
                 active += 1
                 maximum_active = max(maximum_active, active)
+                executions += 1
             started.set()
             release.wait(timeout=2)
             with lock:
@@ -176,11 +178,137 @@ class BackendVerifierTests(unittest.TestCase):
             with ThreadPoolExecutor(max_workers=2) as executor:
                 first = executor.submit(request_backend_verification, ["test"], verifier.environment)
                 self.assertTrue(started.wait(timeout=1))
+                second = executor.submit(request_backend_verification, ["test"], verifier.environment)
+                time.sleep(0.05)
+                self.assertEqual(maximum_active, 1)
+                release.set()
+                self.assertEqual(first.result(timeout=2), BackendVerificationResult(0, "ok"))
+                self.assertEqual(second.result(timeout=2), BackendVerificationResult(0, "ok"))
+                self.assertEqual(
+                    request_backend_verification(["test"], verifier.environment),
+                    BackendVerificationResult(0, "ok"),
+                )
+        self.assertEqual(maximum_active, 1)
+        self.assertEqual(executions, 2)
+
+    def test_joins_identical_timeout_results(self) -> None:
+        started = threading.Event()
+        release = threading.Event()
+        executions = 0
+
+        def timeout_runner(*_args, **_kwargs):
+            nonlocal executions
+            executions += 1
+            started.set()
+            release.wait(timeout=2)
+            raise subprocess.TimeoutExpired(["gradlew", "build"], 1, output="timed out")
+
+        with BackendVerifier(self.root, runner=timeout_runner) as verifier:
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                first = executor.submit(request_backend_verification, ["build"], verifier.environment)
+                self.assertTrue(started.wait(timeout=1))
+                second = executor.submit(request_backend_verification, ["build"], verifier.environment)
+                time.sleep(0.05)
+                release.set()
+                expected = BackendVerificationResult(124, "timed out", timed_out=True)
+                self.assertEqual(first.result(timeout=2), expected)
+                self.assertEqual(second.result(timeout=2), expected)
+        self.assertEqual(executions, 1)
+
+    def test_process_start_failure_releases_joiners_and_allows_retry(self) -> None:
+        started = threading.Event()
+        release = threading.Event()
+        executions = 0
+
+        def failing_runner(*_args, **_kwargs):
+            nonlocal executions
+            executions += 1
+            if executions == 1:
+                started.set()
+                release.wait(timeout=2)
+                raise OSError(2, "missing")
+            return subprocess.CompletedProcess(["gradlew", "build"], 0, stdout="ok")
+
+        with BackendVerifier(self.root, runner=failing_runner) as verifier:
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                first = executor.submit(request_backend_verification, ["build"], verifier.environment)
+                self.assertTrue(started.wait(timeout=1))
+                second = executor.submit(request_backend_verification, ["build"], verifier.environment)
+                time.sleep(0.05)
+                release.set()
+                self.assertEqual(first.result(timeout=2), second.result(timeout=2))
+            self.assertEqual(request_backend_verification(["build"], verifier.environment).returncode, 0)
+        self.assertEqual(executions, 2)
+
+    def test_unexpected_failure_releases_joiners_and_allows_retry(self) -> None:
+        started = threading.Event()
+        release = threading.Event()
+        executions = 0
+
+        def failing_runner(*_args, **_kwargs):
+            nonlocal executions
+            executions += 1
+            if executions == 1:
+                started.set()
+                release.wait(timeout=2)
+                raise RuntimeError("unexpected")
+            return subprocess.CompletedProcess(["gradlew", "build"], 0, stdout="ok")
+
+        with BackendVerifier(self.root, runner=failing_runner) as verifier:
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                first = executor.submit(request_backend_verification, ["build"], verifier.environment)
+                self.assertTrue(started.wait(timeout=1))
+                second = executor.submit(request_backend_verification, ["build"], verifier.environment)
+                time.sleep(0.05)
+                release.set()
+                expected = BackendVerificationResult(1, "Backend 검증 실행 중 예외가 발생했습니다.")
+                self.assertEqual(first.result(timeout=2), expected)
+                self.assertEqual(second.result(timeout=2), expected)
+            self.assertEqual(request_backend_verification(["build"], verifier.environment).returncode, 0)
+        self.assertEqual(executions, 2)
+
+    def test_rejects_different_concurrent_gradle_requests(self) -> None:
+        started = threading.Event()
+        release = threading.Event()
+
+        def slow_runner(*_args, **_kwargs):
+            started.set()
+            release.wait(timeout=2)
+            return subprocess.CompletedProcess(["gradlew", "test"], 0, stdout="ok")
+
+        with BackendVerifier(self.root, runner=slow_runner) as verifier:
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                first = executor.submit(request_backend_verification, ["test"], verifier.environment)
+                self.assertTrue(started.wait(timeout=1))
                 with self.assertRaisesRegex(BackendVerifierClientError, "429"):
-                    request_backend_verification(["test"], verifier.environment)
+                    request_backend_verification(["build"], verifier.environment)
                 release.set()
                 self.assertEqual(first.result(timeout=2).returncode, 0)
-        self.assertEqual(maximum_active, 1)
+
+    def test_joins_identical_formatter_requests(self) -> None:
+        target = self.write_java("backend/src/main/java/allowed/Target.java")
+        started = threading.Event()
+        release = threading.Event()
+        executions = 0
+
+        def slow_formatter(command, **_kwargs):
+            nonlocal executions
+            executions += 1
+            started.set()
+            release.wait(timeout=2)
+            return subprocess.CompletedProcess(command, 0, stdout="formatted")
+
+        with BackendVerifier(self.root, runner=slow_formatter) as verifier:
+            environment = verifier.environment_for_task(("backend/src/main/java/allowed",), ())
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                first = executor.submit(request_backend_formatting, [str(target.relative_to(self.root))], environment)
+                self.assertTrue(started.wait(timeout=1))
+                second = executor.submit(request_backend_formatting, [str(target.relative_to(self.root))], environment)
+                time.sleep(0.05)
+                release.set()
+                self.assertEqual(first.result(timeout=2), BackendVerificationResult(0, "formatted"))
+                self.assertEqual(second.result(timeout=2), BackendVerificationResult(0, "formatted"))
+        self.assertEqual(executions, 1)
 
     def test_cli_forwards_exit_code_and_output_from_parent_verifier(self) -> None:
         output = StringIO()
@@ -250,11 +378,12 @@ class BackendVerifierTests(unittest.TestCase):
 
     def test_formatter_rejects_symlink_without_platform_symlink_privilege(self) -> None:
         target = self.write_java("backend/src/main/java/allowed/Link.java")
+        resolved_target = target.resolve()
         runner = mock.Mock()
         original_is_symlink = Path.is_symlink
 
         def controlled_is_symlink(path: Path) -> bool:
-            return path == target or original_is_symlink(path)
+            return path in {target, resolved_target} or original_is_symlink(path)
 
         with (
             mock.patch.object(Path, "is_symlink", autospec=True, side_effect=controlled_is_symlink),

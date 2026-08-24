@@ -19,7 +19,7 @@ spring:
 
   datasource:
     driver-class-name: org.h2.Driver
-    url: jdbc:h2:mem:flowbi;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    url: jdbc:h2:mem:flowbi;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
     username: sa
     password:
 
@@ -60,7 +60,6 @@ springdoc:
     enabled: false
 
 ---
-
 spring:
   config:
     activate:
@@ -78,7 +77,7 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: update
     database-platform: org.hibernate.dialect.PostgreSQLDialect
 
   flyway:
@@ -91,6 +90,11 @@ springdoc:
   swagger-ui:
     enabled: true
     path: /swagger-ui.html
+    try-it-out-enabled: true
+    csrf:
+      enabled: true
+      cookie-name: XSRF-TOKEN
+      header-name: X-XSRF-TOKEN
 
 auth:
   session:

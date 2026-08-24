@@ -14,6 +14,7 @@ if str(SCRIPTS) not in sys.path:
 from harness_runner.evidence import ExecutionRecordStore, revision_fingerprint
 from harness_runner.execution import execute_workers
 from harness_runner.models import HarnessRequest, ParsedPlan, Task
+from harness_runner.parse import parse_invocation
 from harness_runner.state import PlanStateStore, StateRecordError
 
 
@@ -49,8 +50,6 @@ def worker_result(*, quality_score: object = 90, decision: str = "PASS") -> obje
             "remaining_issues": [],
             "final_status": "PASS",
             "quality_score": quality_score,
-            "remaining_issues": [],
-            "final_status": "PASS",
         }
 
     return Result()
@@ -140,7 +139,7 @@ class RevisionEvidenceTests(unittest.TestCase):
 
         report = execute_workers(
             self.plan,
-            HarnessRequest("rerun-plan", start_task_number=2),
+            HarnessRequest("rerun-plan-01", start_task_number=2),
             lambda invocation: calls.append(invocation.task.number) or worker_result(),
             project_root=self.root,
             record_store=self.store,
@@ -154,7 +153,7 @@ class RevisionEvidenceTests(unittest.TestCase):
     def test_from_task_requires_trusted_prior_pass_records(self) -> None:
         report = execute_workers(
             self.plan,
-            HarnessRequest("rerun-plan", start_task_number=2),
+            HarnessRequest("rerun-plan-01", start_task_number=2),
             lambda _: worker_result(),
             project_root=self.root,
             record_store=self.store,

@@ -86,6 +86,30 @@ class ScheduleUpdateServiceTest {
         .isInstanceOf(InvalidScheduleUpdateCommandException.class);
   }
 
+  @Test
+  void rejectsPersonalRelationsBeforeUpdatingAnExistingSchedule() {
+    ScheduleReferenceValidator referenceValidator = mock(ScheduleReferenceValidator.class);
+    ScheduleRepository repository = mock(ScheduleRepository.class);
+    ScheduleRoomReservationLookup reservations = mock(ScheduleRoomReservationLookup.class);
+    Schedule schedule = Schedule
+        .create(ScheduleCreateCommand.of(1L,"Personal",ScheduleType.PERSONAL,
+            ScheduleVisibility.PRIVATE,OffsetDateTime.parse("2026-08-10T09:00:00+09:00"),
+            OffsetDateTime.parse("2026-08-10T10:00:00+09:00"),false,ScheduleColorLabel.BLUE,null,
+            null,false,List.of(2L),List.of(),List.of(),List.of()));
+    when(repository.findByIdWithAssociationsForUpdate(100L)).thenReturn(Optional.of(schedule));
+    ScheduleUpdateService service = new ScheduleUpdateService(referenceValidator,
+        new ScheduleUpdateTransaction(repository, reservations));
+    ScheduleUpdateCommand command = ScheduleUpdateCommand.of("Personal",ScheduleType.PERSONAL,
+        ScheduleVisibility.PRIVATE,OffsetDateTime.parse("2026-08-10T09:00:00+09:00"),
+        OffsetDateTime.parse("2026-08-10T10:00:00+09:00"),false,ScheduleColorLabel.BLUE,null,null,
+        false,List.of(2L),List.of(),List.of(),List.of());
+
+    assertThatThrownBy(() -> service.update(1L,100L,command))
+        .isInstanceOf(PersonalScheduleRelationsForbiddenException.class);
+    org.mockito.Mockito.verifyNoInteractions(referenceValidator);
+    assertThat(schedule.getTitle()).isEqualTo("Personal");
+  }
+
   private Schedule activeSchedule(long creatorId) {
     return Schedule.create(ScheduleCreateCommand.of(creatorId,"Planning",ScheduleType.TEAM,
         ScheduleVisibility.TEAM,OffsetDateTime.parse("2026-08-10T09:00:00+09:00"),

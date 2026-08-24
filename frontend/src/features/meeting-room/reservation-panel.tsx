@@ -1,8 +1,10 @@
+import { useQuery } from '@tanstack/react-query'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 
 import {
   isMeetingRoomGatewayError,
   type CreateRoomReservationCommand,
+  type RoomReservationAttendee,
   type RoomSummary,
 } from './meeting-room-gateway'
 import { TIME_INPUT_STEP_SECONDS } from './meeting-time'
@@ -24,6 +26,7 @@ interface ReservationPanelProps {
   onClose: () => void
   onSubmit: (command: CreateRoomReservationCommand) => Promise<void>
   onRefreshAvailability: () => void
+  onFindAttendeeCandidates?: (query: string) => Promise<RoomReservationAttendee[]>
 }
 
 const inputClassName = 'mt-1 w-full rounded border border-(--color-border) p-2'
@@ -54,13 +57,17 @@ export function ReservationPanel({
   onClose,
   onSubmit,
   onRefreshAvailability,
+  onFindAttendeeCandidates,
 }: ReservationPanelProps) {
   const defaultValues =
     initialValues ??
     initialReservationValuesFromSearch({ date: initialDate, startTime: '09:00', endTime: '10:00' })
   const [values, setValues] = useState(defaultValues)
   const [errors, setErrors] = useState<ReservationFormErrors>({})
-  const [attendeeInput, setAttendeeInput] = useState('')
+  const [attendeeQuery, setAttendeeQuery] = useState('')
+  const [selectedAttendees, setSelectedAttendees] = useState<RoomReservationAttendee[]>(
+    defaultValues.attendees ?? [],
+  )
   const [duplicateNotice, setDuplicateNotice] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string>()
@@ -68,6 +75,13 @@ export function ReservationPanel({
   const [confirmDiscard, setConfirmDiscard] = useState(false)
   const headingRef = useRef<HTMLHeadingElement>(null)
   const isDirty = JSON.stringify(values) !== JSON.stringify(defaultValues)
+  const normalizedAttendeeQuery = attendeeQuery.trim().replace(/\s+/g, ' ')
+  const attendeeSearch = useQuery({
+    queryKey: ['meeting-room', 'attendee-candidates', normalizedAttendeeQuery],
+    queryFn: () => onFindAttendeeCandidates?.(normalizedAttendeeQuery) ?? Promise.resolve([]),
+    enabled: normalizedAttendeeQuery.length > 0,
+    retry: false,
+  })
 
   useEffect(() => {
     headingRef.current?.focus()
@@ -85,22 +99,19 @@ export function ReservationPanel({
     }
   }
 
-  function addAttendee() {
-    const attendeeId = Number(attendeeInput)
-    if (!Number.isInteger(attendeeId) || attendeeId < 1) {
-      return
-    }
-    if (values.attendeeIds.includes(attendeeId)) {
+  function addAttendee(candidate: RoomReservationAttendee) {
+    if (selectedAttendees.some((attendee) => attendee.userId === candidate.userId)) {
       setDuplicateNotice(true)
     } else {
-      setValues({ ...values, attendeeIds: [...values.attendeeIds, attendeeId] })
+      const attendees = [...selectedAttendees, candidate]
+      setSelectedAttendees(attendees)
+      setValues({ ...values, attendeeIds: attendees.map(({ userId }) => userId), attendees })
     }
-    setAttendeeInput('')
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (isSubmitting || !isSubmissionAvailable) {
+    if (isSubmitting || !isSubmissionAvailable || attendeeSearch.isLoading) {
       return
     }
     const validationErrors = validateReservationForm(values, room.capacity)
@@ -265,40 +276,73 @@ export function ReservationPanel({
             aria-describedby={errors.attendeeIds ? 'reservation-attendees-error' : undefined}
           >
             <legend>참석자</legend>
-            <div className="flex gap-2">
-              <label className="grow">
-                참석자 ID
-                <input
-                  className={inputClassName}
-                  type="number"
-                  min="1"
-                  value={attendeeInput}
-                  onChange={(event) => setAttendeeInput(event.target.value)}
-                />
-              </label>
+            <label>
+              참석자 검색
+              <input
+                className={inputClassName}
+                value={attendeeQuery}
+                onChange={(event) => setAttendeeQuery(event.target.value)}
+              />
+            </label>
+            {attendeeSearch.isLoading ? <p role="status">참석자를 검색하고 있습니다.</p> : null}
+            {attendeeSearch.isError ? (
+              <div role="alert">
+                <p>
+                  {isMeetingRoomGatewayError(attendeeSearch.error) &&
+                  attendeeSearch.error.code === 'AUTH_INTEGRATION_PENDING'
+                    ? '세션이 만료되었습니다. 다시 로그인해 주세요.'
+                    : isMeetingRoomGatewayError(attendeeSearch.error) &&
+                        attendeeSearch.error.code === 'ATTENDEE_SEARCH_FORBIDDEN'
+                      ? '참석자 검색 권한이 없습니다.'
+                      : '참석자 검색에 실패했습니다. 다시 시도해 주세요.'}
+                </p>
+                <button type="button" onClick={() => void attendeeSearch.refetch()}>
+                  검색 다시 시도
+                </button>
+              </div>
+            ) : null}
+            {normalizedAttendeeQuery.length > 0 &&
+            !attendeeSearch.isLoading &&
+            !attendeeSearch.isError &&
+            attendeeSearch.data?.length === 0 ? (
+              <p role="status">일치하는 참석자가 없습니다.</p>
+            ) : null}
+            {attendeeSearch.data?.map((candidate) => (
               <button
-                className="mt-6 rounded border border-(--color-border) px-3 py-1"
+                key={candidate.userId}
+                className="mt-2 mr-2 rounded border border-(--color-border) px-3 py-1"
                 type="button"
-                onClick={addAttendee}
+                onClick={() => addAttendee(candidate)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    addAttendee(candidate)
+                  }
+                }}
               >
-                참석자 추가
+                {candidate.displayName} 참석자로 추가
               </button>
-            </div>
+            ))}
             {duplicateNotice ? <p role="status">중복 참석자는 한 번만 추가됩니다.</p> : null}
             <ul className="mt-2 flex flex-wrap gap-2" aria-label="추가된 참석자">
-              {values.attendeeIds.map((attendeeId) => (
-                <li key={attendeeId}>
+              {selectedAttendees.map((attendee) => (
+                <li key={attendee.userId}>
                   <button
                     className="rounded bg-(--color-background) px-2 py-1"
                     type="button"
-                    onClick={() =>
+                    onClick={() => {
+                      const attendees = selectedAttendees.filter(
+                        ({ userId }) => userId !== attendee.userId,
+                      )
+                      setSelectedAttendees(attendees)
                       setValues({
                         ...values,
-                        attendeeIds: values.attendeeIds.filter((id) => id !== attendeeId),
+                        attendeeIds: attendees.map(({ userId }) => userId),
+                        attendees,
                       })
-                    }
+                    }}
                   >
-                    참석자 {attendeeId} 제거
+                    {attendee.displayName} 제거
                   </button>
                 </li>
               ))}

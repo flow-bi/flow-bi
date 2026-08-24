@@ -2,6 +2,7 @@ import { validateMeetingTimes } from './meeting-time'
 
 import type {
   CreateRoomReservationCommand,
+  RoomReservationAttendee,
   UpdateRoomReservationCommand,
 } from './meeting-room-gateway'
 
@@ -11,6 +12,7 @@ export interface ReservationFormValues {
   startTime: string
   endTime: string
   attendeeIds: number[]
+  attendees?: RoomReservationAttendee[]
   description: string
 }
 
@@ -61,7 +63,7 @@ export function toReservationCommand(
     title: values.title.trim(),
     startAt: `${values.date}T${values.startTime}:00`,
     endAt: `${values.date}T${values.endTime}:00`,
-    attendeeIds: values.attendeeIds,
+    attendeeIds: [...new Set(values.attendeeIds)],
     description: values.description.trim(),
   }
 }

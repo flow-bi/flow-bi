@@ -35,6 +35,11 @@ const roomManagedDetail: ScheduleDetail = {
   location: '회의실 A',
   creatorAttends: true,
   participantIds: [2, 3],
+  participants: [
+    { userId: 2, displayName: '김하늘' },
+    { userId: 3, displayName: '이바다' },
+  ],
+  attendeeCount: 3,
   userTargetIds: [],
   teamTargetIds: [10],
   projectTargetIds: [],
@@ -71,6 +76,161 @@ function renderCalendar(props: Partial<React.ComponentProps<typeof ScheduleCalen
 }
 
 describe('ScheduleCalendar', () => {
+  it('announces target loading and lets a screen-reader user retry a failed target lookup', async () => {
+    window.history.replaceState({}, '', '/?view=month&date=2024-02-29')
+    const teamDetail = {
+      ...roomManagedDetail,
+      id: 4,
+      title: '대상 목록을 확인할 팀 회의',
+      meetingRoomManaged: false,
+      canManage: true,
+    }
+    let rejectTargetOptions: ((reason?: unknown) => void) | undefined
+    const getTargetOptions = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<{ teams: Array<{ id: number; name: string }>; projects: [] }>(
+            (_resolve, reject) => (rejectTargetOptions = reject),
+          ),
+      )
+      .mockResolvedValueOnce({ teams: [{ id: 10, name: '플랫폼팀' }], projects: [] })
+    const user = userEvent.setup()
+    renderCalendar({
+      getScheduleDetail: () => Promise.resolve(teamDetail),
+      getSchedules: () => Promise.resolve([teamDetail]),
+      getTargetOptions,
+    })
+
+    await user.click(await screen.findByRole('button', { name: /대상 목록을 확인할 팀 회의/ }))
+    await user.click(await screen.findByRole('button', { name: '일정 수정' }))
+    expect(screen.getByRole('status')).toHaveTextContent('일정 대상 목록을 불러오고 있습니다.')
+
+    rejectTargetOptions?.(new Error('offline'))
+    expect(
+      await screen.findByText('일정 대상 목록을 불러오지 못했습니다. 다시 시도해 주세요.'),
+    ).toBeVisible()
+    await user.click(screen.getByRole('button', { name: '대상 목록 다시 시도' }))
+    expect(await screen.findByRole('checkbox', { name: '플랫폼팀' })).toBeChecked()
+    expect(getTargetOptions).toHaveBeenCalledTimes(2)
+  })
+
+  it('announces the empty named target list to screen readers', async () => {
+    window.history.replaceState({}, '', '/?view=month&date=2024-02-29')
+    const teamDetail = {
+      ...roomManagedDetail,
+      id: 5,
+      title: '대상이 없는 팀 회의',
+      meetingRoomManaged: false,
+      canManage: true,
+    }
+    const user = userEvent.setup()
+    renderCalendar({
+      getScheduleDetail: () => Promise.resolve(teamDetail),
+      getSchedules: () => Promise.resolve([teamDetail]),
+      getTargetOptions: () => Promise.resolve({ teams: [], projects: [] }),
+    })
+
+    await user.click(await screen.findByRole('button', { name: /대상이 없는 팀 회의/ }))
+    await user.click(await screen.findByRole('button', { name: '일정 수정' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('선택 가능한 팀이 없습니다.')
+  })
+
+  it('shows attendee count, named participants, creator attendance, and an empty attendee state without raw IDs', async () => {
+    window.history.replaceState({}, '', '/?view=month&date=2024-02-29')
+    const detail = {
+      ...roomManagedDetail,
+      participants: [
+        { userId: 2, displayName: '김하늘' },
+        { userId: 3, displayName: '이바다' },
+      ],
+      attendeeCount: 3,
+    }
+    const user = userEvent.setup()
+    renderCalendar({ getScheduleDetail: () => Promise.resolve(detail) })
+
+    await user.click(await screen.findByRole('button', { name: /기간을 넘는 팀 회의/ }))
+    const modal = await screen.findByRole('dialog', { name: '기간을 넘는 팀 회의' })
+    expect(within(modal).getByText('참석 인원: 3명')).toBeVisible()
+    expect(within(modal).getByText('등록자 참석: 예')).toBeVisible()
+    expect(within(modal).getByText('김하늘')).toBeVisible()
+    expect(within(modal).getByText('이바다')).toBeVisible()
+    expect(within(modal).queryByText('2')).not.toBeInTheDocument()
+    expect(within(modal).queryByText('3')).not.toBeInTheDocument()
+  })
+
+  it('edits team attendees by name, removes them accessibly, and clears them when changed to personal', async () => {
+    window.history.replaceState({}, '', '/?view=month&date=2024-02-29')
+    const teamDetail = {
+      ...roomManagedDetail,
+      id: 4,
+      title: '수정할 팀 회의',
+      meetingRoomManaged: false,
+      canManage: true,
+    }
+    const updateSchedule = vi.fn(() => Promise.resolve(teamDetail))
+    const user = userEvent.setup()
+    renderCalendar({
+      getScheduleDetail: () => Promise.resolve(teamDetail),
+      getSchedules: () => Promise.resolve([teamDetail]),
+      getTargetOptions: () =>
+        Promise.resolve({
+          teams: [
+            { id: 10, name: '플랫폼팀' },
+            { id: 11, name: '디자인팀' },
+          ],
+          projects: [],
+        }),
+      searchAttendees: () => Promise.resolve([{ userId: 4, displayName: '박민지' }]),
+      updateSchedule,
+    })
+
+    await user.click(await screen.findByRole('button', { name: /수정할 팀 회의/ }))
+    await user.click(await screen.findByRole('button', { name: '일정 수정' }))
+    expect(screen.getByTestId('schedule-edit-form-grid')).toHaveClass('sm:grid-cols-3')
+    expect(screen.getByLabelText('위치')).toHaveClass('rounded-md', 'border-border', 'px-3', 'py-2')
+    expect(screen.queryByLabelText('팀 대상 ID')).not.toBeInTheDocument()
+    expect(screen.getByRole('group', { name: '팀 대상' })).toBeVisible()
+    expect(await screen.findByRole('checkbox', { name: '플랫폼팀' })).toBeChecked()
+    await user.click(screen.getByRole('checkbox', { name: '디자인팀' }))
+    expect(screen.getByRole('checkbox', { name: '디자인팀' })).toBeChecked()
+    expect(screen.getByRole('list', { name: '선택된 참석자' })).toHaveTextContent('김하늘')
+    expect(screen.queryByLabelText('참석자 ID')).not.toBeInTheDocument()
+    await user.type(screen.getByLabelText('참석자 검색'), '민지')
+    await user.click(await screen.findByRole('button', { name: '박민지 참석자로 추가' }))
+    await user.click(screen.getByRole('button', { name: '김하늘 참석자 제거' }))
+    expect(screen.getByRole('list', { name: '선택된 참석자' })).toHaveTextContent('박민지')
+
+    await user.selectOptions(screen.getByLabelText('일정 유형'), 'PERSONAL')
+    expect(
+      await screen.findByText(
+        '개인 일정은 등록자 전용이므로 참석자와 사용자 공유 대상을 제거했습니다.',
+      ),
+    ).toBeVisible()
+    expect(screen.queryByLabelText('참석자 검색')).not.toBeInTheDocument()
+    await user.selectOptions(screen.getByLabelText('일정 유형'), 'TEAM')
+    expect(screen.queryByText('박민지')).not.toBeInTheDocument()
+    expect(updateSchedule).not.toHaveBeenCalled()
+  })
+
+  it('shows the explicit empty state when no other attendees are present', async () => {
+    window.history.replaceState({}, '', '/?view=month&date=2024-02-29')
+    const detail = {
+      ...editableDetail,
+      participantIds: [],
+      participants: [],
+      attendeeCount: 0,
+      creatorAttends: false,
+    }
+    const user = userEvent.setup()
+    renderCalendar({ getScheduleDetail: () => Promise.resolve(detail) })
+
+    await user.click(await screen.findByRole('button', { name: /기간을 넘는 팀 회의/ }))
+    expect(await screen.findByText('다른 참석자가 없습니다.')).toBeVisible()
+    expect(screen.getByText('참석 인원: 0명')).toBeVisible()
+    expect(screen.getByText('등록자 참석: 아니요')).toBeVisible()
+  })
+
   it('exposes Tailwind-styled calendar regions through stable hooks', async () => {
     window.history.replaceState({}, '', '/?view=month&date=2024-02-15')
     renderCalendar()
@@ -118,8 +278,8 @@ describe('ScheduleCalendar', () => {
       3,
       expect.objectContaining({
         title: '변경된 일정',
-        participantIds: [2, 3],
-        userTargetIds: [8],
+        participantIds: [],
+        userTargetIds: [],
         teamTargetIds: [],
         projectTargetIds: [],
       }),

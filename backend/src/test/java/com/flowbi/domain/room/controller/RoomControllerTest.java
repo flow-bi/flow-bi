@@ -5,14 +5,15 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.flowbi.domain.auth.dto.AuthenticatedUser;
-import com.flowbi.domain.auth.dto.AuthenticatedUser.Role;
+import com.flowbi.domain.auth.security.LoginPrincipal;
 import com.flowbi.domain.room.dto.RoomAvailabilityResponse;
 import com.flowbi.domain.room.dto.RoomAvailabilityStatus;
 import com.flowbi.domain.room.dto.RoomDetailResponse;
@@ -35,6 +36,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 
 class RoomControllerTest {
 
@@ -61,9 +64,9 @@ class RoomControllerTest {
             List.of(new RoomAvailabilityResponse.RoomSummary(1L, "A", 8L, "1F", true, List.of()))));
 
     mockMvc
-        .perform(get("/api/rooms").requestAttr("authenticatedUser",user())
-            .param("date","2026-08-10").param("startTime","10:00").param("endTime","11:00")
-            .param("minimumCapacity","6").param("availabilityStatus","AVAILABLE"))
+        .perform(get("/api/rooms").principal(authentication()).param("date","2026-08-10")
+            .param("startTime","10:00").param("endTime","11:00").param("minimumCapacity","6")
+            .param("availabilityStatus","AVAILABLE"))
         .andExpect(status().isOk()).andExpect(jsonPath("$.rooms[0].id").value(1));
 
     ArgumentCaptor<com.flowbi.domain.room.dto.RoomAvailabilityQuery> query = ArgumentCaptor
@@ -75,27 +78,47 @@ class RoomControllerTest {
   }
 
   @Test
+  void acceptsTheAuthenticatedSpringSecurityPrincipalUsedByTheLoginSession() throws Exception {
+    when(availabilityService.findAvailability(any(),Mockito.eq(10L)))
+        .thenReturn(new RoomAvailabilityResponse(List.of()));
+    LoginPrincipal principal = new LoginPrincipal("10", false);
+
+    mockMvc
+        .perform(get("/api/rooms").principal(UsernamePasswordAuthenticationToken
+            .authenticated(principal,"",principal.getAuthorities())).param("date","2026-08-10"))
+        .andExpect(status().isOk());
+
+    verify(availabilityService).findAvailability(any(),Mockito.eq(10L));
+  }
+
+  @Test
   void returnsRoomDetailsAndMapsMissingRoomsToNotFound() throws Exception {
     when(availabilityService.findRoomDetail(1L))
         .thenReturn(new RoomDetailResponse(1L, "A", 8L, "1F", true));
 
-    mockMvc.perform(get("/api/rooms/1").requestAttr("authenticatedUser",user()))
-        .andExpect(status().isOk()).andExpect(jsonPath("$.name").value("A"));
+    mockMvc.perform(get("/api/rooms/1").principal(authentication())).andExpect(status().isOk())
+        .andExpect(jsonPath("$.name").value("A"));
 
     when(availabilityService.findRoomDetail(99L)).thenThrow(new RoomNotFoundException());
-    mockMvc.perform(get("/api/rooms/99").requestAttr("authenticatedUser",user()))
+    mockMvc.perform(get("/api/rooms/99").principal(authentication()))
         .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("ROOM_NOT_FOUND"));
   }
 
   @Test
   void returnsOnlyTheOwnersReservationEditDetails() throws Exception {
-    when(reservationDetailService.findOwnedReservation(10L,5L)).thenReturn(
-        new RoomReservationDetailResponse(5L, 1L, "Planning", LocalDateTime.of(2026,8,10,10,0),
-            LocalDateTime.of(2026,8,10,11,0), List.of(10L,11L), "Discuss plan", true));
+    when(reservationDetailService.findOwnedReservation(10L,5L))
+        .thenReturn(new RoomReservationDetailResponse(5L, 1L, "Planning",
+            LocalDateTime.of(2026,8,10,10,0), LocalDateTime.of(2026,8,10,11,0), List.of(10L,11L),
+            List.of(new RoomReservationDetailResponse.Attendee(10L, "Owner"),
+                new RoomReservationDetailResponse.Attendee(11L, "Attendee")),
+            "Discuss plan", true));
 
-    mockMvc.perform(get("/api/room-reservations/5").requestAttr("authenticatedUser",user()))
+    mockMvc.perform(get("/api/room-reservations/5").principal(authentication()))
         .andExpect(status().isOk()).andExpect(jsonPath("$.roomId").value(1))
         .andExpect(jsonPath("$.attendeeIds[1]").value(11))
+        .andExpect(jsonPath("$.attendees[0].userId").value(10))
+        .andExpect(jsonPath("$.attendees[0].displayName").value("Owner"))
+        .andExpect(jsonPath("$.attendees[0].email").doesNotExist())
         .andExpect(jsonPath("$.description").value("Discuss plan"))
         .andExpect(jsonPath("$.editable").value(true));
   }
@@ -111,9 +134,7 @@ class RoomControllerTest {
 
   @Test
   void mapsInvalidQueriesToBadRequest() throws Exception {
-    mockMvc
-        .perform(
-            get("/api/rooms").requestAttr("authenticatedUser",user()).param("date","not-a-date"))
+    mockMvc.perform(get("/api/rooms").principal(authentication()).param("date","not-a-date"))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.code").value("ROOM_QUERY_INVALID"));
   }
@@ -125,10 +146,10 @@ class RoomControllerTest {
     when(reservationDetailService.findOwnedReservation(10L,6L))
         .thenThrow(new RoomReservationApplicationException("ROOM_RESERVATION_NOT_FOUND"));
 
-    mockMvc.perform(get("/api/room-reservations/5").requestAttr("authenticatedUser",user()))
+    mockMvc.perform(get("/api/room-reservations/5").principal(authentication()))
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.code").value("ROOM_RESERVATION_NOT_FOUND"));
-    mockMvc.perform(get("/api/room-reservations/6").requestAttr("authenticatedUser",user()))
+    mockMvc.perform(get("/api/room-reservations/6").principal(authentication()))
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.code").value("ROOM_RESERVATION_NOT_FOUND"));
   }
@@ -139,7 +160,7 @@ class RoomControllerTest {
         .thenReturn(new CreateRoomReservationResult(5L, 9L));
 
     mockMvc
-        .perform(post("/api/room-reservations").requestAttr("authenticatedUser",user())
+        .perform(post("/api/room-reservations").principal(authentication())
             .contentType("application/json").content("""
                 {"roomId":1,"title":"Planning","startAt":"2026-08-10T10:00:00",
                 "endAt":"2026-08-10T11:00:00","attendeeIds":[10,11],
@@ -181,7 +202,7 @@ class RoomControllerTest {
         .thenReturn(new UpdateRoomReservationResult(5L, 9L));
 
     mockMvc
-        .perform(put("/api/room-reservations/5").requestAttr("authenticatedUser",user())
+        .perform(put("/api/room-reservations/5").principal(authentication())
             .contentType("application/json").content("""
                 {"roomId":2,"title":"Updated planning","startAt":"2026-08-10T10:00:00",
                 "endAt":"2026-08-10T11:00:00","attendeeIds":[10,11],
@@ -230,13 +251,43 @@ class RoomControllerTest {
         .andExpect(jsonPath("$.code").value("ROOM_RESERVATION_NOT_FOUND"));
   }
 
+  @Test
+  void cancelsWithTheAuthenticatedActorAndReturnsNoContent() throws Exception {
+    mockMvc.perform(delete("/api/room-reservations/5").principal(authentication()))
+        .andExpect(status().isNoContent());
+
+    ArgumentCaptor<com.flowbi.domain.room.dto.ReservationActor> actor = ArgumentCaptor
+        .forClass(com.flowbi.domain.room.dto.ReservationActor.class);
+    verify(reservationService).cancel(actor.capture(),Mockito.eq(5L));
+    org.assertj.core.api.Assertions.assertThat(actor.getValue().userId()).isEqualTo(10L);
+  }
+
+  @Test
+  void rejectsUnauthenticatedAndHidesUnownedCancellationTargets() throws Exception {
+    mockMvc.perform(delete("/api/room-reservations/5")).andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
+    verify(reservationService,never()).cancel(any(),any());
+
+    doThrow(new RoomReservationApplicationException("ROOM_RESERVATION_NOT_FOUND"))
+        .when(reservationService).cancel(any(),any());
+    mockMvc.perform(delete("/api/room-reservations/6").principal(authentication()))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.code").value("ROOM_RESERVATION_NOT_FOUND"));
+
+    doThrow(new RoomReservationApplicationException("ROOM_RESERVATION_CANCEL_CONFLICT"))
+        .when(reservationService).cancel(any(),any());
+    mockMvc.perform(delete("/api/room-reservations/7").principal(authentication()))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("ROOM_RESERVATION_CANCEL_CONFLICT"));
+  }
+
   private void assertCreationError(String code,int expectedStatus) throws Exception {
     reset(reservationService);
     when(reservationService.create(any(),any()))
         .thenThrow(new RoomReservationApplicationException(code));
 
     mockMvc
-        .perform(post("/api/room-reservations").requestAttr("authenticatedUser",user())
+        .perform(post("/api/room-reservations").principal(authentication())
             .contentType("application/json").content("""
                 {"roomId":1,"title":"Planning","startAt":"2026-08-10T10:00:00",
                 "endAt":"2026-08-10T11:00:00","attendeeIds":[10],"description":"Plan"}
@@ -255,14 +306,16 @@ class RoomControllerTest {
 
   private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder updateRequest(
       Long reservationId) {
-    return put("/api/room-reservations/{reservationId}",reservationId)
-        .requestAttr("authenticatedUser",user()).contentType("application/json").content("""
+    return put("/api/room-reservations/{reservationId}",reservationId).principal(authentication())
+        .contentType("application/json").content("""
             {"roomId":1,"title":"Planning","startAt":"2026-08-10T10:00:00",
             "endAt":"2026-08-10T11:00:00","attendeeIds":[10],"description":"Plan"}
             """);
   }
 
-  private AuthenticatedUser user() {
-    return new AuthenticatedUser(10L, Role.USER);
+  private Authentication authentication() {
+    LoginPrincipal principal = new LoginPrincipal("10", false);
+    return UsernamePasswordAuthenticationToken.authenticated(principal,"",
+        principal.getAuthorities());
   }
 }

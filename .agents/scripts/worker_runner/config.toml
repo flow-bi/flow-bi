@@ -18,6 +18,7 @@ glob_scan_max_depth = 5
 "backend/.gradle/" ="write"
   "backend/.gradle/**" = "write"
 "backend/.gradle-user-home/" = "write"
+"backend/.gradle-user-home/**" = "write"
 
 [permissions.task-worker.network]
 enabled = true

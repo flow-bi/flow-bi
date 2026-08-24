@@ -54,7 +54,17 @@ class ScheduleIntegrationConfiguration {
   @Bean
   @ConditionalOnMissingBean(ScheduleRoomReservationLookup.class)
   ScheduleRoomReservationLookup defaultScheduleRoomReservationLookup() {
-    return scheduleId -> false;
+    return new ScheduleRoomReservationLookup() {
+      @Override
+      public boolean isManagedSchedule(long scheduleId) {
+        return false;
+      }
+
+      @Override
+      public java.util.Set<Long> managedScheduleIds(java.util.Collection<Long> scheduleIds) {
+        return java.util.Set.of();
+      }
+    };
   }
 
   @Bean

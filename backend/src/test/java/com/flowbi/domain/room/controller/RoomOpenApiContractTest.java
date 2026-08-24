@@ -7,13 +7,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
+import com.flowbi.test.H2SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 @ActiveProfiles("harness")
 @AutoConfigureMockMvc
-@SpringBootTest
+@H2SpringBootTest
 class RoomOpenApiContractTest {
 
   @Autowired
@@ -29,7 +29,18 @@ class RoomOpenApiContractTest {
                 .exists())
         .andExpect(
             jsonPath("$.components.schemas.RoomReservationDetailResponse.properties.scheduleId")
-                .doesNotExist());
+                .doesNotExist())
+        .andExpect(
+            jsonPath("$.components.schemas.RoomReservationDetailResponse.properties.attendees")
+                .exists())
+        .andExpect(jsonPath("$.components.schemas.Attendee.properties.userId").exists())
+        .andExpect(jsonPath("$.components.schemas.Attendee.properties.displayName").exists())
+        .andExpect(jsonPath("$.components.schemas.Attendee.properties.email").doesNotExist())
+        .andExpect(jsonPath("$.components.schemas.Attendee.properties.phoneNumber").doesNotExist())
+        .andExpect(
+            jsonPath("$.components.schemas.Attendee.properties.employeeNumber").doesNotExist())
+        .andExpect(jsonPath("$.components.schemas.Attendee.properties.teamId").doesNotExist())
+        .andExpect(jsonPath("$.components.schemas.Attendee.properties.status").doesNotExist());
   }
 
   @Test
@@ -103,10 +114,20 @@ class RoomOpenApiContractTest {
   }
 
   @Test
-  void documentsTheReservationSummaryEditabilityRequiredByTheFrontendGateway() throws Exception {
+  void documentsReservationSummaryEditabilityAndCancellationResponses() throws Exception {
     mockMvc.perform(get("/v3/api-docs")).andExpect(status().isOk())
         .andExpect(jsonPath("$.components.schemas.ReservationSummary.properties.canEdit").exists())
         .andExpect(
-            jsonPath("$.paths['/api/room-reservations/{reservationId}'].delete").doesNotExist());
+            jsonPath("$.paths['/api/room-reservations/{reservationId}'].delete.responses['204']")
+                .exists())
+        .andExpect(
+            jsonPath("$.paths['/api/room-reservations/{reservationId}'].delete.responses['401']")
+                .exists())
+        .andExpect(
+            jsonPath("$.paths['/api/room-reservations/{reservationId}'].delete.responses['404']")
+                .exists())
+        .andExpect(
+            jsonPath("$.paths['/api/room-reservations/{reservationId}'].delete.responses['409']")
+                .exists());
   }
 }

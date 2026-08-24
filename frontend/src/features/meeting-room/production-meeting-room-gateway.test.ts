@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
+import { onUnauthenticated } from '../authenticatedFetch'
 import { productionMeetingRoomGateway } from './meeting-room-gateway'
 
 describe('productionMeetingRoomGateway', () => {
@@ -38,7 +39,7 @@ describe('productionMeetingRoomGateway', () => {
     expect(fetch.mock.calls).toEqual([
       [
         '/api/rooms?date=2026-08-10&startTime=09%3A00&endTime=10%3A00&minimumCapacity=4&availabilityStatus=AVAILABLE',
-        { credentials: 'include' },
+        expect.objectContaining({ credentials: 'include' }),
       ],
       [
         '/api/room-reservations',
@@ -59,6 +60,8 @@ describe('productionMeetingRoomGateway', () => {
   })
 
   it('maps authentication and stable backend errors without exposing backend messages', async () => {
+    const onSessionExpired = vi.fn()
+    const unsubscribe = onUnauthenticated(onSessionExpired)
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValueOnce(
@@ -73,5 +76,43 @@ describe('productionMeetingRoomGateway', () => {
     ).rejects.toMatchObject({
       code: 'AUTH_INTEGRATION_PENDING',
     })
+    expect(onSessionExpired).toHaveBeenCalledOnce()
+    unsubscribe()
+  })
+
+  it('searches attendee candidates with a normalized query and exposes only display data', async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ data: [{ userId: 10, displayName: '김하늘' }] }), {
+        status: 200,
+      }),
+    )
+    vi.stubGlobal('fetch', fetch)
+
+    await expect(
+      productionMeetingRoomGateway.findAttendeeCandidates?.('  김   하늘  '),
+    ).resolves.toEqual([{ userId: 10, displayName: '김하늘' }])
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/schedules/attendee-candidates?query=%EA%B9%80%20%ED%95%98%EB%8A%98',
+      expect.objectContaining({ credentials: 'include' }),
+    )
+  })
+
+  it('cancels with a same-origin empty DELETE request and maps cancellation errors', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ code: 'ROOM_RESERVATION_CANCEL_CONFLICT' }), { status: 409 }),
+      )
+    vi.stubGlobal('fetch', fetch)
+
+    await expect(productionMeetingRoomGateway.cancelReservation?.(5)).resolves.toBeUndefined()
+    await expect(productionMeetingRoomGateway.cancelReservation?.(5)).rejects.toMatchObject({
+      code: 'ROOM_RESERVATION_CANCEL_CONFLICT',
+    })
+    expect(fetch.mock.calls[0]).toEqual([
+      '/api/room-reservations/5',
+      expect.objectContaining({ method: 'DELETE', credentials: 'include' }),
+    ])
   })
 })

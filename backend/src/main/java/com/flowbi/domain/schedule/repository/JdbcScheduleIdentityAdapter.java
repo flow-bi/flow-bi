@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
+import java.util.Map;
 import java.util.stream.Collectors;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -43,6 +44,25 @@ public class JdbcScheduleIdentityAdapter {
         (resultSet,rowNumber) -> new AttendeeCandidate(resultSet.getLong("user_id"),
             resultSet.getString("name")),
         "%" + query.toLowerCase() + "%","%" + query.toLowerCase() + "%");
+  }
+
+  public List<AttendeeCandidate> findUserDisplayNames(List<Long> userIds) {
+    if (userIds.isEmpty()) {
+      return List.of();
+    }
+    String placeholders = userIds.stream().map(userId -> "?").collect(Collectors.joining(","));
+    Map<Long, String> displayNames = jdbcTemplate
+        .query("""
+            SELECT user_id, name
+            FROM users
+            WHERE user_id IN (""" + placeholders + ")",
+            (resultSet,rowNumber) -> new AttendeeCandidate(resultSet.getLong("user_id"),
+                resultSet.getString("name")),
+            userIds.toArray())
+        .stream()
+        .collect(Collectors.toMap(AttendeeCandidate::userId,AttendeeCandidate::displayName));
+    return userIds.stream().filter(displayNames::containsKey)
+        .map(userId -> new AttendeeCandidate(userId, displayNames.get(userId))).toList();
   }
 
   public ScheduleTargetOptions findTargetOptions(long actorId) {

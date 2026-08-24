@@ -32,6 +32,7 @@ if str(HARNESS_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(HARNESS_SCRIPTS))
 
 from harness_runner import cli
+from harness_runner.models import ExecutionReport, TaskResult
 
 
 class FrontendVerifierTests(unittest.TestCase):
@@ -174,7 +175,7 @@ class FrontendVerifierTests(unittest.TestCase):
         def execute(_tasks, _request, *, call_worker):
             for invocation in invocations:
                 call_worker(invocation)
-            return mock.Mock(succeeded=True)
+            return ExecutionReport((TaskResult(1, "lifecycle", "succeeded"),))
 
         with (
             mock.patch.object(cli, "parse_invocation", return_value=mock.Mock()),
@@ -185,6 +186,11 @@ class FrontendVerifierTests(unittest.TestCase):
             mock.patch.object(cli, "FrontendVerifier", return_value=frontend),
             mock.patch.object(cli, "execute_workers", side_effect=execute),
             mock.patch.object(cli, "invoke_task") as invoke_task,
+            mock.patch.object(
+                cli,
+                "publish_report",
+                return_value=mock.Mock(page_url="https://notion.example/report"),
+            ),
             mock.patch.object(cli, "complete_plan", return_value=destination),
             mock.patch("builtins.print"),
         ):

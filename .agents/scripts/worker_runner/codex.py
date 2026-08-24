@@ -91,6 +91,7 @@ def collect_worker_readable_paths(
     home_dir: Path | None = None,
     platform_name: str | None = None,
     python_executable: str | Path = sys.executable,
+    project_root: Path = PROJECT_ROOT,
 ) -> tuple[str, ...]:
     """Worker가 사용하는 외부 Toolchain 경로를 OS에 맞게 수집한다."""
 
@@ -154,6 +155,9 @@ def collect_worker_readable_paths(
 
     add(actual_home / ".gitconfig", require_directory=False)
     add(actual_home / ".config" / "git" / "config", require_directory=False)
+
+    for directory in (project_root, *project_root.parents):
+        add(directory / "package.json")
 
     return tuple(str(path) for path in paths)
 
