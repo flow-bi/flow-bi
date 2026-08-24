@@ -33,6 +33,9 @@ class RoomOpenApiContractTest {
         .andExpect(
             jsonPath("$.components.schemas.RoomReservationDetailResponse.properties.attendees")
                 .exists())
+        .andExpect(
+            jsonPath("$.components.schemas.RoomReservationDetailResponse.properties.creatorAttends")
+                .exists())
         .andExpect(jsonPath("$.components.schemas.Attendee.properties.userId").exists())
         .andExpect(jsonPath("$.components.schemas.Attendee.properties.displayName").exists())
         .andExpect(jsonPath("$.components.schemas.Attendee.properties.email").doesNotExist())
@@ -62,6 +65,9 @@ class RoomOpenApiContractTest {
             jsonPath("$.components.schemas.CreateRoomReservationRequest.properties.endAt").exists())
         .andExpect(
             jsonPath("$.components.schemas.CreateRoomReservationRequest.properties.attendeeIds")
+                .exists())
+        .andExpect(
+            jsonPath("$.components.schemas.CreateRoomReservationRequest.properties.creatorAttends")
                 .exists())
         .andExpect(
             jsonPath("$.components.schemas.CreateRoomReservationRequest.properties.description")
@@ -100,6 +106,9 @@ class RoomOpenApiContractTest {
                 .exists())
         .andExpect(jsonPath("$.components.schemas.UpdateRoomReservationRequest.properties.roomId")
             .exists())
+        .andExpect(
+            jsonPath("$.components.schemas.UpdateRoomReservationRequest.properties.creatorAttends")
+                .exists())
         .andExpect(jsonPath("$.components.schemas.UpdateRoomReservationRequest.properties.userId")
             .doesNotExist())
         .andExpect(

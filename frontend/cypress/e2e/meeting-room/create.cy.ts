@@ -36,7 +36,7 @@ describe('meeting room reservation creation', () => {
     cy.get('[role="dialog"]').within(() => {
       cy.contains('label', '참석자 ID').should('not.exist')
       cy.contains('label', '예약 제목').find('input').type('정기 회의')
-      selectAttendeeByName()
+      cy.contains('label', '등록자도 참석').find('input').should('not.be.checked').check()
       cy.contains('button', '예약 및 일정 생성').click()
       cy.contains('예약과 연결 일정이 생성되었습니다.').scrollIntoView().should('be.visible')
     })

@@ -58,10 +58,9 @@ class RoomReservationHttpFlowIntegrationTest {
                 LocalDateTime.of(2026,8,10,10,0), LocalDateTime.of(2026,8,10,11,0),
                 com.flowbi.domain.room.dto.ReservationDisplayStatus.UPCOMING, true)))));
     when(availabilityService.findAvailability(any(),Mockito.eq(10L))).thenReturn(availability);
-    when(reservationDetailService.findOwnedReservation(10L,5L))
-        .thenReturn(new RoomReservationDetailResponse(5L, 1L, "Planning",
-            LocalDateTime.of(2026,8,10,10,0), LocalDateTime.of(2026,8,10,11,0), List.of(10L),
-            List.of(new RoomReservationDetailResponse.Attendee(10L, "Owner")), "Initial", true));
+    when(reservationDetailService.findOwnedReservation(10L,5L)).thenReturn(
+        new RoomReservationDetailResponse(5L, 1L, "Planning", LocalDateTime.of(2026,8,10,10,0),
+            LocalDateTime.of(2026,8,10,11,0), true, List.of(), List.of(), "Initial", true));
     when(reservationService.create(any(),any()))
         .thenReturn(new CreateRoomReservationResult(6L, 16L));
     when(reservationService.update(any(),any()))
@@ -140,7 +139,7 @@ class RoomReservationHttpFlowIntegrationTest {
   private String requestBody(String title) {
     return """
         {"roomId":1,"title":"%s","startAt":"2026-08-10T10:00:00",
-        "endAt":"2026-08-10T11:00:00","attendeeIds":[10],"description":"Plan"}
+        "endAt":"2026-08-10T11:00:00","creatorAttends":true,"attendeeIds":[],"description":"Plan"}
         """.formatted(title);
   }
 

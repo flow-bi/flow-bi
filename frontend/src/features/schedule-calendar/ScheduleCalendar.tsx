@@ -333,12 +333,7 @@ function DetailModal({
             )}
           </div>
         </section>
-        {detail.meetingRoomManaged && (
-          <>
-            <p className="font-bold text-orange-800">회의실 예약에서 관리하는 일정입니다.</p>
-            <p>회의실 예약 취소 흐름을 사용해 주세요.</p>
-          </>
-        )}
+        {detail.meetingRoomManaged}
         {error && <p role="alert">{error}</p>}
         {canManage && !detail.meetingRoomManaged && (
           <div className="mt-6 flex flex-wrap justify-end gap-3">

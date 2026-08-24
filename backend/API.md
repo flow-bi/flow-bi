@@ -494,13 +494,15 @@ Calendar Core의 조회 경계 DTO는 검증 가능한 Actor ID를 명시적으�
 `usesDefaultImage`만 반환한다.
 
 `GET /api/room-reservations/{reservationId}`는 예약 수정 화면에 필요한
-`reservationId`, `roomId`, `title`, `startAt`, `endAt`, `attendeeIds`, `attendees`,
+`reservationId`, `roomId`, `title`, `startAt`, `endAt`, `creatorAttends`, `attendeeIds`, `attendees`,
 `description`, `editable`만 반환한다. `attendees`의 각 항목은 `userId`와 `displayName`만
-포함하며 `attendeeIds`와 같은 ID를 같은 순서로 제공한다. 연결 일정 ID, 예약 Entity, 인증
+포함하며 `attendeeIds`와 같은 ID를 같은 순서로 제공한다. 예약자는 `creatorAttends`로 분리하고
+`attendeeIds`와 `attendees`에 중복하지 않는다. 연결 일정 ID, 예약 Entity, 인증
 사용자 정보 및 이메일·전화번호·조직 정보·재직 상태 등 불필요한 개인정보는 반환하지 않는다.
 
 ```json
 {
+  "creatorAttends": true,
   "attendeeIds": [10, 11],
   "attendees": [
     { "userId": 10, "displayName": "김하늘" },
@@ -529,6 +531,7 @@ Calendar Core의 조회 경계 DTO는 검증 가능한 Actor ID를 명시적으�
   "title": "분기 계획 회의",
   "startAt": "2026-08-10T10:00:00",
   "endAt": "2026-08-10T11:00:00",
+  "creatorAttends": true,
   "attendeeIds": [10, 11],
   "description": "분기 계획을 논의합니다."
 }
@@ -543,8 +546,11 @@ Calendar Core의 조회 경계 DTO는 검증 가능한 Actor ID를 명시적으�
 }
 ```
 
+`creatorAttends`는 인증된 예약자를 연결 일정 참석 인원에 포함할지 나타내며 새 Client는 항상
+`true` 또는 `false`를 명시한다. 필드가 없는 기존 요청은 하위 호환을 위해 `attendeeIds`에 인증
+사용자 ID가 포함됐는지를 기존 방식으로 해석한다.
 `userId`, `role` 또는 그 밖의 인증 정보는 요청·응답에 포함하지 않는다. 서버는 인증 경계가
-제공한 현재 사용자 ID만 예약 생성자로 사용한다. 실제 인증 Adapter가 없는 실행에서 인증
+제공한 현재 사용자 ID만 예약 생성자와 등록자 참석 판정에 사용한다. 실제 인증 Adapter가 없는 실행에서 인증
 속성이 제공되지 않으면 Service를 호출하지 않고 `401 Unauthorized`와
 `AUTHENTICATION_REQUIRED`를 반환한다.
 
@@ -565,10 +571,14 @@ Calendar Core의 조회 경계 DTO는 검증 가능한 Actor ID를 명시적으�
   "title": "분기 계획 회의",
   "startAt": "2026-08-10T10:00:00",
   "endAt": "2026-08-10T11:00:00",
+  "creatorAttends": true,
   "attendeeIds": [10, 11],
   "description": "분기 계획을 논의합니다."
 }
 ```
+
+`creatorAttends`는 수정 후 연결 일정의 등록자 참석 여부를 나타낸다. 서버는 인증된 예약 소유자
+ID를 사용해 연결 일정 관계를 갱신하며 요청 Body의 `attendeeIds`에는 예약자 ID를 요구하지 않는다.
 
 성공 시 `200 OK`와 다음을 반환한다.
 

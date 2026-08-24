@@ -291,6 +291,7 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
       date: reservation.startAt.slice(0, 10),
       startTime: reservation.startAt.slice(11, 16),
       endTime: reservation.endAt.slice(11, 16),
+      creatorAttends: reservation.creatorAttends ?? false,
       attendeeIds: reservation.attendeeIds,
       attendees: reservation.attendees,
       description: reservation.description,

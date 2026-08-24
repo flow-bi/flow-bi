@@ -44,6 +44,7 @@ export interface CreateRoomReservationCommand {
   title: string
   startAt: string
   endAt: string
+  creatorAttends?: boolean
   attendeeIds: number[]
   description: string
 }
@@ -74,6 +75,7 @@ export interface EditableRoomReservation {
   title: string
   startAt: string
   endAt: string
+  creatorAttends?: boolean
   attendeeIds: number[]
   attendees: RoomReservationAttendee[]
   description: string
@@ -193,6 +195,7 @@ function requestBody(command: CreateRoomReservationCommand): string {
     title: command.title,
     startAt: command.startAt,
     endAt: command.endAt,
+    creatorAttends: command.creatorAttends ?? false,
     attendeeIds: command.attendeeIds,
     description: command.description,
   })

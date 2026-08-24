@@ -37,7 +37,9 @@ public class RoomReservationDetailService {
     if (!userId.equals(schedule.creatorId())) {
       throw notFound();
     }
-    var attendeeIds = schedule.attendeeIds();
+    boolean creatorAttends = schedule.attendeeIds().contains(schedule.creatorId());
+    var attendeeIds = schedule.attendeeIds().stream()
+        .filter(attendeeId -> !attendeeId.equals(schedule.creatorId())).toList();
     var attendees = scheduleIdentityService.findUserDisplayNames(attendeeIds).stream()
         .map(attendee -> new RoomReservationDetailResponse.Attendee(attendee.userId(),
             attendee.displayName()))
@@ -47,8 +49,9 @@ public class RoomReservationDetailService {
       throw notFound();
     }
     return new RoomReservationDetailResponse(reservation.getId(), reservation.getRoom().getId(),
-        reservation.getTitle(), reservation.getStartAt(), reservation.getEndAt(), attendeeIds,
-        attendees, schedule.description(), reservation.getStatus() == ReservationStatus.RESERVED);
+        reservation.getTitle(), reservation.getStartAt(), reservation.getEndAt(), creatorAttends,
+        attendeeIds, attendees, schedule.description(),
+        reservation.getStatus() == ReservationStatus.RESERVED);
   }
 
   private RoomReservationApplicationException notFound() {

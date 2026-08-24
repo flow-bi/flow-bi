@@ -70,8 +70,8 @@ public class RoomReservationService {
       CreateRoomReservationCommand command) {
     validateActor(actor);
     validateCommand(command);
-    List<Long> attendeeIds = normalizeAttendees(command.attendeeIds());
-    validateAttendees(actor,attendeeIds);
+    List<Long> attendeeIds = resolveAttendeeIds(actor,command.attendeeIds(),
+        command.creatorAttends());
 
     Room room = roomRepository.findByIdForUpdate(command.roomId())
         .orElseThrow(() -> new RoomReservationApplicationException("ROOM_NOT_FOUND"));
@@ -96,7 +96,7 @@ public class RoomReservationService {
       UpdateRoomReservationCommand command) {
     validateActor(actor);
     validateUpdateCommand(command);
-    List<Long> attendeeIds = normalizeAttendees(command.attendeeIds());
+    List<Long> normalizedAttendeeIds = normalizeAttendees(command.attendeeIds());
 
     RoomReservation reservation = reservationRepository.findByIdForUpdate(command.reservationId())
         .orElseThrow(() -> new RoomReservationApplicationException("ROOM_RESERVATION_NOT_FOUND"));
@@ -104,7 +104,8 @@ public class RoomReservationService {
     if (reservation.getStatus() != ReservationStatus.RESERVED) {
       throw new RoomReservationApplicationException("ROOM_RESERVATION_NOT_EDITABLE");
     }
-    validateAttendees(actor,attendeeIds);
+    List<Long> attendeeIds = resolveAttendeeIds(actor,normalizedAttendeeIds,
+        command.creatorAttends());
     Room room = roomRepository.findByIdForUpdate(command.roomId())
         .orElseThrow(() -> new RoomReservationApplicationException("ROOM_NOT_FOUND"));
     if (room.getCapacity() == null || attendeeIds.size() > room.getCapacity()) {
@@ -185,7 +186,7 @@ public class RoomReservationService {
   }
 
   private List<Long> normalizeAttendees(List<Long> attendeeIds) {
-    if (attendeeIds == null || attendeeIds.isEmpty()) {
+    if (attendeeIds == null) {
       throw new RoomReservationApplicationException("ROOM_RESERVATION_INVALID");
     }
     if (attendeeIds.stream().anyMatch(id -> id == null || id < 1)) {
@@ -193,6 +194,30 @@ public class RoomReservationService {
     }
     List<Long> normalized = List.copyOf(new LinkedHashSet<>(attendeeIds));
     return normalized;
+  }
+
+  private List<Long> resolveAttendeeIds(ReservationActor actor,List<Long> rawAttendeeIds,
+      Boolean creatorAttends) {
+    List<Long> normalized = normalizeAttendees(rawAttendeeIds);
+    if (creatorAttends == null) {
+      if (normalized.isEmpty()) {
+        throw new RoomReservationApplicationException("ROOM_RESERVATION_INVALID");
+      }
+      validateAttendees(actor,normalized);
+      return normalized;
+    }
+    boolean includesCreator = creatorAttends;
+    List<Long> selectedAttendeeIds = normalized.stream()
+        .filter(attendeeId -> !attendeeId.equals(actor.userId())).toList();
+    if (!includesCreator && selectedAttendeeIds.isEmpty()) {
+      throw new RoomReservationApplicationException("ROOM_RESERVATION_INVALID");
+    }
+    validateAttendees(actor,selectedAttendeeIds);
+    if (!includesCreator) {
+      return selectedAttendeeIds;
+    }
+    return java.util.stream.Stream
+        .concat(java.util.stream.Stream.of(actor.userId()),selectedAttendeeIds.stream()).toList();
   }
 
   private void validateAttendees(ReservationActor actor,List<Long> attendeeIds) {

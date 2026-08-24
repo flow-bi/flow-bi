@@ -24,6 +24,7 @@ describe('productionMeetingRoomGateway', () => {
       title: '계약 검증',
       startAt: '2026-08-10T09:00:00',
       endAt: '2026-08-10T10:00:00',
+      creatorAttends: true,
       attendeeIds: [10, 11],
       description: '설명',
     })
@@ -33,6 +34,7 @@ describe('productionMeetingRoomGateway', () => {
       title: '수정',
       startAt: '2026-08-10T10:00:00',
       endAt: '2026-08-10T11:00:00',
+      creatorAttends: false,
       attendeeIds: [10],
       description: '',
     })
@@ -51,11 +53,11 @@ describe('productionMeetingRoomGateway', () => {
       ],
     ])
     for (const [, options] of fetch.mock.calls.slice(1, 3)) {
-      expect(JSON.parse((options as RequestInit).body as string)).not.toHaveProperty('userId')
-      expect(JSON.parse((options as RequestInit).body as string)).not.toHaveProperty('role')
-      expect(JSON.parse((options as RequestInit).body as string)).not.toHaveProperty(
-        'reservationId',
-      )
+      const body = JSON.parse((options as RequestInit).body as string) as Record<string, unknown>
+      expect(body).toHaveProperty('creatorAttends')
+      expect(body).not.toHaveProperty('userId')
+      expect(body).not.toHaveProperty('role')
+      expect(body).not.toHaveProperty('reservationId')
     }
   })
 
@@ -108,6 +110,7 @@ describe('productionMeetingRoomGateway', () => {
             title: '소유한 예약',
             startAt: '2026-08-10T09:00:00',
             endAt: '2026-08-10T10:00:00',
+            creatorAttends: true,
             attendeeIds: [10],
             attendees: [{ userId: 10, displayName: '김하늘' }],
             description: '',

@@ -72,6 +72,27 @@ class RoomReservationUpdateServiceTest {
   }
 
   @Test
+  void updatesTheConnectedScheduleWithTheCreatorAttendanceChoice() {
+    RoomReservationService service = service();
+    Room room = Room.of(2L,"Iris",2L,"4F");
+    RoomReservation reservation = RoomReservation.of(100L,room,200L,"Old title",START.minusHours(1),
+        START,ReservationStatus.RESERVED);
+    when(reservationRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(reservation));
+    when(scheduleModificationService.findReservationSchedule(200L))
+        .thenReturn(Optional.of(new ReservationSchedule(200L, 10L)));
+    when(roomRepository.findByIdForUpdate(2L)).thenReturn(Optional.of(room));
+    when(participantAccessService.canAttend(OWNER,11L)).thenReturn(true);
+
+    service.update(OWNER,new UpdateRoomReservationCommand(100L, 2L, "Updated planning", START, END,
+        List.of(11L), true, "Updated detail"));
+
+    ArgumentCaptor<ScheduleModificationService.UpdateReservationScheduleCommand> update = ArgumentCaptor
+        .forClass(ScheduleModificationService.UpdateReservationScheduleCommand.class);
+    verify(scheduleModificationService).update(update.capture());
+    assertThat(update.getValue().attendeeIds()).containsExactly(10L,11L);
+  }
+
+  @Test
   void rejectsMissingActorNonOwnerHiddenOrCancelledReservationsAndConflicts() {
     RoomReservationService service = service();
     assertCode(() -> service.update(null,command(List.of(10L))),"RESERVATION_ACTOR_REQUIRED");

@@ -94,6 +94,8 @@ describe('MeetingRoomPage', () => {
 
     await user.click(await screen.findByRole('button', { name: '한강 회의실 예약하기' }))
     expect(screen.queryByLabelText('참석자 ID')).not.toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: '등록자도 참석' })).not.toBeChecked()
+    await user.click(screen.getByRole('checkbox', { name: '등록자도 참석' }))
     await user.type(screen.getByLabelText('참석자 검색'), '  김하늘  ')
     expect(await screen.findByRole('button', { name: '김하늘 참석자로 추가' })).toBeVisible()
     expect(findAttendeeCandidates).toHaveBeenCalledWith('김하늘')
@@ -101,7 +103,25 @@ describe('MeetingRoomPage', () => {
     await user.type(screen.getByLabelText('예약 제목'), '이름 검색 회의')
     await user.click(screen.getByRole('button', { name: '예약 및 일정 생성' }))
     await waitFor(() => expect(createReservation).toHaveBeenCalledTimes(1))
-    expect(createReservation).toHaveBeenCalledWith(expect.objectContaining({ attendeeIds: [21] }))
+    expect(createReservation).toHaveBeenCalledWith(
+      expect.objectContaining({ creatorAttends: true, attendeeIds: [21] }),
+    )
+  })
+
+  it('creates a reservation with only the authenticated creator attending', async () => {
+    const createReservation = vi.fn().mockResolvedValue({ reservationId: 30, scheduleId: 40 })
+    const user = userEvent.setup()
+    renderPage(reservationGateway(createReservation))
+
+    await user.click(await screen.findByRole('button', { name: '한강 회의실 예약하기' }))
+    await user.type(screen.getByLabelText('예약 제목'), '혼자 사용')
+    await user.click(screen.getByRole('checkbox', { name: '등록자도 참석' }))
+    await user.click(screen.getByRole('button', { name: '예약 및 일정 생성' }))
+
+    await waitFor(() => expect(createReservation).toHaveBeenCalledTimes(1))
+    expect(createReservation).toHaveBeenCalledWith(
+      expect.objectContaining({ creatorAttends: true, attendeeIds: [] }),
+    )
   })
 
   it('uses an injected gateway only in a test harness', async () => {
@@ -135,6 +155,7 @@ describe('MeetingRoomPage', () => {
       title: '제품 검토',
       startAt: '2026-08-07T09:00:00',
       endAt: '2026-08-07T10:00:00',
+      creatorAttends: true,
       attendeeIds: [1],
       attendees: [{ userId: 1, displayName: '김하늘' }],
       description: '초기 설명',
@@ -156,6 +177,7 @@ describe('MeetingRoomPage', () => {
     const panel = screen.getByRole('dialog', { name: '제품 검토 예약 수정' })
     expect(within(panel).getByLabelText('예약 제목')).toHaveValue('제품 검토')
     expect(within(panel).getByLabelText('상세 설명')).toHaveValue('초기 설명')
+    expect(within(panel).getByRole('checkbox', { name: '등록자도 참석' })).toBeChecked()
     expect(within(panel).getByRole('button', { name: '김하늘 제거' })).toBeVisible()
     await user.clear(within(panel).getByLabelText('예약 제목'))
     await user.type(within(panel).getByLabelText('예약 제목'), '수정된 제품 검토')

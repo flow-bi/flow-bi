@@ -108,16 +108,16 @@ class RoomControllerTest {
   void returnsOnlyTheOwnersReservationEditDetails() throws Exception {
     when(reservationDetailService.findOwnedReservation(10L,5L))
         .thenReturn(new RoomReservationDetailResponse(5L, 1L, "Planning",
-            LocalDateTime.of(2026,8,10,10,0), LocalDateTime.of(2026,8,10,11,0), List.of(10L,11L),
-            List.of(new RoomReservationDetailResponse.Attendee(10L, "Owner"),
-                new RoomReservationDetailResponse.Attendee(11L, "Attendee")),
-            "Discuss plan", true));
+            LocalDateTime.of(2026,8,10,10,0), LocalDateTime.of(2026,8,10,11,0), true, List.of(11L),
+            List.of(new RoomReservationDetailResponse.Attendee(11L, "Attendee")), "Discuss plan",
+            true));
 
     mockMvc.perform(get("/api/room-reservations/5").principal(authentication()))
         .andExpect(status().isOk()).andExpect(jsonPath("$.roomId").value(1))
-        .andExpect(jsonPath("$.attendeeIds[1]").value(11))
-        .andExpect(jsonPath("$.attendees[0].userId").value(10))
-        .andExpect(jsonPath("$.attendees[0].displayName").value("Owner"))
+        .andExpect(jsonPath("$.creatorAttends").value(true))
+        .andExpect(jsonPath("$.attendeeIds[0]").value(11))
+        .andExpect(jsonPath("$.attendees[0].userId").value(11))
+        .andExpect(jsonPath("$.attendees[0].displayName").value("Attendee"))
         .andExpect(jsonPath("$.attendees[0].email").doesNotExist())
         .andExpect(jsonPath("$.description").value("Discuss plan"))
         .andExpect(jsonPath("$.editable").value(true));
@@ -163,7 +163,7 @@ class RoomControllerTest {
         .perform(post("/api/room-reservations").principal(authentication())
             .contentType("application/json").content("""
                 {"roomId":1,"title":"Planning","startAt":"2026-08-10T10:00:00",
-                "endAt":"2026-08-10T11:00:00","attendeeIds":[10,11],
+                "endAt":"2026-08-10T11:00:00","creatorAttends":true,"attendeeIds":[11],
                 "description":"Discuss plan"}
                 """))
         .andExpect(status().isCreated()).andExpect(jsonPath("$.reservationId").value(5))
@@ -177,7 +177,7 @@ class RoomControllerTest {
     org.assertj.core.api.Assertions.assertThat(actor.getValue().userId()).isEqualTo(10L);
     org.assertj.core.api.Assertions.assertThat(command.getValue())
         .isEqualTo(new com.flowbi.domain.room.dto.CreateRoomReservationCommand(1L, "Planning",
-            LocalDateTime.of(2026,8,10,10,0), LocalDateTime.of(2026,8,10,11,0), List.of(10L,11L),
+            LocalDateTime.of(2026,8,10,10,0), LocalDateTime.of(2026,8,10,11,0), List.of(11L), true,
             "Discuss plan"));
   }
 
@@ -205,7 +205,7 @@ class RoomControllerTest {
         .perform(put("/api/room-reservations/5").principal(authentication())
             .contentType("application/json").content("""
                 {"roomId":2,"title":"Updated planning","startAt":"2026-08-10T10:00:00",
-                "endAt":"2026-08-10T11:00:00","attendeeIds":[10,11],
+                "endAt":"2026-08-10T11:00:00","creatorAttends":false,"attendeeIds":[11],
                 "description":"Updated plan"}
                 """))
         .andExpect(status().isOk()).andExpect(jsonPath("$.reservationId").value(5))
@@ -219,7 +219,7 @@ class RoomControllerTest {
     org.assertj.core.api.Assertions.assertThat(actor.getValue().userId()).isEqualTo(10L);
     org.assertj.core.api.Assertions.assertThat(command.getValue())
         .isEqualTo(new UpdateRoomReservationCommand(5L, 2L, "Updated planning",
-            LocalDateTime.of(2026,8,10,10,0), LocalDateTime.of(2026,8,10,11,0), List.of(10L,11L),
+            LocalDateTime.of(2026,8,10,10,0), LocalDateTime.of(2026,8,10,11,0), List.of(11L), false,
             "Updated plan"));
   }
 

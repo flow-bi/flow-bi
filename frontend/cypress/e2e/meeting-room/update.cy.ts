@@ -34,6 +34,7 @@ describe('meeting room reservation update', () => {
         .clear()
         .type('수정된 제품 검토')
       cy.contains('label', '상세 설명').find('textarea').should('have.value', '초기 설명')
+      cy.contains('label', '등록자도 참석').find('input').should('not.be.checked').check()
       cy.contains('button', '김하늘 제거').should('be.visible').click()
       cy.contains('label', '참석자 검색').find('input').type('이바다')
       cy.contains('button', '이바다 참석자로 추가').click()
