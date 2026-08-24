@@ -1,4 +1,4 @@
-import { PROJECT_ROOT, SUMMARY_REQUEST, TREE_VERSION } from "./config.mjs";
+import { PROJECT_ROOT, TREE_VERSION } from "./config.mjs";
 import {
   commonRecord,
   isSyntheticPrompt,
@@ -8,177 +8,94 @@ import {
   terminalRecordForState,
 } from "./records.mjs";
 import { withStorage } from "./storage.mjs";
+import { readSessionUsage, terminalUsage } from "./usage.mjs";
 
-/*
-UserPromptSubmit 훅
+function captureUsage(sessionId, usageReader) {
+  try { return usageReader(sessionId); }
+  catch { return { usage: null, usage_status: "SESSION_READ_FAILED" }; }
+}
 
-사용자가 Codex에 프롬프트를 제출할 때 호출
-
-1. 현재 작업을 담당하는 worker 확인
-2. 부모 작업 존재시 부모,자식 관계를 연결
-3. task_start 기록을 recoreds에 추가
-4. 끝나지 않은 작업이면 pending에 추가
-*/
+function usageForTerminal(state, usageReader) {
+  return terminalUsage(
+    { usage: state.usage_baseline ?? null, usage_status: state.usage_baseline_status },
+    captureUsage(state.session_id, usageReader),
+  );
+}
 
 export async function handleUserPromptSubmit(
   input,
-  {
-    projectRoot = PROJECT_ROOT,
-    environment = process.env,
-    now = () => new Date(),
-    storageOptions,
-  } = {},
+  { projectRoot = PROJECT_ROOT, environment = process.env, now = () => new Date(), storageOptions, usageReader = readSessionUsage } = {},
 ) {
-  if (typeof input?.prompt !== "string" || isSyntheticPrompt(input))
-    return null;
-
-  // 작업을 수행하는 worker의 종류를 확인
+  if (typeof input?.prompt !== "string" || isSyntheticPrompt(input)) return null;
   const executor = resolveExecutor(environment);
-
-  // 작업을 실행한 부모 세션의 ID 가져오기
   const parentSessionId = environment.FLOW_BI_PARENT_SESSION_ID || null;
-  // 작업 발생 시각 저장
   const occurredAt = now().toISOString();
-
+  const usageBaseline = captureUsage(input.session_id, usageReader);
   return withStorage(projectRoot, ({ records, pending }) => {
-    const parent = parentSessionId
-      ? pendingForSession(pending, parentSessionId)
-      : null;
-    const hierarchyResolved = parentSessionId ? Boolean(parent) : true;
+    const parent = parentSessionId ? pendingForSession(pending, parentSessionId) : null;
     const state = {
-      // pending 항목의 종류
-      kind: "task",
-
-      // 현재 대화 턴의 ID
-      turn_id: input.turn_id,
-      session_id: input.session_id,
-      node_id: `turn:${input.turn_id}`,
-      parent_id: parent?.node_id ?? null,
-      depth: parent ? parent.depth + 1 : 0,
-
-      parent_session_id: parentSessionId,
-
-      hierarchy_resolved: hierarchyResolved,
-      executor,
-      tree_version: parent ? parent.tree_version : TREE_VERSION,
-
-      run_id: environment.FLOW_BI_RUN_ID || null,
-      summary_requested: false,
+      kind: "task", turn_id: input.turn_id, session_id: input.session_id, node_id: `turn:${input.turn_id}`,
+      parent_id: parent?.node_id ?? null, depth: parent ? parent.depth + 1 : 0,
+      parent_session_id: parentSessionId, hierarchy_resolved: parentSessionId ? Boolean(parent) : true,
+      executor, tree_version: parent ? parent.tree_version : TREE_VERSION,
+      run_id: environment.FLOW_BI_RUN_ID || null, summary_requested: false,
+      usage_baseline: usageBaseline.usage, usage_baseline_status: usageBaseline.usage_status,
     };
     state.pending_key = pendingKey(state);
     const existing = pending.find((item) => item.pending_key === state.pending_key);
     if (existing) return existing;
     records.push({
-      record_type: "task_start",
-      tree_version: state.tree_version,
-      ...commonRecord(state, occurredAt),
-      prompt: input.prompt,
-      cwd: input.cwd,
-      model: input.model,
-      permission_mode: input.permission_mode,
+      record_type: "task_start", tree_version: state.tree_version, ...commonRecord(state, occurredAt),
+      prompt: input.prompt, cwd: input.cwd, model: input.model, permission_mode: input.permission_mode,
     });
     pending.push(state);
     return state;
   }, {
     ...storageOptions,
-    diagnosticContext: {
-      event: "UserPromptSubmit", session_id: input.session_id ?? null, turn_id: input.turn_id ?? null,
-      run_id: environment.FLOW_BI_RUN_ID ?? null, task_number: executor.task_number,
-    },
+    diagnosticContext: { event: "UserPromptSubmit", session_id: input.session_id ?? null, turn_id: input.turn_id ?? null, run_id: environment.FLOW_BI_RUN_ID ?? null, task_number: executor.task_number },
   });
 }
 
 export async function handleStop(
   input,
-  { projectRoot = PROJECT_ROOT, now = () => new Date(), storageOptions } = {},
+  { projectRoot = PROJECT_ROOT, now = () => new Date(), storageOptions, usageReader = readSessionUsage } = {},
 ) {
   return withStorage(projectRoot, ({ records, pending }) => {
-    const index = pending.findIndex(
-      (item) => item.pending_key === `primary:${input.session_id}:${input.turn_id}`,
-    );
+    const index = pending.findIndex((item) => item.pending_key === `primary:${input.session_id}:${input.turn_id}`);
     if (index < 0 || pending[index].executor?.kind !== "primary") return {};
-
     const state = pending[index];
-
-    // if (!state.summary_requested && input.stop_hook_active !== true) {
-    //   state.summary_requested = true;
-    //   return { decision: "block", reason: SUMMARY_REQUEST };
-    // }
-
     if (!terminalRecordForState(records, state)) {
       records.push({
-        record_type: "task_end",
-        tree_version: state.tree_version,
-        ...commonRecord(state, now().toISOString()),
-        status: "completed",
-        exit_code: 0,
-        summary:
-          input.last_assistant_message || "Task가 최종 요약 없이 종료되었습니다.",
+        record_type: "task_end", tree_version: state.tree_version, ...commonRecord(state, now().toISOString()),
+        status: "completed", exit_code: 0, ...usageForTerminal(state, usageReader),
+        summary: input.last_assistant_message || "Task completed without a captured final summary.",
       });
     }
     pending.splice(index, 1);
     return {};
-  }, {
-    ...storageOptions,
-    diagnosticContext: { event: "Stop", session_id: input.session_id ?? null, turn_id: input.turn_id ?? null, run_id: null, task_number: null },
-  });
+  }, { ...storageOptions, diagnosticContext: { event: "Stop", session_id: input.session_id ?? null, turn_id: input.turn_id ?? null, run_id: null, task_number: null } });
 }
-
-/*
-Worker 프로세스 종료 기록 함수
-
-primary가 아닌 별도 worker 프로세스가 종료됐을 때 호출된다.
-
-역할:
-1. run_id에 해당하는 실행 중 작업을 찾는다.
-2. 종료 코드에 따라 성공 또는 실패를 기록한다.
-3. task_end 이벤트를 records에 추가한다.
-4. 종료된 작업을 pending에서 제거한다.
- */
 
 export async function recordWorkerEnd(
   { runId, exitCode, summary, status },
-  { projectRoot = PROJECT_ROOT, now = () => new Date(), storageOptions } = {},
+  { projectRoot = PROJECT_ROOT, now = () => new Date(), storageOptions, usageReader = readSessionUsage } = {},
 ) {
   return withStorage(projectRoot, ({ records, pending }) => {
-    // 전달받은 runId와 같은 pending 작업을 찾음
-    const index = pending.findIndex(
-      (item) => item.kind === "task" && item.run_id === runId,
-    );
-
-    if (index < 0) {
-      return records.some(
-        (record) => record.record_type === "task_end" && record.run_id === runId,
-      )
-        ? { status: "already_completed" }
-        : { status: "start_not_found" };
-    }
+    const index = pending.findIndex((item) => item.kind === "task" && item.run_id === runId);
+    if (index < 0) return records.some((record) => record.record_type === "task_end" && record.run_id === runId)
+      ? { status: "already_completed" } : { status: "start_not_found" };
     const state = pending[index];
     if (terminalRecordForState(records, state)) {
       pending.splice(index, 1);
       return { status: "cleanup_retry" };
     }
     const terminalStatus = status || (exitCode === 0 ? "completed" : "failed");
-
     records.push({
-      record_type: "task_end",
-      tree_version: state.tree_version,
-      ...commonRecord(state, now().toISOString()),
-
-      status: {
-        type: terminalStatus,
-        exit_code: exitCode,
-      },
-      summary:
-        summary?.trim() ||
-        (exitCode === 0
-          ? "최종 응답을 기록하지 못했지만 Worker 작업이 정상적으로 완료되었습니다."
-          : `최종 응답을 기록하지 못했으며 Worker 작업이 종료 코드 ${exitCode}(으)로 실패했습니다.`),
+      record_type: "task_end", tree_version: state.tree_version, ...commonRecord(state, now().toISOString()),
+      status: { type: terminalStatus, exit_code: exitCode }, ...usageForTerminal(state, usageReader),
+      summary: summary?.trim() || (exitCode === 0 ? "Worker completed without a captured final summary." : `Worker failed with exit code ${exitCode}.`),
     });
     pending.splice(index, 1);
     return { status: terminalStatus };
-  }, {
-    ...storageOptions,
-    diagnosticContext: { event: "worker_end", session_id: null, turn_id: null, run_id: runId ?? null, task_number: null },
-  });
+  }, { ...storageOptions, diagnosticContext: { event: "worker_end", session_id: null, turn_id: null, run_id: runId ?? null, task_number: null } });
 }

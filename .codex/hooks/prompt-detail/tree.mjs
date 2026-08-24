@@ -57,6 +57,8 @@ function nodeFor(record, kind) {
     context: contextFor(record),
     executor: executorFor(record),
     request: { prompt: record.prompt ?? null },
+    usage: null,
+    usage_status: null,
     result: normalizedResult(null),
     children: [],
   };
@@ -86,6 +88,8 @@ export function buildPromptDetailTree(records) {
     const node = entries.get(id).node;
     node.ended_at = record.occurred_at ?? null;
     node.result = normalizedResult(record);
+    node.usage = record.usage ?? null;
+    node.usage_status = record.usage_status ?? null;
   }
 
   for (const entry of entries.values()) {
