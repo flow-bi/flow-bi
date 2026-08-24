@@ -14,7 +14,7 @@ export const PENDING_FILE = "pending.json";
 export const TREE_VERSION = 1;
 
 export const LOCK_DIRECTORY = ".lock";
-export const LOCK_TIMEOUT_MS = 10_000;
+export const LOCK_TIMEOUT_MS = 5_400_000;
 export const STALE_LOCK_MS = 30_000;
 
 export const SUMMARY_REQUEST =

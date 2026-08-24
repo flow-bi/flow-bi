@@ -26,6 +26,7 @@ export async function handleUserPromptSubmit(
     projectRoot = PROJECT_ROOT,
     environment = process.env,
     now = () => new Date(),
+    storageOptions,
   } = {},
 ) {
   if (typeof input?.prompt !== "string" || isSyntheticPrompt(input))
@@ -78,12 +79,18 @@ export async function handleUserPromptSubmit(
     });
     pending.push(state);
     return state;
+  }, {
+    ...storageOptions,
+    diagnosticContext: {
+      event: "UserPromptSubmit", session_id: input.session_id ?? null, turn_id: input.turn_id ?? null,
+      run_id: environment.FLOW_BI_RUN_ID ?? null, task_number: executor.task_number,
+    },
   });
 }
 
 export async function handleStop(
   input,
-  { projectRoot = PROJECT_ROOT, now = () => new Date() } = {},
+  { projectRoot = PROJECT_ROOT, now = () => new Date(), storageOptions } = {},
 ) {
   return withStorage(projectRoot, ({ records, pending }) => {
     const index = pending.findIndex(
@@ -111,6 +118,9 @@ export async function handleStop(
     }
     pending.splice(index, 1);
     return {};
+  }, {
+    ...storageOptions,
+    diagnosticContext: { event: "Stop", session_id: input.session_id ?? null, turn_id: input.turn_id ?? null, run_id: null, task_number: null },
   });
 }
 
@@ -128,7 +138,7 @@ primary가 아닌 별도 worker 프로세스가 종료됐을 때 호출된다.
 
 export async function recordWorkerEnd(
   { runId, exitCode, summary, status },
-  { projectRoot = PROJECT_ROOT, now = () => new Date() } = {},
+  { projectRoot = PROJECT_ROOT, now = () => new Date(), storageOptions } = {},
 ) {
   return withStorage(projectRoot, ({ records, pending }) => {
     // 전달받은 runId와 같은 pending 작업을 찾음
@@ -167,5 +177,8 @@ export async function recordWorkerEnd(
     });
     pending.splice(index, 1);
     return { status: terminalStatus };
+  }, {
+    ...storageOptions,
+    diagnosticContext: { event: "worker_end", session_id: null, turn_id: null, run_id: runId ?? null, task_number: null },
   });
 }
