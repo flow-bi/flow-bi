@@ -451,6 +451,7 @@ class WorkerExecutionTests(unittest.TestCase):
         self.assertEqual(self.pending_files(), ())
 
     def test_execute_worker_includes_log_tail_when_final_json_is_invalid(self) -> None:
+        logger = mock.Mock()
         def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
             log = kwargs["stderr"]
             log.write("json-generation-failed\n")
@@ -466,13 +467,35 @@ class WorkerExecutionTests(unittest.TestCase):
                 task_number=1,
                 project_root=self.root,
                 runner=run,
-                logger=lambda *_args: None,
+                logger=logger,
             )
 
         self.assertIsNone(result.output)
         self.assertIn("Expecting value", result.output_error)
         self.assertIn("json-generation-failed", result.output_error)
+        logger.assert_called_once()
+        self.assertEqual(logger.call_args.args[4], "failed")
         self.assertEqual(self.pending_files(), ())
+
+    def test_execute_worker_logs_actual_terminal_status_once_for_each_exit_branch(self) -> None:
+        cases = (
+            (0, '{"final_status":"PASS"}', "completed"),
+            (0, '{"final_status":"FAILED"}', "failed"),
+            (7, '', "failed"),
+        )
+        for returncode, output, expected_status in cases:
+            with self.subTest(returncode=returncode, expected_status=expected_status):
+                logger = mock.Mock()
+
+                def run(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+                    self.output_path(command).write_text(output, encoding="utf-8")
+                    return subprocess.CompletedProcess(command, returncode)
+
+                with self.patch_command_builder():
+                    execute_worker("task", (".agents",), (), task_number=1, project_root=self.root, runner=run, logger=logger)
+
+                logger.assert_called_once()
+                self.assertEqual(logger.call_args.args[4], expected_status)
 
     def test_execute_worker_attaches_log_tail_and_cleans_files_on_timeout(self) -> None:
         def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:

@@ -52,13 +52,14 @@ export async function runCli({
       const runId = argv[3];
       const exitCode = Number.parseInt(argv[4], 10);
       const summaryFile = argv[5];
+      const status = argv[6];
       let summary = "";
       try {
         summary = readFile(summaryFile, "utf8");
       } catch {
         // Missing output is represented by the fallback summary.
       }
-      await workerEnd({ runId, exitCode, summary });
+      await workerEnd({ runId, exitCode, summary, status });
       return;
     }
 

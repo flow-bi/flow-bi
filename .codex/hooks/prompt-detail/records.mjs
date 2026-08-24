@@ -46,6 +46,22 @@ export function pendingForSession(pending, sessionId) {
   return matches.at(-1) ?? null;
 }
 
+export function pendingKey({ session_id: sessionId, turn_id: turnId, run_id: runId, executor }) {
+  return executor?.kind === "task"
+    ? `task:${runId}:${sessionId}:${turnId}`
+    : `primary:${sessionId}:${turnId}`;
+}
+
+export function terminalRecordForState(records, state) {
+  return records.find(
+    (record) =>
+      record.record_type === "task_end" &&
+      record.run_id === (state.run_id ?? null) &&
+      record.context?.session_id === state.session_id &&
+      record.context?.turn_id === state.turn_id,
+  );
+}
+
 export function commonRecord(state, occurredAt) {
   return {
     occurred_at: occurredAt,

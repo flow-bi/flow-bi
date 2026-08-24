@@ -3,7 +3,9 @@ import {
   commonRecord,
   isSyntheticPrompt,
   pendingForSession,
+  pendingKey,
   resolveExecutor,
+  terminalRecordForState,
 } from "./records.mjs";
 import { withStorage } from "./storage.mjs";
 
@@ -62,6 +64,9 @@ export async function handleUserPromptSubmit(
       run_id: environment.FLOW_BI_RUN_ID || null,
       summary_requested: false,
     };
+    state.pending_key = pendingKey(state);
+    const existing = pending.find((item) => item.pending_key === state.pending_key);
+    if (existing) return existing;
     records.push({
       record_type: "task_start",
       tree_version: state.tree_version,
@@ -82,10 +87,7 @@ export async function handleStop(
 ) {
   return withStorage(projectRoot, ({ records, pending }) => {
     const index = pending.findIndex(
-      (item) =>
-        item.kind === "task" &&
-        item.session_id === input.session_id &&
-        item.turn_id === input.turn_id,
+      (item) => item.pending_key === `primary:${input.session_id}:${input.turn_id}`,
     );
     if (index < 0 || pending[index].executor?.kind !== "primary") return {};
 
@@ -96,15 +98,17 @@ export async function handleStop(
     //   return { decision: "block", reason: SUMMARY_REQUEST };
     // }
 
-    records.push({
-      record_type: "task_end",
-      tree_version: state.tree_version,
-      ...commonRecord(state, now().toISOString()),
-      status: "completed",
-      exit_code: 0,
-      summary:
-        input.last_assistant_message || "Task가 최종 요약 없이 종료되었습니다.",
-    });
+    if (!terminalRecordForState(records, state)) {
+      records.push({
+        record_type: "task_end",
+        tree_version: state.tree_version,
+        ...commonRecord(state, now().toISOString()),
+        status: "completed",
+        exit_code: 0,
+        summary:
+          input.last_assistant_message || "Task가 최종 요약 없이 종료되었습니다.",
+      });
+    }
     pending.splice(index, 1);
     return {};
   });
@@ -123,7 +127,7 @@ primary가 아닌 별도 worker 프로세스가 종료됐을 때 호출된다.
  */
 
 export async function recordWorkerEnd(
-  { runId, exitCode, summary },
+  { runId, exitCode, summary, status },
   { projectRoot = PROJECT_ROOT, now = () => new Date() } = {},
 ) {
   return withStorage(projectRoot, ({ records, pending }) => {
@@ -132,8 +136,19 @@ export async function recordWorkerEnd(
       (item) => item.kind === "task" && item.run_id === runId,
     );
 
-    if (index < 0) return false;
+    if (index < 0) {
+      return records.some(
+        (record) => record.record_type === "task_end" && record.run_id === runId,
+      )
+        ? { status: "already_completed" }
+        : { status: "start_not_found" };
+    }
     const state = pending[index];
+    if (terminalRecordForState(records, state)) {
+      pending.splice(index, 1);
+      return { status: "cleanup_retry" };
+    }
+    const terminalStatus = status || (exitCode === 0 ? "completed" : "failed");
 
     records.push({
       record_type: "task_end",
@@ -141,7 +156,7 @@ export async function recordWorkerEnd(
       ...commonRecord(state, now().toISOString()),
 
       status: {
-        type: exitCode === 0 ? "completed" : "failed",
+        type: terminalStatus,
         exit_code: exitCode,
       },
       summary:
@@ -151,6 +166,6 @@ export async function recordWorkerEnd(
           : `최종 응답을 기록하지 못했으며 Worker 작업이 종료 코드 ${exitCode}(으)로 실패했습니다.`),
     });
     pending.splice(index, 1);
-    return true;
+    return { status: terminalStatus };
   });
 }

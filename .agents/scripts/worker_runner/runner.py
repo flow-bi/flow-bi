@@ -21,7 +21,7 @@ from .codex import (
 
 
 SubprocessRunner = Callable[..., subprocess.CompletedProcess[str]]
-WorkerLogger = Callable[[str, int, Path, Path], None]
+WorkerLogger = Callable[[str, int, Path, Path, str], None]
 WORKER_LOG_TAIL_BYTES = 16 * 1024
 
 
@@ -80,6 +80,7 @@ def invoke_worker_logger(
     exit_code: int,
     output_path: Path,
     project_root: Path,
+    status: str,
     runner: SubprocessRunner = subprocess.run,
 ) -> None:
     """"Worker 종료 후 prompt-detail Hook을 실행"""
@@ -94,7 +95,7 @@ def invoke_worker_logger(
         return
     try:
         runner(
-            [node, str(logger), "--worker-end", run_id, str(exit_code), str(output_path)],
+            [node, str(logger), "--worker-end", run_id, str(exit_code), str(output_path), status],
             cwd=project_root,
             check=False,
             stdout=subprocess.DEVNULL,
@@ -102,6 +103,14 @@ def invoke_worker_logger(
         )
     except Exception:
         return
+
+
+def _terminal_status(returncode: int, output: object | None, output_error: str) -> str:
+    if returncode != 0 or output_error:
+        return "failed"
+    if isinstance(output, dict) and output.get("final_status") == "PASS":
+        return "completed"
+    return "failed"
 
 
 def execute_worker(
@@ -183,7 +192,7 @@ def execute_worker(
                 log_tail = _read_worker_log_tail(log_path)
                 if log_tail:
                     error.stderr = _with_worker_log_tail("", log_tail)
-                logger(run_id, 124, output_path, project_root)
+                logger(run_id, 124, output_path, project_root, "timeout")
                 raise
 
             # 기타 실행 오류
@@ -192,13 +201,18 @@ def execute_worker(
                 log_tail = _read_worker_log_tail(log_path)
                 if log_tail and hasattr(error, "add_note"):
                     error.add_note(_with_worker_log_tail("", log_tail))
-                logger(run_id, 1, output_path, project_root)
+                logger(run_id, 1, output_path, project_root, "failed")
                 raise
 
             # 종료 결과 기록
-            logger(run_id, result.returncode, output_path, project_root)
-
             output, output_error = _read_worker_output(output_path)
+            logger(
+                run_id,
+                result.returncode,
+                output_path,
+                project_root,
+                _terminal_status(result.returncode, output, output_error),
+            )
             if result.returncode != 0 or output_error:
                 log_file.flush()
                 output_error = _with_worker_log_tail(
