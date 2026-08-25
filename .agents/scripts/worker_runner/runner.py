@@ -10,19 +10,19 @@ import subprocess
 import tempfile
 import uuid
 
-from .codex import (
-    DEFAULT_TIMEOUT_SECONDS,
+from .codex_cli import build_codex_command
+from .environment import (
     PROJECT_ROOT,
     build_subprocess_environment,
     validate_task_number,
 )
-from .codex_cli import build_codex_command
 from .toolchain_paths import collect_worker_readable_paths
 
 
 SubprocessRunner = Callable[..., subprocess.CompletedProcess[str]]
 WorkerLogger = Callable[[str, int, Path, Path, str], None]
 WORKER_LOG_TAIL_BYTES = 16 * 1024
+DEFAULT_TIMEOUT_SECONDS = 30 * 60
 
 
 @dataclass(frozen=True)

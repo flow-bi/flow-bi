@@ -7,7 +7,6 @@ import sys
 from .codex_cli import resolve_codex_home
 
 
-DEFAULT_TIMEOUT_SECONDS = 30 * 60
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -37,7 +36,7 @@ def _read_project_java_home(env_path: Path) -> Path | None:
 
 
 def validate_task_number(task_number: object) -> str:
-    """Return a validated Harness task number for subprocess environment use."""
+    """Return a positive integer task number formatted for the Worker."""
 
     if (
         isinstance(task_number, bool)
@@ -54,11 +53,11 @@ def build_subprocess_environment(
     base_environment: dict[str, str] | None = None,
     project_root: Path = PROJECT_ROOT,
 ) -> dict[str, str]:
+    """Build the isolated environment passed to a Worker subprocess."""
+
     task_number_text = validate_task_number(task_number)
     environment = (
-        base_environment
-        if base_environment is not None
-        else os.environ
+        base_environment if base_environment is not None else os.environ
     ).copy()
 
     environment["CODEX_HOME"] = str(resolve_codex_home())
@@ -66,20 +65,17 @@ def build_subprocess_environment(
     gradle_user_home = project_root / "backend" / ".gradle-user-home"
     worker_temp = gradle_user_home / "tmp"
     worker_home = gradle_user_home / "worker-home"
-
     worker_temp.mkdir(parents=True, exist_ok=True)
     worker_home.mkdir(parents=True, exist_ok=True)
 
     npm_cache = worker_temp / "npm-cache"
     npm_user_config = worker_home / ".npmrc"
-
     npm_cache.mkdir(parents=True, exist_ok=True)
     npm_user_config.touch(exist_ok=True)
 
     environment["NPM_CONFIG_CACHE"] = str(npm_cache)
     environment["NPM_CONFIG_USERCONFIG"] = str(npm_user_config)
     environment["NPM_CONFIG_UPDATE_NOTIFIER"] = "false"
-
     environment["GRADLE_USER_HOME"] = str(gradle_user_home)
     environment["TEMP"] = str(worker_temp)
     environment["TMP"] = str(worker_temp)
@@ -93,13 +89,10 @@ def build_subprocess_environment(
         if part
     )
 
-    java_home = _read_project_java_home(
-        project_root / "backend" / ".env.local"
-    )
+    java_home = _read_project_java_home(project_root / "backend" / ".env.local")
     if java_home is not None:
         java_bin = str(java_home / "bin")
-        current_path = environment.get("PATH", "")
-        path_entries = current_path.split(os.pathsep) if current_path else []
+        path_entries = environment.get("PATH", "").split(os.pathsep)
         environment["JAVA_HOME"] = str(java_home)
         environment["PATH"] = os.pathsep.join(
             [java_bin, *(entry for entry in path_entries if entry != java_bin)]
