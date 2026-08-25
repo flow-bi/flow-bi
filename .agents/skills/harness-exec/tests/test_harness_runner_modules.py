@@ -14,7 +14,8 @@ if str(SCRIPTS) not in sys.path:
 from harness_runner.evidence import ExecutionRecordStore, revision_fingerprint
 from harness_runner.execution import execute_workers
 from harness_runner.models import HarnessRequest, ParsedPlan, Task
-from harness_runner.parse import parse_invocation
+from harness_runner.worker_result import completion_error, needs_decision_correction
+from harness_runner.invocation import parse_invocation
 from harness_runner.state import PlanStateStore, StateRecordError
 
 
@@ -71,6 +72,14 @@ class RevisionEvidenceTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
+    def test_worker_result_contract_keeps_explicit_failure_and_correction_boundaries(self) -> None:
+        failed = worker_result(decision="FAILED")
+        corrected = worker_result(decision="PASS_WITH_FOLLOW_UP")
+
+        self.assertIn("Worker 판정", completion_error(task(1), failed))
+        self.assertFalse(needs_decision_correction(task(1), failed))
+        self.assertTrue(needs_decision_correction(task(1), corrected))
+
     def test_same_fingerprint_reuses_complete_evidence_but_runs_current_regression(self) -> None:
         calls: list[object] = []
         first = execute_workers(self.plan, self.request, lambda invocation: calls.append(invocation) or worker_result(), project_root=self.root, record_store=self.store)
@@ -114,6 +123,29 @@ class RevisionEvidenceTests(unittest.TestCase):
             "01": {"task1": {"status": "succeeded"}, "task2": {"status": "failed", "reason": "test failure"}},
             "02": {"task1": {"status": "pending"}},
         })
+
+    def test_state_store_returns_only_the_current_plan_task_records(self) -> None:
+        other = HarnessRequest("rerun-plan-02")
+        self.state_store.update(self.request.plan_id, task(1), "succeeded")
+        self.state_store.update(other.plan_id, task(1), "pending")
+
+        records = self.state_store.load_task_records(self.request.plan_id, self.plan.tasks)
+
+        self.assertEqual(records, {"task1": {"status": "succeeded"}})
+
+    def test_blocking_descendants_survives_state_write_failure(self) -> None:
+        failed_plan = ParsedPlan("requirements", (task(1), task(2, prerequisites=(1,))))
+        with mock.patch.object(self.state_store, "update", side_effect=StateRecordError("disk full")):
+            report = execute_workers(
+                failed_plan,
+                self.request,
+                call_worker=lambda _: type("Failed", (), {"returncode": 1, "output": None, "output_error": "failure"})(),
+                project_root=self.root,
+                record_store=self.store,
+                state_store=self.state_store,
+            )
+
+        self.assertEqual([result.status for result in report.results], ["failed", "blocked"])
 
     def test_state_schema_rejects_invalid_json_and_reason_rules(self) -> None:
         path = self.state_store.path_for(self.request.plan_id)
@@ -171,12 +203,8 @@ class RevisionEvidenceTests(unittest.TestCase):
         self.assertEqual(contexts, [])
 
     def test_other_task_or_common_prompt_change_does_not_invalidate_task_evidence(self) -> None:
-        original = revision_fingerprint(
-            self.root, self.request.plan_id, task(1), "original common prompt"
-        )
-        changed = revision_fingerprint(
-            self.root, self.request.plan_id, task(1), "changed by another task"
-        )
+        original = revision_fingerprint(self.request.plan_id, task(1))
+        changed = revision_fingerprint(self.request.plan_id, task(1))
 
         self.assertEqual(original, changed)
 
@@ -205,7 +233,7 @@ class RevisionEvidenceTests(unittest.TestCase):
         self.assertEqual(contexts, [])
 
     def test_corrupt_record_is_not_reused_and_blocks_dependent_task(self) -> None:
-        fingerprint = revision_fingerprint(self.root, self.request.plan_id, task(1), self.plan.common_prompt)
+        fingerprint = revision_fingerprint(self.request.plan_id, task(1))
         record_path = self.store.path_for(self.request.plan_id, 1)
         record_path.parent.mkdir(parents=True)
         record_path.write_text('{"fingerprint": "' + fingerprint + '"}', encoding="utf-8")
@@ -319,6 +347,18 @@ class RevisionEvidenceTests(unittest.TestCase):
 
 
 class InvocationParsingTests(unittest.TestCase):
+    def test_rejects_missing_harness_exec_prefix(self) -> None:
+        from harness_runner.models import PlanValidationError
+
+        with self.assertRaises(PlanValidationError):
+            parse_invocation("calendar-01 --from-task 2")
+
+    def test_rejects_zero_from_task(self) -> None:
+        from harness_runner.models import PlanValidationError
+
+        with self.assertRaises(PlanValidationError):
+            parse_invocation("$harness-exec calendar-01 --from-task 0")
+
     def test_parses_from_task_option_without_forwarding_it_to_worker(self) -> None:
         request = parse_invocation(
             "$harness-exec calendar-01 --from-task 7 인증 만료 흐름을 검증해줘"

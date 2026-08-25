@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from .models import ParsedPlan
-from .parse import parse_plan_text
+from .plan_parser import parse_plan_text
 
 
 def repository_root() -> Path:

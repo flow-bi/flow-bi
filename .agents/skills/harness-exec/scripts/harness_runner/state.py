@@ -100,6 +100,11 @@ class PlanStateStore:
             raise StateRecordError("현재 Plan에 없는 Task 상태가 저장되어 있습니다.")
         return document
 
+    def load_task_records(self, plan_id: str, tasks: tuple[Task, ...]) -> dict[str, Any]:
+        """Return this plan's validated task records without exposing its document key."""
+        _, plan_number = self._parts(plan_id)
+        return self.load(plan_id, tasks).get(plan_number, {})
+
     def update(self, plan_id: str, task: Task, status: str, *, reason: str | None = None) -> None:
         if status not in ALLOWED_STATUSES:
             raise ValueError("허용되지 않은 Task 상태입니다.")

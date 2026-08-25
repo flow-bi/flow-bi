@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 import sys
 
-from .parse import parse_invocation
+from .invocation import parse_invocation
 from .execution import execute_workers
 from .models import PlanValidationError, TaskResult
 from .notion import NotionPublicationError, publish_report

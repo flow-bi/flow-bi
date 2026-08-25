@@ -51,14 +51,6 @@ class TaskExecutionContext:
 
 
 @dataclass(frozen=True)
-class WorkerFailure:
-    worker: str
-    return_code: int | None = None
-    timed_out: bool = False
-    message: str = ""
-
-
-@dataclass(frozen=True)
 class VerificationResult:
     item: str
     result: str
@@ -77,7 +69,6 @@ class TaskResult:
     verification: tuple[VerificationResult, ...] = ()
     quality_score: int | None = None
     remaining_issues: tuple[str, ...] = ()
-    final_status: str = ""
     restored: bool = False
 
 

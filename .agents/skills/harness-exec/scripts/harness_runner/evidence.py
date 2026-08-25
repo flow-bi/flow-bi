@@ -21,9 +21,8 @@ def _json_bytes(value: object) -> bytes:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
-def revision_fingerprint(root: Path, plan_id: str, task: Task, common_prompt: str) -> str:
+def revision_fingerprint(plan_id: str, task: Task) -> str:
     """Hash only the task contract that the recorded TDD evidence proves."""
-    del root, common_prompt
     return hashlib.sha256(_json_bytes({
         "plan_id": plan_id,
         "task_number": task.number,
