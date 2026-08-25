@@ -18,15 +18,10 @@ spring:
       timeout: 2s
 
   datasource:
-    driver-class-name: org.h2.Driver
-    url: jdbc:h2:mem:flowbi;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
-    username: sa
-    password:
-
-  h2:
-    console:
-      enabled: true
-      path: /h2-console
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://localhost:${POSTGRES_PORT:5432}/${POSTGRES_DB:flowbi}
+    username: ${POSTGRES_USER:flowbi}
+    password: ${POSTGRES_PASSWORD:}
 
   jpa:
     open-in-view: false
@@ -36,7 +31,7 @@ spring:
     properties:
       hibernate:
         format_sql: true
-    database-platform: org.hibernate.dialect.H2Dialect
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
 
   flyway:
     enabled: true
@@ -64,16 +59,6 @@ spring:
   config:
     activate:
       on-profile: local
-
-  datasource:
-    driver-class-name: org.postgresql.Driver
-    url: jdbc:postgresql://localhost:${POSTGRES_PORT:5432}/${POSTGRES_DB:flowbi}
-    username: ${POSTGRES_USER:flowbi}
-    password: ${POSTGRES_PASSWORD:}
-
-  h2:
-    console:
-      enabled: false
 
   jpa:
     hibernate:

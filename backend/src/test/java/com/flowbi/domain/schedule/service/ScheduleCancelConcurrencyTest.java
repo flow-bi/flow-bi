@@ -25,14 +25,14 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import com.flowbi.test.H2SpringBootTest;
+import com.flowbi.test.PostgresSpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 
-@H2SpringBootTest
+@PostgresSpringBootTest
 @Import(ScheduleCancelConcurrencyTest.CalendarBoundaryConfiguration.class)
 class ScheduleCancelConcurrencyTest {
 

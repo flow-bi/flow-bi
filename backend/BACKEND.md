@@ -15,7 +15,7 @@
 | Framework | Spring Boot 3.5.7 |
 | Build | Gradle Groovy DSL |
 | Production Database | PostgreSQL |
-| Current Test Database | H2 In-memory, MySQL Compatibility Mode |
+| Test Database | PostgreSQL 16 via Testcontainers |
 | Cache | Redis |
 | Persistence | Spring Data JPA |
 | Authentication | Spring Security + Spring Session Redis |
@@ -26,8 +26,7 @@
 미확정 기술은 ADR 또는 승인된 Active Plan 없이 임의로 도입하지 않는다.
 
 - 현재 Spring Security 의존성은 초기 테스트 편의를 위해 주석 처리되어 있지만 `SECURITY.md`의 요구사항은 완화되지 않는다. 인증 기능이나 보호 API를 완료하기 전에는 Spring Security를 활성화하고 관련 테스트를 통과해야 한다.
-- H2는 테스트 전용이며 PostgreSQL과 SQL·제약 동작이 다르므로 H2 테스트만으로 운영 DB 호환성을 보장했다고 판단하지 않는다.
-- H2 Console은 개발·테스트 Profile에서만 활성화하고 운영 환경에서는 노출하지 않는다.
+- 애플리케이션과 Spring 통합 테스트는 모두 PostgreSQL을 사용한다. 테스트는 Testcontainers로 격리된 PostgreSQL 16을 기동한다.
 
 ## 3. 책임과 경계
 
@@ -128,15 +127,12 @@ backend/src/
 - 테스트는 구현 세부보다 사용자의 관찰 가능한 동작과 핵심 규칙을 검증한다.
 - Controller 테스트만으로 도메인 규칙을 검증한 것으로 간주하지 않는다.
 - Mock이 실제 권한·트랜잭션·쿼리 동작을 가리지 않도록 하고, PostgreSQL 고유 동작은 적용 가능한 통합 테스트로 검증한다.
-- H2 기반 Spring 테스트는 빠른 보조 검증으로 사용하며 PostgreSQL 전용 Flyway Migration 이후 Schema는 JPA Mapping으로 격리 구성한다.
-- Migration, PostgreSQL 제약, 영속·트랜잭션·동시성 계약은 전체 Migration과 기준 데이터가 적용된 PostgreSQL Testcontainers에서 검증한다.
+- Spring 통합 테스트는 PostgreSQL Testcontainers를 사용한다. 기능별 공통 테스트는 필요한 Migration 기준점과 JPA Mapping을 함께 적용할 수 있으며, Migration·PostgreSQL 제약·영속·트랜잭션·동시성 계약은 전체 Migration과 기준 데이터가 적용된 전용 PostgreSQL 테스트로 검증한다.
 - DB 통합 테스트 Fixture는 공유 기준 데이터를 삭제하거나 고정 ID와 빈 테이블을 가정하지 않고 테스트가 소유한 식별자만 조회·정리한다.
 - 코드 스타일은 Spotless 규칙을 따른다.
 
 ## 10. 미결정 사항
 
-- Migration 도구(Flyway/Liquibase)
-- PostgreSQL 기반 통합 테스트 환경과 Testcontainers 도입 여부
 - 세션 유휴·절대 만료 시간과 Cookie `SameSite` 값
 - Redis 운영 가용성, 백업·복구와 Keyspace Event 구성
 - 알림 채널과 Scheduler

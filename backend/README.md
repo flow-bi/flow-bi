@@ -23,8 +23,9 @@ docker compose exec redis sh -c 'REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli ping'
 ./gradlew bootRun --args='--spring.profiles.active=local'
 ```
 
-Windows에서는 `./gradlew` 대신 `gradlew.bat`을 사용할 수 있다. 기본 Profile과 테스트는
-기존 H2 설정을 유지하며, `local` Profile에서만 Docker PostgreSQL로 전환한다.
+Windows에서는 `./gradlew` 대신 `gradlew.bat`을 사용할 수 있다. 기본 Profile과 `local`
+Profile은 모두 PostgreSQL 접속 설정을 사용하고, Spring 통합 테스트는 Testcontainers로
+PostgreSQL 16을 자동 기동한다.
 호스트의 `5432` 포트를 이미 사용 중이면 `.env`의 `POSTGRES_PORT`를 `5433`처럼 사용 가능한
 포트로 변경한다. Backend의 `local` Profile도 같은 값을 자동으로 사용한다.
 

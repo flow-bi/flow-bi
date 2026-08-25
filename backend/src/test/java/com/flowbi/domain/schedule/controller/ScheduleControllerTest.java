@@ -26,14 +26,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import com.flowbi.test.H2SpringBootTest;
+import com.flowbi.test.PostgresSpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
-@H2SpringBootTest
+@PostgresSpringBootTest
 @AutoConfigureMockMvc
 class ScheduleControllerTest {
 

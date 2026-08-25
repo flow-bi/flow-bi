@@ -20,16 +20,18 @@ import com.flowbi.domain.user.repository.UserRepository;
 import com.flowbi.domain.user.service.ReservationParticipantAccessService;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import com.flowbi.test.H2SpringBootTest;
+import com.flowbi.test.PostgresSpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
-@H2SpringBootTest
+@PostgresSpringBootTest
 class RoomReservationUpdateTransactionTest {
 
+  private static final ZoneId KOREA_ZONE = ZoneId.of("Asia/Seoul");
   private static final LocalDateTime OLD_START = LocalDateTime.of(2026,8,10,10,0);
   private static final LocalDateTime OLD_END = LocalDateTime.of(2026,8,10,11,0);
   private static final LocalDateTime NEW_START = LocalDateTime.of(2026,8,10,11,0);
@@ -96,8 +98,10 @@ class RoomReservationUpdateTransactionTest {
     assertThat(reservation.getEndAt()).isEqualTo(NEW_END);
     Schedule schedule = scheduleRepository.findActiveByIdWithAssociations(scheduleId).orElseThrow();
     assertThat(schedule.getTitle()).isEqualTo("Updated title");
-    assertThat(schedule.getStartAt().toLocalDateTime()).isEqualTo(NEW_START);
-    assertThat(schedule.getEndAt().toLocalDateTime()).isEqualTo(NEW_END);
+    assertThat(schedule.getStartAt().atZoneSameInstant(KOREA_ZONE).toLocalDateTime())
+        .isEqualTo(NEW_START);
+    assertThat(schedule.getEndAt().atZoneSameInstant(KOREA_ZONE).toLocalDateTime())
+        .isEqualTo(NEW_END);
     assertThat(schedule.getDetail().getContent()).isEqualTo("Updated detail");
     assertThat(schedule.getDetail().getLocation()).isEqualTo("Iris");
     assertThat(schedule.getParticipants()).extracting(participant -> participant.getUserId())
