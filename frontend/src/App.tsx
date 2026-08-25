@@ -17,8 +17,7 @@ import {
   resolveMeetingRoomGateway,
   type MeetingRoomGateway,
 } from './features/meeting-room'
-import { ScheduleCalendar } from './features/schedule-calendar/ScheduleCalendar'
-import { ScheduleCreateModal } from './features/schedule-create/ScheduleCreateModal'
+import { ScheduleCalendar, ScheduleCreateModal } from './features/schedule-calendar'
 
 declare global {
   interface Window {

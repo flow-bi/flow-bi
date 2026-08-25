@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import type { ScheduleType, ScheduleVisibility } from './scheduleCreateApi'
+import type { ScheduleDetail, ScheduleType, ScheduleVisibility } from '../api/scheduleCalendarApi'
 
 export const scheduleTypeDefaults: Record<ScheduleType, ScheduleVisibility> = {
   PERSONAL: 'PRIVATE',
@@ -58,6 +58,46 @@ export const scheduleFormSchema = z
   })
 
 export type ScheduleFormValues = z.infer<typeof scheduleFormSchema>
+
+export function createScheduleFormValues(): ScheduleFormValues {
+  return {
+    title: '',
+    date: '',
+    startTime: '09:00',
+    endTime: '10:00',
+    allDay: false,
+    type: 'PERSONAL',
+    visibility: 'PRIVATE',
+    colorLabel: 'BLUE',
+    location: '',
+    content: '',
+    creatorAttends: false,
+    participantIds: [],
+    userTargetIds: [],
+    teamTargetIds: [],
+    projectTargetIds: [],
+  }
+}
+
+export function scheduleDetailToFormValues(detail: ScheduleDetail): ScheduleFormValues {
+  return {
+    title: detail.title,
+    date: detail.startAt.slice(0, 10),
+    startTime: detail.startAt.slice(11, 16),
+    endTime: detail.endAt.slice(11, 16),
+    allDay: detail.allDay,
+    type: detail.type,
+    visibility: detail.visibility,
+    colorLabel: detail.colorLabel,
+    location: detail.location,
+    content: detail.content,
+    creatorAttends: detail.creatorAttends,
+    participantIds: detail.participantIds,
+    userTargetIds: detail.userTargetIds,
+    teamTargetIds: detail.teamTargetIds,
+    projectTargetIds: detail.projectTargetIds,
+  }
+}
 
 export function formatScheduleOffset(date: string, time: string): string {
   return `${date}T${time}:00+09:00`
