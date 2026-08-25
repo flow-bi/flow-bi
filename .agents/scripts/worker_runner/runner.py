@@ -13,11 +13,11 @@ import uuid
 from .codex import (
     DEFAULT_TIMEOUT_SECONDS,
     PROJECT_ROOT,
-    build_codex_command,
     build_subprocess_environment,
-    collect_worker_readable_paths,
     validate_task_number,
 )
+from .codex_cli import build_codex_command
+from .toolchain_paths import collect_worker_readable_paths
 
 
 SubprocessRunner = Callable[..., subprocess.CompletedProcess[str]]
@@ -159,11 +159,11 @@ def execute_worker(
     
     # codex exec 명령 생성
     command = build_codex_command(
-        allowed_paths,
-        forbidden_paths,
-        output_path,
-        executable,
-        readable_paths=collect_worker_readable_paths(
+        writable_paths=allowed_paths,
+        read_only_paths=forbidden_paths,
+        output_path=output_path,
+        executable=executable,
+        toolchain_readable_paths=collect_worker_readable_paths(
             environment,
             project_root=project_root,
         ),
