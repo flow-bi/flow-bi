@@ -1,12 +1,7 @@
 package com.flowbi.domain.schedule.entity;
 
-import com.flowbi.domain.schedule.audit.*;
-import com.flowbi.domain.schedule.controller.*;
-import com.flowbi.domain.schedule.dto.*;
-import com.flowbi.domain.schedule.exception.*;
-import com.flowbi.domain.schedule.repository.*;
-import com.flowbi.domain.schedule.service.*;
-
+import com.flowbi.domain.schedule.dto.ScheduleCreateCommand;
+import com.flowbi.domain.schedule.dto.ScheduleUpdateCommand;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -23,7 +18,6 @@ import java.time.OffsetDateTime;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 @Entity
 @Table(name = "schedules")
@@ -99,14 +93,9 @@ public class Schedule {
     schedule.colorLabel = command.colorLabel();
     schedule.creatorAttends = command.creatorAttends();
     schedule.detail = new ScheduleDetail(schedule, command.content(), command.location());
-    command.participantIds()
-        .forEach(userId -> schedule.participants.add(new ScheduleParticipant(schedule, userId)));
-    command.userTargetIds()
-        .forEach(userId -> schedule.targets.add(ScheduleTarget.user(schedule,userId)));
-    command.teamTargetIds()
-        .forEach(teamId -> schedule.targets.add(ScheduleTarget.team(schedule,teamId)));
-    command.projectTargetIds()
-        .forEach(projectId -> schedule.targets.add(ScheduleTarget.project(schedule,projectId)));
+    schedule.replaceParticipants(command.participantIds());
+    schedule.replaceTargets(command.userTargetIds(),command.teamTargetIds(),
+        command.projectTargetIds());
     return schedule;
   }
 
@@ -190,17 +179,24 @@ public class Schedule {
     colorLabel = command.colorLabel();
     creatorAttends = command.creatorAttends();
     detail.update(command.content(),command.location());
-    targets.clear();
-    participants
-        .removeIf(participant -> !command.participantIds().contains(participant.getUserId()));
+    replaceParticipants(command.participantIds());
+    replaceTargets(command.userTargetIds(),command.teamTargetIds(),command.projectTargetIds());
+  }
+
+  private void replaceParticipants(List<Long> participantIds) {
+    participants.removeIf(participant -> !participantIds.contains(participant.getUserId()));
     Set<Long> existingParticipantIds = participants.stream().map(ScheduleParticipant::getUserId)
-        .collect(Collectors.toSet());
-    command.participantIds().stream().filter(userId -> !existingParticipantIds.contains(userId))
+        .collect(java.util.stream.Collectors.toSet());
+    participantIds.stream().filter(userId -> !existingParticipantIds.contains(userId))
         .forEach(userId -> participants.add(new ScheduleParticipant(this, userId)));
-    command.userTargetIds().forEach(userId -> targets.add(ScheduleTarget.user(this,userId)));
-    command.teamTargetIds().forEach(teamId -> targets.add(ScheduleTarget.team(this,teamId)));
-    command.projectTargetIds()
-        .forEach(projectId -> targets.add(ScheduleTarget.project(this,projectId)));
+  }
+
+  private void replaceTargets(List<Long> userTargetIds,List<Long> teamTargetIds,
+      List<Long> projectTargetIds) {
+    targets.clear();
+    userTargetIds.forEach(userId -> targets.add(ScheduleTarget.user(this,userId)));
+    teamTargetIds.forEach(teamId -> targets.add(ScheduleTarget.team(this,teamId)));
+    projectTargetIds.forEach(projectId -> targets.add(ScheduleTarget.project(this,projectId)));
   }
 
   public void cancel(long actorId,OffsetDateTime occurredAt) {

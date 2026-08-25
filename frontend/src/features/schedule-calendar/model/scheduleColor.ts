@@ -1,4 +1,4 @@
-export type ScheduleColorLabel = 'RED' | 'ORANGE' | 'YELLOW' | 'GREEN' | 'BLUE' | 'PURPLE'
+import type { ScheduleColorLabel } from '../api/scheduleCalendarApi'
 
 export interface ScheduleColorClasses {
   background: string

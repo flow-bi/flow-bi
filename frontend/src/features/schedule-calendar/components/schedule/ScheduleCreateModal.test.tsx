@@ -4,12 +4,12 @@ import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
+import { ScheduleCreateModal } from './ScheduleCreateModal'
 import {
   ScheduleApiError,
   type CreateScheduleRequest,
   type ScheduleTargetOptions,
-} from './scheduleCreateApi'
-import { ScheduleCreateModal } from './ScheduleCreateModal'
+} from '../../api/scheduleCalendarApi'
 
 function renderModal(onClose = vi.fn()) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })

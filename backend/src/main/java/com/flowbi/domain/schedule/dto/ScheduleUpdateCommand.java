@@ -1,12 +1,9 @@
 package com.flowbi.domain.schedule.dto;
 
-import com.flowbi.domain.schedule.audit.*;
-import com.flowbi.domain.schedule.controller.*;
-import com.flowbi.domain.schedule.entity.*;
-import com.flowbi.domain.schedule.exception.*;
-import com.flowbi.domain.schedule.repository.*;
-import com.flowbi.domain.schedule.service.*;
-
+import com.flowbi.domain.schedule.entity.ScheduleColorLabel;
+import com.flowbi.domain.schedule.entity.ScheduleType;
+import com.flowbi.domain.schedule.entity.ScheduleVisibility;
+import com.flowbi.domain.schedule.exception.InvalidScheduleUpdateCommandException;
 import java.time.OffsetDateTime;
 import java.util.List;
 
@@ -21,8 +18,11 @@ public record ScheduleUpdateCommand(String title, ScheduleType type, ScheduleVis
       List<Long> participantIds,List<Long> userTargetIds,List<Long> teamTargetIds,
       List<Long> projectTargetIds) {
     ScheduleUpdateCommand command = new ScheduleUpdateCommand(title, type, visibility, startAt,
-        endAt, allDay, colorLabel, content, location, creatorAttends, immutable(participantIds),
-        immutable(userTargetIds), immutable(teamTargetIds), immutable(projectTargetIds));
+        endAt, allDay, colorLabel, content, location, creatorAttends,
+        ScheduleWriteCommandValidator.normalizeIds(participantIds),
+        ScheduleWriteCommandValidator.normalizeIds(userTargetIds),
+        ScheduleWriteCommandValidator.normalizeIds(teamTargetIds),
+        ScheduleWriteCommandValidator.normalizeIds(projectTargetIds));
     command.validate();
     return command;
   }
@@ -33,15 +33,9 @@ public record ScheduleUpdateCommand(String title, ScheduleType type, ScheduleVis
         projectTargetIds);
   }
 
-  private static List<Long> immutable(List<Long> values) {
-    return List.copyOf(values == null ? List.of() : values);
-  }
-
   private void validate() {
-    try {
-      asCreateCommand(1L);
-    } catch (InvalidScheduleCreateCommandException exception) {
-      throw new InvalidScheduleUpdateCommandException(exception.getMessage());
-    }
+    ScheduleWriteCommandValidator.validate(1L,title,type,visibility,startAt,endAt,colorLabel,
+        participantIds,userTargetIds,teamTargetIds,projectTargetIds,
+        InvalidScheduleUpdateCommandException::new);
   }
 }

@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { ScheduleCalendar } from './ScheduleCalendar'
 
-import type { ScheduleDetail, ScheduleSummary } from './scheduleCalendarApi'
+import type { ScheduleDetail, ScheduleSummary } from './api/scheduleCalendarApi'
 
 const schedules: ScheduleSummary[] = [
   {

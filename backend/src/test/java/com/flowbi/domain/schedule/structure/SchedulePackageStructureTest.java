@@ -46,6 +46,23 @@ class SchedulePackageStructureTest {
             .isEqualTo("com.flowbi.domain.schedule.service"));
   }
 
+  @Test
+  void dtoAndEntityDoNotDependOnControllerRepositoryOrServicePackages() throws IOException {
+    Path scheduleRoot = Path.of("src/main/java/com/flowbi/domain/schedule");
+    try (var paths = Files.walk(scheduleRoot)) {
+      List<String> invalidImports = paths
+          .filter(path -> path.toString().contains("/dto/") || path.toString().contains("/entity/"))
+          .filter(path -> path.getFileName().toString().endsWith(".java")).map(this::read)
+          .flatMap(String::lines).map(String::trim)
+          .filter(line -> line.startsWith("import com.flowbi.domain.schedule."))
+          .filter(line -> line.contains(".controller.") || line.contains(".repository.")
+              || line.contains(".service."))
+          .toList();
+
+      assertThat(invalidImports).isEmpty();
+    }
+  }
+
   private List<Path> rootJavaTypes() {
     Path root = Path.of("src/main/java/com/flowbi/domain/schedule");
     try (var paths = Files.list(root)) {
@@ -60,6 +77,14 @@ class SchedulePackageStructureTest {
       return Class.forName("com.flowbi.domain.schedule." + type);
     } catch (ClassNotFoundException exception) {
       throw new AssertionError("missing schedule type: " + type, exception);
+    }
+  }
+
+  private String read(Path path) {
+    try {
+      return Files.readString(path);
+    } catch (IOException exception) {
+      throw new AssertionError("cannot inspect schedule source: " + path, exception);
     }
   }
 }

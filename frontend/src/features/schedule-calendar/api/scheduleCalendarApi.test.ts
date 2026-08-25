@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { authenticatedFetch } from '../authenticatedFetch'
 import {
   cancelRoomReservation,
   getScheduleDetail,
   type ScheduleCalendarApiError,
 } from './scheduleCalendarApi'
+import { authenticatedFetch } from '../../authenticatedFetch'
 
-vi.mock('../authenticatedFetch', () => ({ authenticatedFetch: vi.fn() }))
+vi.mock('../../authenticatedFetch', () => ({ authenticatedFetch: vi.fn() }))
 
 const mockedAuthenticatedFetch = vi.mocked(authenticatedFetch)
 

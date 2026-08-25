@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 
-import { type AttendeeCandidate, ScheduleApiError } from './scheduleCreateApi'
+import { type AttendeeCandidate, ScheduleApiError } from '../../api/scheduleCalendarApi'
 
 const fieldClass =
   'w-full rounded-md border border-border bg-surface px-3 py-2 text-text-primary focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-2'
