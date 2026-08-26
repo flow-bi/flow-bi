@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from copy import deepcopy
 from pathlib import Path
 import json
 import re
@@ -58,15 +59,25 @@ def format_toml_value(value: object) -> str:
     )
 
 # config 설정을 읽고 실행 별 경로 권한 병합
+def load_worker_config_template() -> dict[str, object]:
+    """Load and validate the cohort-shared Worker config once."""
+    return build_worker_config((), ())
+
+
 def build_worker_config(
     writable_paths: Iterable[str],
     read_only_paths: Iterable[str],
     toolchain_readable_paths: Iterable[str] = (),
+    *,
+    template: dict[str, object] | None = None,
 ) -> dict[str, object]:
 
     try:
-        with CONFIG_PATH.open("rb") as config_file:
-            config = tomllib.load(config_file)
+        if template is None:
+            with CONFIG_PATH.open("rb") as config_file:
+                config = tomllib.load(config_file)
+        else:
+            config = deepcopy(template)
 
     except FileNotFoundError as error:
         raise WorkerConfigError(
@@ -124,11 +135,14 @@ def build_config_overrides(
     writable_paths: Iterable[str],
     read_only_paths: Iterable[str],
     toolchain_readable_paths: Iterable[str] = (),
+    *,
+    template: dict[str, object] | None = None,
 ) -> list[str]:
     config = build_worker_config(
         writable_paths=writable_paths,
         read_only_paths=read_only_paths,
         toolchain_readable_paths=toolchain_readable_paths,
+        template=template,
     )
 
     return [

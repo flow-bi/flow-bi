@@ -23,12 +23,12 @@ class WorkerEnvironmentTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def test_rejects_non_positive_or_non_integer_task_numbers(self) -> None:
-        from worker_runner.environment import validate_task_number
+        from worker_runner.runtime import _validate_task_number
 
         for value in (None, True, False, 0, -1, "2", 1.5):
             with self.subTest(value=value):
                 with self.assertRaisesRegex(ValueError, "Task number"):
-                    validate_task_number(value)
+                    _validate_task_number(value)
 
     def test_builds_isolated_environment_without_parent_only_values(self) -> None:
         from worker_runner.environment import build_subprocess_environment
@@ -81,22 +81,53 @@ class WorkerEnvironmentTests(unittest.TestCase):
         self.assertEqual(environment["JAVA_HOME"], str(java_home))
         self.assertEqual(environment["PATH"].split(os.pathsep), [str(java_home / "bin"), "other"])
 
+    def test_runtime_prepares_shared_values_once_and_isolates_task_environments(self) -> None:
+        from worker_runner.runtime import prepare_worker_runtime
+
+        base_environment = {"PATH": "base", "CODEX_THREAD_ID": "parent"}
+        with (
+            mock.patch("worker_runner.runtime.resolve_codex_executable", return_value="codex") as executable,
+            mock.patch("worker_runner.runtime.resolve_codex_home", return_value=self.root / "codex-home") as home,
+            mock.patch("worker_runner.runtime._read_project_java_home", return_value=None) as java_home,
+            mock.patch("worker_runner.runtime.collect_worker_readable_paths", return_value=("toolchain",)) as toolchains,
+            mock.patch("worker_runner.runtime.load_worker_config_template", return_value={"default_permissions": "task", "permissions": {"task": {"filesystem": {":workspace_roots": {}}}}}),
+        ):
+            runtime = prepare_worker_runtime(self.root, base_environment=base_environment)
+
+        first = runtime.bind_task(1, ("frontend",), ("backend",), {"FRONTEND_URL": "one"})
+        second = runtime.bind_task(2, ("backend",), ("frontend",), {"FRONTEND_URL": "two"})
+        first_environment = first.environment_for_run("first-run")
+        second_environment = second.environment_for_run("second-run")
+
+        executable.assert_called_once_with()
+        home.assert_called_once_with()
+        java_home.assert_called_once()
+        toolchains.assert_called_once()
+        self.assertEqual(runtime.toolchain_readable_paths, ("toolchain",))
+        self.assertEqual(first_environment["FLOW_BI_TASK_NUMBER"], "1")
+        self.assertEqual(second_environment["FLOW_BI_TASK_NUMBER"], "2")
+        self.assertEqual(first_environment["FLOW_BI_RUN_ID"], "first-run")
+        self.assertEqual(second_environment["FLOW_BI_RUN_ID"], "second-run")
+        self.assertEqual(first_environment["FRONTEND_URL"], "one")
+        self.assertEqual(second_environment["FRONTEND_URL"], "two")
+        self.assertNotIn("FRONTEND_URL", runtime.base_environment)
+        self.assertEqual(first.config_overrides, first.config_overrides)
+        self.assertNotEqual(first.config_overrides, second.config_overrides)
+
 
 class WorkerRunnerPublicContractTests(unittest.TestCase):
-    def test_package_exports_only_worker_execution_and_invocation_parsing(self) -> None:
+    def test_package_exports_only_runtime_contract(self) -> None:
         import worker_runner
 
-        self.assertEqual(worker_runner.__all__, ("execute_worker", "parse_invocation"))
-        self.assertTrue(callable(worker_runner.execute_worker))
-        self.assertTrue(callable(worker_runner.parse_invocation))
+        self.assertEqual(worker_runner.__all__, ("WorkerRuntime", "WorkerTaskRuntime", "prepare_worker_runtime"))
+        self.assertTrue(callable(worker_runner.prepare_worker_runtime))
 
     def test_runner_composes_specialized_modules(self) -> None:
         import worker_runner.runner as runner
 
         self.assertTrue(callable(runner.build_codex_command))
-        self.assertTrue(callable(runner.collect_worker_readable_paths))
-        self.assertTrue(callable(runner.build_subprocess_environment))
         self.assertTrue(callable(runner.execute_worker))
+        self.assertTrue(callable(runner.execute_prepared_worker))
 
 
 class WorkerExecutionContractTests(unittest.TestCase):

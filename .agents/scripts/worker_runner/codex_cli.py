@@ -26,13 +26,17 @@ def build_codex_command(
     toolchain_readable_paths: tuple[str, ...],
     output_path: Path,
     executable: str | None = None,
+    config_overrides: tuple[str, ...] | None = None,
 ) -> list[str]:
     command = [executable or resolve_codex_executable(), "exec", "-o", str(output_path)]
-    for override in build_config_overrides(
-        writable_paths=writable_paths,
-        read_only_paths=read_only_paths,
-        toolchain_readable_paths=toolchain_readable_paths,
-    ):
+    overrides = config_overrides
+    if overrides is None:
+        overrides = tuple(build_config_overrides(
+            writable_paths=writable_paths,
+            read_only_paths=read_only_paths,
+            toolchain_readable_paths=toolchain_readable_paths,
+        ))
+    for override in overrides:
         command.extend(("-c", override))
     command.append("-")
     return command
