@@ -113,10 +113,29 @@ class WorkerExecutionContractTests(unittest.TestCase):
 
     def test_returns_worker_json_and_cleans_isolated_files(self) -> None:
         import worker_runner.runner as runner_module
+        from worker_runner.prompt import build_worker_prompt, load_prompt_sections
 
         logger = mock.Mock()
+        prompt = build_worker_prompt(
+            sections=load_prompt_sections(),
+            common_prompt="common guidance",
+            additional_request="",
+            title="Task title",
+            task_prompt="Implement the task.",
+            number=1,
+            verification_items=("unit test",),
+            execution_context={
+                "plan_id": "harness-03",
+                "fingerprint": "fingerprint",
+                "mode": "new_or_changed",
+                "prior_tdd_evidence": None,
+                "prior_evidence_id": None,
+            },
+            decision_correction=None,
+        )
 
-        def run(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            self.assertEqual(kwargs["input"], prompt)
             self.output_path(command).write_text('{"final_status":"PASS"}', encoding="utf-8")
             return subprocess.CompletedProcess(command, 0)
 
@@ -126,7 +145,7 @@ class WorkerExecutionContractTests(unittest.TestCase):
             side_effect=lambda **kwargs: ["codex", "exec", "-o", str(kwargs["output_path"])],
         ):
             result = runner_module.execute_worker(
-                "task",
+                prompt,
                 (".agents",),
                 (),
                 task_number=1,
@@ -167,6 +186,33 @@ class WorkerExecutionContractTests(unittest.TestCase):
 
         self.assertEqual(logger.call_args.args[1], 124)
         self.assertEqual(logger.call_args.args[4], "timeout")
+        self.assertEqual(tuple((self.root / ".codex-logs" / ".pending").iterdir()), ())
+
+    def test_process_module_owns_log_tail_and_temporary_file_lifecycle(self) -> None:
+        import worker_runner.worker_process as process
+
+        logger = mock.Mock()
+
+        def command_factory(output_path: Path) -> list[str]:
+            return ["codex", "exec", "-o", str(output_path)]
+
+        def run(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            self.output_path(command).write_text('{"final_status":"PASS"}', encoding="utf-8")
+            return subprocess.CompletedProcess(command, 0)
+
+        result = process.run_worker_process(
+            run_id="run-1",
+            command_factory=command_factory,
+            prompt="prompt from build_worker_prompt()",
+            environment={"PATH": ""},
+            project_root=self.root,
+            runner=run,
+            logger=logger,
+        )
+
+        self.assertEqual(result.output, {"final_status": "PASS"})
+        self.assertEqual(result.output_error, "")
+        self.assertEqual(logger.call_args.args[4], "completed")
         self.assertEqual(tuple((self.root / ".codex-logs" / ".pending").iterdir()), ())
 
 
