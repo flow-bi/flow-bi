@@ -11,7 +11,6 @@ from .plan import complete_plan, load_active_plan, repository_root
 from .report import build_execution_report
 from .worker_gateway import invoke_task
 
-from worker_runner.browser_verifier import BrowserVerifier
 from worker_runner.backend_verifier import BackendVerifier
 from worker_runner.frontend_verifier import FrontendVerifier
 
@@ -64,9 +63,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         _print_console(f"plan 준비 실패: {error}", file=sys.stderr)
         return 1
 
-    # 브라우저 프로세스는 부모에서 실행하고 Worker에는 제한된 호출 정보만 전달한다.
     with (
-        BrowserVerifier(root) as browser_verifier,
         BackendVerifier(root) as backend_verifier,
         FrontendVerifier(root) as frontend_verifier,
     ):
@@ -83,7 +80,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             return invoke_task(
                 invocation,
                 environment_overrides={
-                    **browser_verifier.environment,
                     **backend_verifier.environment_for_task(
                         invocation.task.allowed_paths,
                         invocation.task.forbidden_paths,

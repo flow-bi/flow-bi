@@ -261,6 +261,8 @@ def build_subprocess_environment(
     environment["FLOW_BI_TASK_NUMBER"] = task_number_text
     environment["FLOW_BI_PYTHON_EXECUTABLE"] = sys.executable
     environment.pop("FLOW_BI_NOTION_PARENT", None)
+    environment.pop("FLOW_BI_" + "BROWSER_VERIFIER_URL", None)
+    environment.pop("FLOW_BI_" + "BROWSER_VERIFIER_TOKEN", None)
     environment.pop("CODEX_PERMISSION_PROFILE", None)
 
     parent_session_id = environment.get("CODEX_THREAD_ID")

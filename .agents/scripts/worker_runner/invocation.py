@@ -37,20 +37,6 @@ TASK_WORKER_GUIDANCE = (
     "Skill과 실행 스크립트를 재호출하지 마십시오. 또한  모든 timeout은 90분으로 설정해 확인합니다."
 )
 
-BROWSER_VERIFICATION_GUIDANCE = (
-    "Cypress 브라우저 검증은 Worker에서 직접 실행하지 말고 "
-    "부모가 전달한 `FLOW_BI_PYTHON_EXECUTABLE`로 "
-    "`.agents/scripts/run-browser-verifier.py cypress`를 실행하십시오. "
-    "macOS/Linux shell에서는 "
-    "`\"$FLOW_BI_PYTHON_EXECUTABLE\" .agents/scripts/run-browser-verifier.py cypress`, "
-    "Windows PowerShell에서는 "
-    "`& $env:FLOW_BI_PYTHON_EXECUTABLE .agents/scripts/run-browser-verifier.py cypress`를 "
-    "사용하십시오. "
-    "이 명령은 Harness 부모에서 `npm run test:e2e`를 실행하고 동일한 종료 코드와 "
-    "로그를 반환합니다. 검증이 실패하면 로그를 분석해 허용 범위의 구현 또는 "
-    "테스트를 수정한 뒤 같은 명령을 재실행하여 Green을 확인하십시오."
-)
-
 BACKEND_VERIFICATION_GUIDANCE = (
     "Backend Gradle 검증은 Worker에서 `gradlew`를 직접 실행하지 말고 부모가 전달한 "
     "`FLOW_BI_PYTHON_EXECUTABLE`로 "
@@ -289,7 +275,6 @@ def parse_invocation(raw_invocation: str) -> InvocationResult:
         DISCOVERY_GUIDANCE,
         CONTEXT_EFFICIENCY_GUIDANCE,
         TASK_WORKER_GUIDANCE,
-        BROWSER_VERIFICATION_GUIDANCE,
         BACKEND_VERIFICATION_GUIDANCE,
         BACKEND_FORMATTING_GUIDANCE,
         FRONTEND_VERIFICATION_GUIDANCE,

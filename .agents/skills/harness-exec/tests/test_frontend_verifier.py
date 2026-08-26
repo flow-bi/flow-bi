@@ -160,8 +160,6 @@ class FrontendVerifierTests(unittest.TestCase):
         self.assertIn("FLOW_BI_PYTHON_EXECUTABLE", prompt)
 
     def test_lifecycle_exposes_frontend_environment_only_to_frontend_tasks(self) -> None:
-        browser = mock.MagicMock()
-        browser.__enter__.return_value.environment = {"BROWSER": "browser"}
         backend = mock.MagicMock()
         backend.__enter__.return_value.environment_for_task.return_value = {"BACKEND": "backend"}
         frontend = mock.MagicMock()
@@ -181,7 +179,6 @@ class FrontendVerifierTests(unittest.TestCase):
             mock.patch.object(cli, "parse_invocation", return_value=mock.Mock()),
             mock.patch.object(cli, "repository_root", return_value=self.root),
             mock.patch.object(cli, "load_active_plan", return_value=(plan_path, mock.Mock())),
-            mock.patch.object(cli, "BrowserVerifier", return_value=browser),
             mock.patch.object(cli, "BackendVerifier", return_value=backend),
             mock.patch.object(cli, "FrontendVerifier", return_value=frontend),
             mock.patch.object(cli, "execute_workers", side_effect=execute),
@@ -196,10 +193,10 @@ class FrontendVerifierTests(unittest.TestCase):
         ):
             self.assertEqual(cli.main(["$harness-exec test"]), 0)
         self.assertEqual(invoke_task.call_args_list[0].kwargs["environment_overrides"], {
-            "BROWSER": "browser", "BACKEND": "backend", "FRONTEND": "frontend",
+            "BACKEND": "backend", "FRONTEND": "frontend",
         })
         self.assertEqual(invoke_task.call_args_list[1].kwargs["environment_overrides"], {
-            "BROWSER": "browser", "BACKEND": "backend",
+            "BACKEND": "backend",
         })
         frontend.__exit__.assert_called_once()
 
