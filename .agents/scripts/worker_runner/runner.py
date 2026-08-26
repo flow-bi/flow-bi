@@ -5,14 +5,14 @@ import subprocess
 import uuid
 
 from .codex_cli import build_codex_command
-from .environment import PROJECT_ROOT, build_subprocess_environment, validate_task_number
+from .environment import build_subprocess_environment
+from .paths import PROJECT_ROOT
 from .toolchain_paths import collect_worker_readable_paths
 from .valids import validate_task_number
 from .worker_process import (
     SubprocessRunner,
     WorkerExecutionResult,
     WorkerLogger,
-    invoke_worker_logger,
     run_worker_process,
 )
 
@@ -29,7 +29,7 @@ def execute_worker(
     executable: str | None = None,
     base_environment: dict[str, str] | None = None,
     runner: SubprocessRunner = subprocess.run,
-    logger: WorkerLogger = invoke_worker_logger,
+    logger: WorkerLogger | None = None,
     timeout: int = DEFAULT_TIMEOUT_SECONDS,
 ) -> WorkerExecutionResult:
     """Coordinate Worker setup, command construction, and process execution."""

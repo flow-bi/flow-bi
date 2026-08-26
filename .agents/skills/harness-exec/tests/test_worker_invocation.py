@@ -10,12 +10,12 @@ WORKER_SCRIPTS = Path(__file__).resolve().parents[3] / "scripts"
 if str(WORKER_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(WORKER_SCRIPTS))
 
-from worker_runner.invocation import (  # noqa: E402
+from worker_runner.execution_context import (  # noqa: E402
     EXISTING_WITHOUT_EVIDENCE,
     NEW_OR_CHANGED,
     RERUN,
-    parse_invocation,
 )
+from worker_runner.invocation import parse_invocation  # noqa: E402
 
 
 def invocation(*, context: object | None = None, correction: object | None = None) -> str:

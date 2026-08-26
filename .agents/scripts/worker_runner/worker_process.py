@@ -88,19 +88,19 @@ def _terminal_status(returncode: int, output: object | None, output_error: str) 
 
 
 def run_worker_process(
-        *, 
-        run_id: str, 
-        command_factory: WorkerCommandFactory, 
-        prompt: str, 
-        environment: dict[str, str], 
-        project_root: Path, 
-        runner: SubprocessRunner = subprocess.run, 
-        logger: WorkerLogger = invoke_worker_completion_hook, 
-        timeout: int = 30 * 60
-    ) -> WorkerExecutionResult:
-    
-    with _temporary_worker_artifacts(project_root, run_id) as (output_path, log_path):
+    *,
+    run_id: str,
+    command_factory: WorkerCommandFactory,
+    prompt: str,
+    environment: dict[str, str],
+    project_root: Path,
+    runner: SubprocessRunner = subprocess.run,
+    logger: WorkerLogger | None = None,
+    timeout: int = 30 * 60,
+) -> WorkerExecutionResult:
+    completion_logger = logger or invoke_worker_completion_hook
 
+    with _temporary_worker_artifacts(project_root, run_id) as (output_path, log_path):
         command = command_factory(output_path)
 
         with log_path.open("w", encoding="utf-8") as log_file:
@@ -124,7 +124,7 @@ def run_worker_process(
 
                 if log_tail:
                     error.stderr = with_worker_log_tail("", log_tail)
-                logger(run_id, 124, output_path, project_root, "timeout")
+                completion_logger(run_id, 124, output_path, project_root, "timeout")
                 raise
 
             # Timeout 외의 프로세스 실행 예외
@@ -134,16 +134,16 @@ def run_worker_process(
 
                 if log_tail and hasattr(error, "add_note"):
                     error.add_note(with_worker_log_tail("", log_tail))
-                logger(run_id, 1, output_path, project_root, "failed")
+                completion_logger(run_id, 1, output_path, project_root, "failed")
                 raise
 
             output, output_error = read_worker_output(output_path)
-            logger(
-                run_id, 
-                result.returncode, 
-                output_path, 
-                project_root, 
-                _terminal_status(result.returncode, output, output_error)
+            completion_logger(
+                run_id,
+                result.returncode,
+                output_path,
+                project_root,
+                _terminal_status(result.returncode, output, output_error),
             )
 
             if result.returncode != 0 or output_error:

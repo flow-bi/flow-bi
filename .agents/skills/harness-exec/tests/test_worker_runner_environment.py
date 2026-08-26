@@ -215,11 +215,35 @@ class WorkerExecutionContractTests(unittest.TestCase):
         self.assertEqual(logger.call_args.args[4], "completed")
         self.assertEqual(tuple((self.root / ".codex-logs" / ".pending").iterdir()), ())
 
-    def test_process_reports_invalid_json_with_a_bounded_log_tail(self) -> None:
+    def test_process_selects_default_completion_logger_at_call_time(self) -> None:
         import worker_runner.worker_process as process
 
+        def command_factory(output_path: Path) -> list[str]:
+            return ["codex", "exec", "-o", str(output_path)]
+
+        def run(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            self.output_path(command).write_text('{"final_status":"PASS"}', encoding="utf-8")
+            return subprocess.CompletedProcess(command, 0)
+
+        with mock.patch.object(process, "invoke_worker_completion_hook") as logger:
+            result = process.run_worker_process(
+                run_id="run-default-logger",
+                command_factory=command_factory,
+                prompt="prompt",
+                environment={"PATH": ""},
+                project_root=self.root,
+                runner=run,
+            )
+
+        self.assertEqual(result.output, {"final_status": "PASS"})
+        self.assertEqual(logger.call_args.args[4], "completed")
+
+    def test_process_reports_invalid_json_with_a_bounded_log_tail(self) -> None:
+        import worker_runner.worker_process as process
+        from worker_runner.worker_log import WORKER_LOG_TAIL_BYTES
+
         logger = mock.Mock()
-        log_content = "x" * (process.WORKER_LOG_TAIL_BYTES + 1)
+        log_content = "x" * (WORKER_LOG_TAIL_BYTES + 1)
 
         def command_factory(output_path: Path) -> list[str]:
             return ["codex", "exec", "-o", str(output_path)]
@@ -242,7 +266,7 @@ class WorkerExecutionContractTests(unittest.TestCase):
         self.assertIsNone(result.output)
         self.assertIn("Worker log tail", result.output_error)
         self.assertIn("earlier output omitted", result.output_error)
-        self.assertLessEqual(len(result.output_error.encode("utf-8")), process.WORKER_LOG_TAIL_BYTES + 256)
+        self.assertLessEqual(len(result.output_error.encode("utf-8")), WORKER_LOG_TAIL_BYTES + 256)
         self.assertEqual(logger.call_args.args[4], "failed")
         self.assertEqual(tuple((self.root / ".codex-logs" / ".pending").iterdir()), ())
 
