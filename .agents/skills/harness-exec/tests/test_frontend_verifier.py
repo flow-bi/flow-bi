@@ -180,7 +180,14 @@ class FrontendVerifierTests(unittest.TestCase):
         with (
             mock.patch.object(cli, "parse_invocation", return_value=mock.Mock()),
             mock.patch.object(cli, "repository_root", return_value=self.root),
-            mock.patch.object(cli, "load_active_plan", return_value=(plan_path, mock.Mock())),
+            mock.patch.object(
+                cli,
+                "load_active_plan",
+                return_value=(
+                    plan_path,
+                    mock.Mock(tasks=(frontend_task, other_task)),
+                ),
+            ),
             mock.patch.object(cli, "BackendVerifier", return_value=backend),
             mock.patch.object(cli, "FrontendVerifier", return_value=frontend),
             mock.patch.object(cli, "execute_workers", side_effect=execute),
