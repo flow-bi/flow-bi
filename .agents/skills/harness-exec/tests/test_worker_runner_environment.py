@@ -215,6 +215,37 @@ class WorkerExecutionContractTests(unittest.TestCase):
         self.assertEqual(logger.call_args.args[4], "completed")
         self.assertEqual(tuple((self.root / ".codex-logs" / ".pending").iterdir()), ())
 
+    def test_process_reports_invalid_json_with_a_bounded_log_tail(self) -> None:
+        import worker_runner.worker_process as process
+
+        logger = mock.Mock()
+        log_content = "x" * (process.WORKER_LOG_TAIL_BYTES + 1)
+
+        def command_factory(output_path: Path) -> list[str]:
+            return ["codex", "exec", "-o", str(output_path)]
+
+        def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            self.output_path(command).write_text("not-json", encoding="utf-8")
+            kwargs["stdout"].write(log_content)
+            return subprocess.CompletedProcess(command, 1)
+
+        result = process.run_worker_process(
+            run_id="run-2",
+            command_factory=command_factory,
+            prompt="prompt",
+            environment={"PATH": ""},
+            project_root=self.root,
+            runner=run,
+            logger=logger,
+        )
+
+        self.assertIsNone(result.output)
+        self.assertIn("Worker log tail", result.output_error)
+        self.assertIn("earlier output omitted", result.output_error)
+        self.assertLessEqual(len(result.output_error.encode("utf-8")), process.WORKER_LOG_TAIL_BYTES + 256)
+        self.assertEqual(logger.call_args.args[4], "failed")
+        self.assertEqual(tuple((self.root / ".codex-logs" / ".pending").iterdir()), ())
+
 
 if __name__ == "__main__":
     unittest.main()
