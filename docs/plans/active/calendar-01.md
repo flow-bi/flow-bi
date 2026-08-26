@@ -129,7 +129,6 @@ FR-014~FR-016 중 인증과 사용자 원장에 독립적인 일반 일정 생�
 - `frontend/src/pages`
 - `frontend/src/App.tsx`
 - `frontend/src/index.css`
-- `frontend/cypress/e2e`
 
 #### 수정 금지 경로
 
@@ -458,7 +457,6 @@ FR-017~FR-018의 등록자 기준 수정·Soft Delete 상태 전이와 회의실
 - [ ] `cd frontend && npm run test:unit -- --run src/features`로 수정 정상/검증 실패/권한, 취소 확인·성공·404·409·네트워크 실패, Query 갱신 시나리오를 통과한다.
 - [ ] `cd frontend && npm run typecheck`와 `cd frontend && npm run lint`로 Task 5 계약 타입과 정적 규칙을 검증해 선행 Task 결과와의 계약 충돌이 없음을 확인한다.
 - [ ] 1280×800과 390×844에서 키보드만으로 수정·취소·오류 복구가 가능하고 Modal 닫힘 후 초점이 원래 일정으로 복귀하는지 확인한다.
-- [ ] `cd frontend && npm run test:e2e`로 `frontend/cypress/e2e`의 PC·모바일 수정·취소 핵심 흐름을 검증한다.
 
 #### 완료 조건
 
@@ -579,7 +577,7 @@ FR-017~FR-018의 등록자 기준 수정·Soft Delete 상태 전이와 회의실
 
 ---
 
-### Task 8. Calendar 전체 사용자 흐름 통합 검증
+### Task 8. Calendar Frontend 사용자 흐름 통합 검증
 
 #### 선행 Task
 
@@ -587,15 +585,17 @@ FR-017~FR-018의 등록자 기준 수정·Soft Delete 상태 전이와 회의실
 
 #### 작업 목적
 
-Calendar MVP의 생성·월주일 조회·상세·수정·취소 흐름과 주요 오류·접근성·반응형 동작을 Cypress 브라우저 테스트로 고정한다.
+Calendar MVP의 생성·월주일 조회·상세·수정·취소 흐름과 주요 오류·접근성·반응형 동작을 Frontend 단위·컴포넌트 통합 테스트로 고정한다.
 
 #### 수정 가능 경로
 
-- `frontend/cypress/e2e`
+- `frontend/src/features`
+- `frontend/src/pages`
+- `frontend/src/test`
 
 #### 수정 금지 경로
 
-- `frontend/src`
+- `frontend/cypress`
 - `frontend/package.json`
 - `frontend/package-lock.json`
 - `backend`
@@ -605,7 +605,7 @@ Calendar MVP의 생성·월주일 조회·상세·수정·취소 흐름과 주�
 
 #### 구현 항목
 
-- [ ] `frontend/cypress/e2e/calendar/**`에 월간 첫 화면, 월·주·일 전환, 날짜 Banner, 상세 Modal, 일정 생성·수정·취소 핵심 흐름의 실패 E2E 테스트를 먼저 작성한다.
+- [ ] 월간 첫 화면, 월·주·일 전환, 날짜 Banner, 상세 Modal, 일정 생성·수정·취소 핵심 흐름의 실패 컴포넌트 통합 테스트를 먼저 작성한다.
 - [ ] 통제된 응답으로 Loading·Empty·네트워크 Error를 검증하고, 실제 인증 Session과 Backend 연결로 Permission·인증 만료·비공개·취소 일정 미표시와 회의실 예약 관리 일정의 409 안내를 검증한다.
 - [ ] Desktop 1280×800과 Mobile 390×844에서 키보드 탐색, Modal·Overlay 초점 이동과 복귀, 취소 확인, 색상 외 텍스트 대안과 가로 Overflow 부재를 검증한다.
 - [ ] 실제 PostgreSQL Test 환경에 한 달 범위 1,000건의 접근 가능한 일정을 준비해 인증된 사용자로 20회 Warm Run하고 보기 이동 시작부터 Calendar settled 상태까지 p95 3초 이내인지 측정해 환경·표본·결과를 기록한다.
@@ -613,7 +613,7 @@ Calendar MVP의 생성·월주일 조회·상세·수정·취소 흐름과 주�
 
 #### 검증 항목
 
-- [ ] `cd frontend && npx cypress run --spec 'cypress/e2e/calendar/**/*.cy.ts'`로 Calendar Cypress Test를 통과한다.
+- [ ] `cd frontend && npm run test:unit -- --run src/features`로 Calendar 단위·컴포넌트 통합 테스트를 통과한다.
 - [ ] Task 7의 실제 보호 API가 사용하는 Status·Error Code·Response Field와 Fixture·Intercept를 대조하고 실제 Backend 생성·조회·수정·취소 흐름 간 통합 충돌과 회귀가 없음을 확인한다.
 - [ ] 성능 실패를 대기 시간 증가나 Assertion 완화로 우회하지 않고 재현 조건과 병목 범위를 작업 결과에 기록한다.
 
@@ -621,8 +621,8 @@ Calendar MVP의 생성·월주일 조회·상세·수정·취소 흐름과 주�
 
 - 모든 구현 항목과 검증 항목이 완료되어야 한다.
 - FR-011~FR-018, NFR-003, NFR-006 및 Mandatory Gate G1~G7이 충족되어야 한다.
-- Cypress TDD Red → Green → Refactor와 Viewport·키보드·성능 검증 결과가 기록되어야 한다.
-- 핵심 흐름과 주요 실패 상태가 브라우저에서 관찰 가능하게 검증되고 Test가 실제 API 계약과 일치해야 한다.
+- Frontend 테스트 TDD Red → Green → Refactor와 Viewport·키보드·성능 검증 결과가 기록되어야 한다.
+- 핵심 흐름과 주요 실패 상태의 사용자 관찰 결과가 컴포넌트 통합 테스트로 검증되고 Test가 실제 API 계약과 일치해야 한다.
 - 수정 범위가 `수정 가능 경로`를 벗어나지 않고 `수정 금지 경로`에 변경이 없어야 한다.
 - 전체 사용자 흐름 위험을 반영해 `quality_score`가 90 이상이어야 한다.
 
@@ -630,13 +630,13 @@ Calendar MVP의 생성·월주일 조회·상세·수정·취소 흐름과 주�
 
 - 핵심 생성·조회·상세·수정·취소 흐름 또는 PC·모바일·키보드 시나리오 누락
 - 실제 API 계약과 다른 Mock, 실제 인증 Backend 검증 누락, 실패 상태 우회, 취소·비공개 일정 노출 또는 p95 3초 초과
-- Cypress 실패 또는 3회 수정 후 동일 실패가 남음
+- Frontend 단위·컴포넌트 통합 테스트 실패 또는 3회 수정 후 동일 실패가 남음
 - Product Spec·Design Doc과 다른 동작 또는 수정 가능 경로 밖 변경
 - TDD 증거 부재, 검증 불가 상태 또는 `quality_score` 90 미만
 
 #### 제외 범위
 
-- Cypress 환경 재구축과 신규 E2E 의존성 도입
+- 신규 Frontend 테스트 의존성 도입
 - 회의실 예약·알림·AI Assistant의 End-to-End 흐름
 - 운영 환경 부하·가용성·지원 Browser 전체 Matrix 검증
 
@@ -646,7 +646,7 @@ Calendar MVP의 생성·월주일 조회·상세·수정·취소 흐름과 주�
 
 #### 남은 문제
 
-- 현재 Cypress 명령은 Frontend 개발 서버만 시작하므로 Harness가 실제 Backend와 PostgreSQL Test 환경을 함께 기동하는 방식을 제공해야 한다. 해당 환경이 없으면 이 Task를 `BLOCKED`로 기록하고 계약 기반 Intercept Test만으로 완료 처리하지 않는다.
+- 실제 Backend와 PostgreSQL Test 환경을 사용한 성능 검증 방식은 Harness 실행 환경에서 가용해야 하며, 해당 환경이 없으면 성능 검증을 `BLOCKED`로 기록한다.
 
 ---
 
@@ -662,14 +662,14 @@ Calendar MVP의 생성·월주일 조회·상세·수정·취소 흐름과 주�
 - 타 팀의 사용자·인증·인가·로그인 기능과 통합 Test Fixture가 완료된 후 Task 7에서 실제 연동을 검증해야 한다.
 - ADR-0001과 ADR-0002가 사람 승인으로 `ACCEPTED`되고 구현이 승인된 Schema·Migration·PostgreSQL 검증 결정과 일치해야 하며, 인증 연동은 타 팀 계약과 관련 Design Doc에 일치해야 한다.
 - 인증·공개 범위·IDOR·시간 경계·Transaction·취소 이력·동시성 Mandatory Gate가 통과해야 한다.
-- 모든 Task 완료 후 Harness 실행기가 `cd backend && ./gradlew spotlessCheck && ./gradlew test && ./gradlew build`, `cd frontend && npm run check`, `cd frontend && npm run test:e2e`를 한 번 실행해 모두 통과해야 한다.
+- 모든 Task 완료 후 Harness 실행기가 `cd backend && ./gradlew spotlessCheck && ./gradlew test && ./gradlew build`, `cd frontend && npm run check`를 한 번 실행해 모두 통과해야 한다.
 - 전체 `quality_score`가 90 이상이어야 한다.
 
 ## 4. 전체 실패 조건
 
 - 타 팀의 사용자·인증·인가·로그인 기능이 아직 준비되지 않은 상태만으로 Task 1~6을 실패 처리하지 않는다. 이 경우 Plan 전체는 Task 7부터 `BLOCKED`로 기록한다.
 - 하나 이상의 필수 Task가 실패하거나 같은 오류에 대한 3회 수정 후에도 검증이 실패함
-- 필수 검증 명령, PostgreSQL Migration 검증, Cypress 핵심 흐름 또는 성능 기준이 실패함
+- 필수 검증 명령, PostgreSQL Migration 검증, Frontend 핵심 흐름 또는 성능 기준이 실패함
 - Task별 수정 가능 경로 밖 변경 또는 수정 금지 경로 변경이 발생함
 - 관련 Product Spec 또는 Design Doc과 충돌하거나 API·DB·화면 계약이 동기화되지 않음
 - 인증 우회, 권한·IDOR·개인정보 노출, 부분 저장, 데이터 손실, 물리 삭제 또는 회의실 예약 관리 경계 침범이 발생함

@@ -158,10 +158,10 @@ class FrontendVerifierTests(unittest.TestCase):
         self.assertIn("frontend_verifier.py", prompt)
         self.assertIn("Frontend npm 검증은 Worker에서 직접 `npm`으로 실행하지 말고", prompt)
         self.assertIn("FLOW_BI_PYTHON_EXECUTABLE", prompt)
+        self.assertIn("Cypress E2E 테스트를 작성하거나 실행하지 마십시오", prompt)
+        self.assertNotIn("npm run test:e2e", prompt)
 
     def test_lifecycle_exposes_frontend_environment_only_to_frontend_tasks(self) -> None:
-        browser = mock.MagicMock()
-        browser.__enter__.return_value.environment = {"BROWSER": "browser"}
         backend = mock.MagicMock()
         backend.__enter__.return_value.environment_for_task.return_value = {"BACKEND": "backend"}
         frontend = mock.MagicMock()
@@ -181,7 +181,6 @@ class FrontendVerifierTests(unittest.TestCase):
             mock.patch.object(cli, "parse_invocation", return_value=mock.Mock()),
             mock.patch.object(cli, "repository_root", return_value=self.root),
             mock.patch.object(cli, "load_active_plan", return_value=(plan_path, mock.Mock())),
-            mock.patch.object(cli, "BrowserVerifier", return_value=browser),
             mock.patch.object(cli, "BackendVerifier", return_value=backend),
             mock.patch.object(cli, "FrontendVerifier", return_value=frontend),
             mock.patch.object(cli, "execute_workers", side_effect=execute),
@@ -196,10 +195,10 @@ class FrontendVerifierTests(unittest.TestCase):
         ):
             self.assertEqual(cli.main(["$harness-exec test"]), 0)
         self.assertEqual(invoke_task.call_args_list[0].kwargs["environment_overrides"], {
-            "BROWSER": "browser", "BACKEND": "backend", "FRONTEND": "frontend",
+            "BACKEND": "backend", "FRONTEND": "frontend",
         })
         self.assertEqual(invoke_task.call_args_list[1].kwargs["environment_overrides"], {
-            "BROWSER": "browser", "BACKEND": "backend",
+            "BACKEND": "backend",
         })
         frontend.__exit__.assert_called_once()
 

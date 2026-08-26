@@ -145,9 +145,9 @@ class WorkerReadablePathTests(unittest.TestCase):
                 )
             )
 
-        self.assertIn(str(resolved_python), paths)
-        self.assertIn(str(resolved_python.parent), paths)
-        self.assertIn(str(python_root), paths)
+        self.assertIn(str(resolved_python.resolve()), paths)
+        self.assertIn(str(resolved_python.parent.resolve()), paths)
+        self.assertIn(str(python_root.resolve()), paths)
         self.assertIn(str(python_opt_root), paths)
 
     def test_collects_package_json_for_project_ancestors(self) -> None:
@@ -172,11 +172,7 @@ class WorkerReadablePathTests(unittest.TestCase):
 
     def test_collects_platform_specific_git_support_paths(self) -> None:
         home = self.root / "home"
-        mac_cache = home / "Library" / "Caches" / "Cypress"
-        windows_cache = self.root / "local-app-data" / "Cypress" / "Cache"
-        linux_cache = home / ".cache" / "Cypress"
-        for cache in (mac_cache, windows_cache, linux_cache):
-            cache.mkdir(parents=True)
+        home.mkdir()
         git_config = home / ".gitconfig"
         xdg_git_config = home / ".config" / "git" / "config"
         git_config.write_text("[user]\n", encoding="utf-8")
@@ -212,9 +208,6 @@ class WorkerReadablePathTests(unittest.TestCase):
         self.assertIn(str(Path("/System/Library/OpenSSL")), mac_paths)
         self.assertIn(str(git_config), mac_paths)
         self.assertIn(str(xdg_git_config), mac_paths)
-        self.assertNotIn(str(mac_cache), mac_paths)
-        self.assertNotIn(str(windows_cache), windows_paths)
-        self.assertNotIn(str(linux_cache), linux_paths)
 
     def test_collects_windows_npm_package_and_git_installation_roots(self) -> None:
         node_install = self.root / "Program Files" / "nodejs"
@@ -262,7 +255,9 @@ class WorkerReadablePathTests(unittest.TestCase):
         )
         self.assertEqual(environment["FLOW_BI_TASK_NUMBER"], "12")
 
-    def test_worker_environment_keeps_task_identifiers_separate_from_verifier_values(self) -> None:
+    def test_worker_environment_discards_removed_browser_verifier_values(self) -> None:
+        browser_url = "FLOW_BI_" + "BROWSER_VERIFIER_URL"
+        browser_token = "FLOW_BI_" + "BROWSER_VERIFIER_TOKEN"
         environment = build_subprocess_environment(
             "worker-run-id",
             task_number=12,
@@ -271,8 +266,8 @@ class WorkerReadablePathTests(unittest.TestCase):
                 "CODEX_THREAD_ID": "parent-session-id",
                 "FLOW_BI_RUN_ID": "stale-run-id",
                 "FLOW_BI_TASK_NUMBER": "99",
-                "FLOW_BI_BROWSER_VERIFIER_URL": "http://127.0.0.1:1234",
-                "FLOW_BI_BROWSER_VERIFIER_TOKEN": "token",
+                browser_url: "http://127.0.0.1:1234",
+                browser_token: "token",
             },
             project_root=self.root,
         )
@@ -283,11 +278,8 @@ class WorkerReadablePathTests(unittest.TestCase):
             environment["FLOW_BI_PARENT_SESSION_ID"],
             "parent-session-id",
         )
-        self.assertEqual(
-            environment["FLOW_BI_BROWSER_VERIFIER_URL"],
-            "http://127.0.0.1:1234",
-        )
-        self.assertEqual(environment["FLOW_BI_BROWSER_VERIFIER_TOKEN"], "token")
+        self.assertNotIn(browser_url, environment)
+        self.assertNotIn(browser_token, environment)
 
     def test_worker_environment_rejects_invalid_task_numbers(self) -> None:
         for value in (None, True, False, 0, -1, "2", 1.5):

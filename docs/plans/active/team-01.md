@@ -483,7 +483,7 @@ adjacency와 Closure의 역할을 분리하여 직속 관계, 모든 조상·자
 
 - `roles`, `permissions`, `user_roles`, `role_permissions` 영속 모델과 세부 RBAC Adapter 구현
 - 시스템 관리자와 인사팀 관리자의 역할 마이그레이션 및 기존 세션 권한 전환
-- Frontend 조직도·관리 화면과 Cypress E2E
+- Frontend 조직도·관리 화면
 - 페이지네이션, 캐시, 조직 변경 감사 이력
 
 #### 작업 결과
