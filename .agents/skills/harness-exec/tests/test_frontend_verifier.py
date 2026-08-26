@@ -158,6 +158,8 @@ class FrontendVerifierTests(unittest.TestCase):
         self.assertIn("frontend_verifier.py", prompt)
         self.assertIn("Frontend npm 검증은 Worker에서 직접 `npm`으로 실행하지 말고", prompt)
         self.assertIn("FLOW_BI_PYTHON_EXECUTABLE", prompt)
+        self.assertIn("Cypress E2E 테스트를 작성하거나 실행하지 마십시오", prompt)
+        self.assertNotIn("npm run test:e2e", prompt)
 
     def test_lifecycle_exposes_frontend_environment_only_to_frontend_tasks(self) -> None:
         backend = mock.MagicMock()

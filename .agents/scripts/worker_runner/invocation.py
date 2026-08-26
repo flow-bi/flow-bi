@@ -77,7 +77,8 @@ FRONTEND_VERIFICATION_GUIDANCE = (
     "Windows PowerShell에서는 "
     "`& $env:FLOW_BI_PYTHON_EXECUTABLE .agents/scripts/worker_runner/frontend_verifier.py run test:unit`를 "
     "사용하십시오. 부모 서비스는 `npm ls`, `npm run test:unit`, `npm run typecheck`, "
-    "`npm run check`만 허용하며 출력과 종료 코드를 반환합니다."
+    "`npm run check`만 허용하며 출력과 종료 코드를 반환합니다. "
+    "Cypress E2E 테스트를 작성하거나 실행하지 마십시오."
 )
 
 
