@@ -7,6 +7,7 @@ import uuid
 from .codex_cli import build_codex_command
 from .environment import PROJECT_ROOT, build_subprocess_environment, validate_task_number
 from .toolchain_paths import collect_worker_readable_paths
+from .valids import validate_task_number
 from .worker_process import (
     SubprocessRunner,
     WorkerExecutionResult,
@@ -32,14 +33,17 @@ def execute_worker(
     timeout: int = DEFAULT_TIMEOUT_SECONDS,
 ) -> WorkerExecutionResult:
     """Coordinate Worker setup, command construction, and process execution."""
+
     validate_task_number(task_number)
     run_id = str(uuid.uuid4())
+
     environment = build_subprocess_environment(
         run_id,
         task_number=task_number,
         base_environment=base_environment,
         project_root=project_root,
     )
+
     toolchain_readable_paths = collect_worker_readable_paths(
         environment,
         project_root=project_root,
