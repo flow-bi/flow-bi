@@ -27,7 +27,7 @@ def invocation(*, context: object | None = None, correction: object | None = Non
             "title": "Task title",
             "task_prompt": "Implement the task.",
             "allowed_paths": ["implementation"],
-            "forbidden_paths": ["forbidden"],
+            "read_only_paths": ["read-only"],
             "verification_items": ["unit test"],
         },
     }
@@ -40,10 +40,10 @@ def invocation(*, context: object | None = None, correction: object | None = Non
 
 class WorkerInvocationTests(unittest.TestCase):
     def test_preserves_return_contract_and_default_execution_context(self) -> None:
-        prompt, allowed, forbidden = parse_invocation(invocation())
+        prompt, allowed, read_only = parse_invocation(invocation())
 
         self.assertEqual(allowed, ("implementation",))
-        self.assertEqual(forbidden, ("forbidden",))
+        self.assertEqual(read_only, ("read-only",))
         self.assertIn(EXISTING_WITHOUT_EVIDENCE, prompt)
 
     def test_rejects_missing_required_task_field(self) -> None:

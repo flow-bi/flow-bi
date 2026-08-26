@@ -88,8 +88,8 @@ class BackendVerifier:
         host, port = self._server.server_address
         return {BACKEND_VERIFIER_URL: f"http://{host}:{port}/verify/gradle", BACKEND_VERIFIER_TOKEN: self._token}
 
-    def environment_for_task(self, allowed_paths: Sequence[str], forbidden_paths: Sequence[str]) -> dict[str, str]:
-        scope = self._formatter.scope(allowed_paths, forbidden_paths)
+    def environment_for_task(self, allowed_paths: Sequence[str], read_only_paths: Sequence[str]) -> dict[str, str]:
+        scope = self._formatter.scope(allowed_paths, read_only_paths)
         if self._server is None:
             raise RuntimeError("Backend verifier has not started")
         token = secrets.token_urlsafe(32)

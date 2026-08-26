@@ -26,7 +26,7 @@ def parse_invocation(raw_invocation: str) -> InvocationResult:
     task_prompt = task["task_prompt"]
 
     allowed_paths = tuple(task["allowed_paths"])
-    forbidden_paths = tuple(task["forbidden_paths"])
+    read_only_paths = tuple(task["read_only_paths"])
     verification_items = tuple(task["verification_items"])
     execution_context = build_execution_context(invocation, number)
     return (
@@ -42,7 +42,7 @@ def parse_invocation(raw_invocation: str) -> InvocationResult:
             decision_correction=invocation.get("decision_correction"),
         ),
         allowed_paths,
-        forbidden_paths,
+        read_only_paths,
     )
 
 

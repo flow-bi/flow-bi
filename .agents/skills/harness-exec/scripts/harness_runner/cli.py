@@ -72,7 +72,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         path for task in tasks.tasks for path in task.allowed_paths
     )
     read_only_paths = tuple(
-        path for task in tasks.tasks for path in task.forbidden_paths
+        path for task in tasks.tasks for path in task.read_only_paths
     )
     acl_paths = worker_permission_paths(writable_paths, read_only_paths)
     try:
@@ -96,7 +96,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     environment_overrides={
                         **backend_verifier.environment_for_task(
                             invocation.task.allowed_paths,
-                            invocation.task.forbidden_paths,
+                            invocation.task.read_only_paths,
                         ),
                         **frontend_environment,
                     },

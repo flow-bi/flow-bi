@@ -32,7 +32,7 @@ def revision_fingerprint(plan_id: str, task: Task) -> str:
         "implementation_items": task.implementation_items,
         "verification_items": task.verification_items,
         "allowed_paths": task.allowed_paths,
-        "forbidden_paths": task.forbidden_paths,
+        "read_only_paths": task.read_only_paths,
         "minimum_quality_score": task.minimum_quality_score,
     })).hexdigest()
 

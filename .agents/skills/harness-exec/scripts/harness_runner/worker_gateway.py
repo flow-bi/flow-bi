@@ -24,14 +24,14 @@ def invoke_task(
 ) -> object:
     root = repository_root().resolve()
     payload = json.dumps(asdict(invocation), ensure_ascii=False)
-    prompt, allowed_paths, forbidden_paths = parse_invocation(payload)
+    prompt, allowed_paths, read_only_paths = parse_invocation(payload)
     environment = os.environ.copy()
     if environment_overrides:
         environment.update(environment_overrides)
     return execute_worker(
         prompt,
         allowed_paths,
-        forbidden_paths,
+        read_only_paths,
         task_number=invocation.task.number,
         project_root=root,
         base_environment=environment,

@@ -13,7 +13,7 @@ import tempfile
 @dataclass(frozen=True)
 class FormatterScope:
     allowed_paths: tuple[Path, ...]
-    forbidden_paths: tuple[Path, ...]
+    read_only_paths: tuple[Path, ...]
 
 
 def _within(path: Path, parent: Path) -> bool:
@@ -35,10 +35,10 @@ class BackendFormatter:
         self._runner = runner
         self._environment = environment
 
-    def scope(self, allowed_paths: Sequence[str], forbidden_paths: Sequence[str]) -> FormatterScope:
+    def scope(self, allowed_paths: Sequence[str], read_only_paths: Sequence[str]) -> FormatterScope:
         return FormatterScope(
             tuple(self._contract_path(value) for value in allowed_paths),
-            tuple(self._contract_path(value) for value in forbidden_paths),
+            tuple(self._contract_path(value) for value in read_only_paths),
         )
 
     def targets(self, values: object, scope: FormatterScope) -> tuple[Path, ...]:
@@ -50,7 +50,7 @@ class BackendFormatter:
             if relative.suffix != ".java" or relative.parts[0] != "backend":
                 raise ValueError("Formatter only accepts Backend Java files")
             if not any(_within(relative, path) for path in scope.allowed_paths) or any(
-                _within(relative, path) for path in scope.forbidden_paths
+                _within(relative, path) for path in scope.read_only_paths
             ):
                 raise ValueError("Formatter path is outside the Task scope")
             target = self._root / relative

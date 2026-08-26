@@ -23,7 +23,7 @@ DEFAULT_TIMEOUT_SECONDS = 30 * 60
 def execute_worker(
     prompt: str,
     allowed_paths: tuple[str, ...],
-    forbidden_paths: tuple[str, ...],
+    read_only_paths: tuple[str, ...],
     task_number: object,
     project_root: Path = PROJECT_ROOT,
     executable: str | None = None,
@@ -52,7 +52,7 @@ def execute_worker(
     def command_factory(output_path: Path) -> list[str]:
         return build_codex_command(
             writable_paths=allowed_paths,
-            read_only_paths=forbidden_paths,
+            read_only_paths=read_only_paths,
             output_path=output_path,
             executable=executable,
             toolchain_readable_paths=toolchain_readable_paths,

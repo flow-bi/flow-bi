@@ -93,7 +93,7 @@ def parse_plan_text(text: str) -> ParsedPlan:
         sections = _detail_sections(task_region[heading.end() : end])
         prerequisite_body = _section_body(sections, "선행 Task")
         allowed_paths_body = _section_body(sections, "수정 가능 경로")
-        forbidden_paths_body = _section_body(sections, "수정 금지 경로")
+        read_only_paths_body = _section_body(sections, "수정 금지 경로")
         implementation_body = _section_body(sections, "구현 항목")
         verification_body = _section_body(sections, "검증 항목")
         completion_body = _section_body(sections, "완료 조건")
@@ -106,7 +106,7 @@ def parse_plan_text(text: str) -> ParsedPlan:
                 title=heading.group(2).strip(),
                 prerequisite_numbers=_prerequisite_numbers(prerequisite_body),
                 allowed_paths=_bullet_values(allowed_paths_body),
-                forbidden_paths=_bullet_values(forbidden_paths_body),
+                read_only_paths=_bullet_values(read_only_paths_body),
                 task_prompt=task_prompt,
                 implementation_items=_bullet_values(implementation_body),
                 verification_items=_bullet_values(verification_body),

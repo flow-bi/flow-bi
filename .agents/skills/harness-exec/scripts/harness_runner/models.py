@@ -13,7 +13,7 @@ class Task:
     title: str
     prerequisite_numbers: tuple[int, ...]
     allowed_paths: tuple[str, ...]
-    forbidden_paths: tuple[str, ...]
+    read_only_paths: tuple[str, ...]
     task_prompt: str
     implementation_items: tuple[str, ...] = ()
     verification_items: tuple[str, ...] = ()

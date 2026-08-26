@@ -150,9 +150,9 @@ class FrontendVerifierTests(unittest.TestCase):
                 })
 
     def test_worker_prompt_forbids_direct_npm(self) -> None:
-        prompt, _allowed, _forbidden = parse_invocation("""
+        prompt, _allowed, _read_only = parse_invocation("""
         {"common_prompt":"common", "additional_request":"", "task":{"number":1,
-        "title":"frontend", "allowed_paths":["frontend"], "forbidden_paths":[],
+        "title":"frontend", "allowed_paths":["frontend"], "read_only_paths":[],
         "task_prompt":"work", "verification_items":["unit"]}}
         """)
         self.assertIn("frontend_verifier.py", prompt)
@@ -168,8 +168,8 @@ class FrontendVerifierTests(unittest.TestCase):
         frontend.__enter__.return_value.environment = {"FRONTEND": "frontend"}
         plan_path = self.root / "docs/plans/active/test.md"
         destination = self.root / "docs/plans/complete/test.md"
-        frontend_task = mock.Mock(allowed_paths=("frontend/src",), forbidden_paths=())
-        other_task = mock.Mock(allowed_paths=("backend/src",), forbidden_paths=())
+        frontend_task = mock.Mock(allowed_paths=("frontend/src",), read_only_paths=())
+        other_task = mock.Mock(allowed_paths=("backend/src",), read_only_paths=())
         invocations = (mock.Mock(task=frontend_task), mock.Mock(task=other_task))
 
         def execute(_tasks, _request, *, call_worker):

@@ -63,7 +63,7 @@ class CompletionTests(unittest.TestCase):
         self.assertEqual(len(plan.tasks), 1)
         self.assertEqual(parsed_task.prerequisite_numbers, (1,))
         self.assertEqual(parsed_task.allowed_paths, ("scripts/harness_runner",))
-        self.assertEqual(parsed_task.forbidden_paths, ("docs/plans/active",))
+        self.assertEqual(parsed_task.read_only_paths, ("docs/plans/active",))
         self.assertEqual(parsed_task.minimum_quality_score, 85)
 
     def test_parses_minimum_quality_score(self) -> None:
