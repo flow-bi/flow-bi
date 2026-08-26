@@ -27,7 +27,7 @@
 - 프런트엔드는 세션의 `mustChangePassword` 값으로 비밀번호 변경 화면에 라우팅하고 변경 API 및 로그아웃 API를 호출할 수 있다.
 - `changePassword`와 `logout`은 상태 변경 요청 전에 `GET /api/auth/csrf`를 호출하지만, `MustChangePasswordFilter`는 강제 변경 상태에서 이 경로를 허용하지 않아 두 흐름이 `403 PASSWORD_CHANGE_REQUIRED`로 중단된다.
 - 강제 비밀번호 변경 화면에는 로그아웃 실행 요소가 없어 변경 실패 시 사용자가 현재 세션에서 벗어날 수 없다.
-- 기존 백엔드 테스트는 비밀번호 변경·로그아웃 Endpoint 자체만 허용되는지 확인하고 CSRF 발급 선행 요청은 다루지 않는다. 기존 Cypress 테스트는 CSRF 성공 응답을 Mock하여 실제 필터 충돌을 재현하지 못한다.
+- 기존 백엔드 테스트는 비밀번호 변경·로그아웃 Endpoint 자체만 허용되는지 확인하고 CSRF 발급 선행 요청은 다루지 않는다.
 
 ---
 
@@ -187,7 +187,7 @@
 
 ---
 
-### Task 3. 최초 로그인 비밀번호 변경 통합 검증
+### Task 3. 최초 로그인 비밀번호 변경 Frontend 통합 검증
 
 #### 선행 Task
 
@@ -196,36 +196,37 @@
 
 #### 작업 목적
 
-최초 로그인부터 비밀번호 변경 성공 또는 현재 세션 로그아웃까지의 실제 브라우저 사용자 흐름을 회귀 테스트로 고정하여 같은 갇힘 문제가 재발하지 않게 한다.
+최초 로그인부터 비밀번호 변경 성공 또는 현재 세션 로그아웃까지의 사용자 흐름을 Frontend 단위·앱 통합 테스트로 고정하여 같은 갇힘 문제가 재발하지 않게 한다.
 
 #### 수정 가능 경로
 
-- `frontend/cypress/e2e/login-auth`
+- `frontend/src/features/auth`
+- `frontend/src/App.test.tsx`
+- `frontend/src/test`
 
 #### 수정 금지 경로
 
-- `frontend/src`
-- `frontend/cypress/e2e/auth-routing`
+- `frontend/cypress`
 - `backend`
 - `docs/product-specs`
 - `docs/design-docs`
 
 #### 구현 항목
 
-- [ ] Red: 임시 비밀번호 로그인 후 강제 변경 화면으로 이동하고 CSRF 발급을 거쳐 새 비밀번호 변경에 성공한 뒤 일반 화면에 진입하는 Cypress 실패 시나리오를 작성한다.
-- [ ] Red: 강제 변경 화면에서 로그아웃하면 현재 세션 종료 요청이 전송되고 로그인 화면으로 복귀하는 Cypress 실패 시나리오를 작성한다.
+- [ ] Red: 임시 비밀번호 로그인 후 강제 변경 화면으로 이동하고 CSRF 발급을 거쳐 새 비밀번호 변경에 성공한 뒤 일반 화면에 진입하는 실패 앱 통합 테스트를 작성한다.
+- [ ] Red: 강제 변경 화면에서 로그아웃하면 현재 세션 종료 요청이 전송되고 로그인 화면으로 복귀하는 실패 앱 통합 테스트를 작성한다.
 - [ ] Green: Task 1과 Task 2의 공개 API·UI 계약만 사용하도록 Intercept와 검증을 구성해 두 시나리오를 통과시킨다.
-- [ ] Refactor: 기존 `auth-routing` 테스트와 책임이 중복되지 않도록 최초 로그인 갇힘 회귀에 필요한 요청 순서와 사용자 관찰 결과만 유지한다.
+- [ ] Refactor: 기존 인증 라우팅 테스트와 책임이 중복되지 않도록 최초 로그인 갇힘 회귀에 필요한 요청 순서와 사용자 관찰 결과만 유지한다.
 - [ ] 테스트 Fixture와 실패 출력에 실제 비밀번호, 세션 ID, CSRF 값을 기록하지 않고 합성 값만 사용한다.
 - [ ] 구현 문제로 검증이 실패하면 원인을 수정하고 최대 3회까지 같은 Task의 검증을 반복하며, Mock 응답으로 오류를 숨기거나 단언을 약화하지 않는다.
 
 #### 검증 항목
 
-- [ ] `frontend`에서 `npm run cy:run -- --spec "cypress/e2e/login-auth/**/*.cy.ts"`를 실행한다.
+- [ ] `frontend`에서 `npm run test:unit -- src/features/auth/api.test.ts src/features/auth/PasswordChangePage.test.tsx src/test/App.test.tsx`를 실행한다.
 - [ ] 선행 Task의 허용 경로와 화면 계약을 기준으로 로그인, CSRF 발급, 비밀번호 변경, 일반 화면 이동의 요청 순서와 결과를 통합 검증한다.
 - [ ] 선행 Task의 로그아웃 경로와 충돌 없이 강제 변경 화면에서 로그아웃 후 보호 화면이 남지 않고 로그인 화면이 표시되는지 검증한다.
 - [ ] 강제 변경 상태에서 일반 기능으로 직접 이동할 수 없고, 비밀번호 변경 또는 로그아웃이라는 두 종료 경로가 모두 제공되는지 확인한다.
-- [ ] Cypress 결과와 스크린샷·로그에 인증 민감정보가 노출되지 않는지 확인한다.
+- [ ] 테스트 결과와 로그에 인증 민감정보가 노출되지 않는지 확인한다.
 
 #### 완료 조건
 
@@ -233,7 +234,7 @@
 - 요구사항 FR-009, FR-010, NFR-001, NFR-002와 최초 로그인 비밀번호 변경 인수 조건을 충족해야 한다.
 - Mandatory Gate의 permission_security, scope, requirements, tdd, automated_verification, contract_sync, critical_findings가 모두 PASS여야 한다.
 - TDD `Red → Green → Refactor` 단계와 각 검증 결과가 작업 결과에 기록되어야 한다.
-- 비밀번호 변경 성공 경로와 로그아웃 탈출 경로가 브라우저 테스트에서 모두 통과해야 한다.
+- 비밀번호 변경 성공 경로와 로그아웃 탈출 경로가 Frontend 단위·앱 통합 테스트에서 모두 통과해야 한다.
 - 수정 범위가 이 Task의 `수정 가능 경로`를 벗어나지 않고 `수정 금지 경로`에 변경이 없어야 한다.
 - 인증·보안 작업 기준 `quality_score`가 90 이상이어야 한다.
 
@@ -241,8 +242,8 @@
 
 - 최초 로그인 사용자가 비밀번호 변경 오류 후 강제 변경 화면에서 빠져나갈 수 없음
 - 비밀번호 변경 성공 후 일반 화면 진입 실패 또는 로그아웃 후 보호 화면 잔류
-- Cypress가 실제 요청 순서나 사용자 관찰 결과를 검증하지 않고 성공 Mock만 확인함
-- Cypress 검증 실패 또는 민감정보가 테스트 산출물에 노출됨
+- Frontend 통합 테스트가 실제 요청 순서나 사용자 관찰 결과를 검증하지 않고 성공 Mock만 확인함
+- Frontend 단위·앱 통합 검증 실패 또는 민감정보가 테스트 산출물에 노출됨
 - 수정 금지 경로 또는 수정 가능 경로 밖 변경
 - Product Spec 또는 Design Doc의 세션 유지·무효화 정책과 충돌함
 - 검증할 수 없는 상태로 종료하거나 `quality_score`가 90 미만임
@@ -259,7 +260,7 @@
 
 #### 남은 문제
 
-- Cypress 개발 서버의 API Intercept 기반 검증은 실제 Redis·PostgreSQL 연동을 대체하지 않으며, 백엔드 보안 필터 회귀는 Task 1의 Spring 테스트가 담당한다.
+- Frontend 테스트의 API Mock 기반 검증은 실제 Redis·PostgreSQL 연동을 대체하지 않으며, 백엔드 보안 필터 회귀는 Task 1의 Spring 테스트가 담당한다.
 
 ---
 
@@ -274,7 +275,7 @@
 - 비밀번호, 비밀번호 해시, 세션 ID와 CSRF 값이 응답·로그·테스트 산출물에 노출되지 않아야 한다.
 - 관련 문서와 실제 구현이 일치해야 한다.
 - 전체 `quality_score`가 인증·보안 작업 기준 90 이상이어야 한다.
-- 모든 Task 완료 후 Harness 실행기가 백엔드 전체 `./gradlew spotlessCheck`, `./gradlew test`, `./gradlew build`와 프런트엔드 전체 `npm run check`, `npm run test:e2e`를 한 번 수행해 통과해야 한다.
+- 모든 Task 완료 후 Harness 실행기가 백엔드 전체 `./gradlew spotlessCheck`, `./gradlew test`, `./gradlew build`와 프런트엔드 전체 `npm run check`를 한 번 수행해 통과해야 한다.
 
 ## 4. 전체 실패 조건
 

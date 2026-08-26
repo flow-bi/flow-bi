@@ -12,10 +12,6 @@
 
 현재 세션은 이미 Harness Task Worker입니다. 전달된 Task를 허용 경로 안에서 직접 구현하고 검증하십시오. harness-exec, harness-plan 또는 다른 Harness Skill과 실행 스크립트를 재호출하지 마십시오. 또한 모든 timeout은 90분으로 설정해 확인합니다.
 
-## browser-verification-guidance
-
-Cypress 브라우저 검증은 Worker에서 직접 실행하지 말고 부모가 전달한 `FLOW_BI_PYTHON_EXECUTABLE`로 `.agents/scripts/run-browser-verifier.py cypress`를 실행하십시오. macOS/Linux shell에서는 `"$FLOW_BI_PYTHON_EXECUTABLE" .agents/scripts/run-browser-verifier.py cypress`, Windows PowerShell에서는 `& $env:FLOW_BI_PYTHON_EXECUTABLE .agents/scripts/run-browser-verifier.py cypress`를 사용하십시오. 이 명령은 Harness 부모에서 `npm run test:e2e`를 실행하고 동일한 종료 코드와 로그를 반환합니다. 검증이 실패하면 로그를 분석해 허용 범위의 구현 또는 테스트를 수정한 뒤 같은 명령을 재실행하여 Green을 확인하십시오.
-
 ## backend-verification-guidance
 
 Backend Gradle 검증은 Worker에서 `gradlew`를 직접 실행하지 말고 부모가 전달한 `FLOW_BI_PYTHON_EXECUTABLE`로 `.agents/scripts/worker_runner/backend_verifier.py <Gradle 인자...>`를 실행하십시오. macOS/Linux shell에서는 `"$FLOW_BI_PYTHON_EXECUTABLE" .agents/scripts/worker_runner/backend_verifier.py test`, Windows PowerShell에서는 `& $env:FLOW_BI_PYTHON_EXECUTABLE .agents/scripts/worker_runner/backend_verifier.py test`를 사용하십시오. 부모 서비스는 `test`, `spotlessCheck`, `build`, `assemble`, `compileJava`와 안전한 `--tests` 필터만 허용하며 출력과 종료 코드를 반환합니다. shell 도구가 이 Backend verifier 명령에 진행 중 상태 또는 실행 session을 반환하면 같은 verifier CLI를 새 shell 명령으로 시작하지 마십시오. 기존 실행을 wait/poll하여 최종 종료 코드와 출력을 확인하십시오. 동일 요청은 부모 verifier에서 single-flight로 결합됩니다. 이전 실행이 확정적으로 종료된 뒤에만, 실패 원인을 수정했거나 명시적인 재검증이 필요한 경우에 같은 명령을 재실행하십시오. HTTP 429 등 실행 중 충돌 응답만으로 필수 검증을 실패 처리하지 말고 기존 실행의 최종 결과를 먼저 확인하십시오. 최종 JSON에는 완료된 최신 검증 결과만 반영하고, 나중에 도착한 완료 결과와 모순되는 `automated_verification` 또는 `decision`을 제출하지 마십시오. 실패하면 로그를 분석해 허용 범위 구현 또는 테스트를 수정한 뒤 같은 명령을 재실행하여 Green을 확인하십시오.
@@ -26,7 +22,7 @@ Backend Gradle 검증은 Worker에서 `gradlew`를 직접 실행하지 말고 �
 
 ## frontend-verification-guidance
 
-Frontend npm 검증은 Worker에서 직접 `npm`으로 실행하지 말고 부모가 전달한 `FLOW_BI_PYTHON_EXECUTABLE`로 `.agents/scripts/worker_runner/frontend_verifier.py <npm 인자...>`를 실행하십시오. macOS/Linux shell에서는 `"$FLOW_BI_PYTHON_EXECUTABLE" .agents/scripts/worker_runner/frontend_verifier.py run test:unit`, Windows PowerShell에서는 `& $env:FLOW_BI_PYTHON_EXECUTABLE .agents/scripts/worker_runner/frontend_verifier.py run test:unit`를 사용하십시오. 부모 서비스는 `npm ls`, `npm run test:unit`, `npm run typecheck`, `npm run check`만 허용하며 출력과 종료 코드를 반환합니다.
+Frontend npm 검증은 Worker에서 직접 `npm`으로 실행하지 말고 부모가 전달한 `FLOW_BI_PYTHON_EXECUTABLE`로 `.agents/scripts/worker_runner/frontend_verifier.py <npm 인자...>`를 실행하십시오. macOS/Linux shell에서는 `"$FLOW_BI_PYTHON_EXECUTABLE" .agents/scripts/worker_runner/frontend_verifier.py run test:unit`, Windows PowerShell에서는 `& $env:FLOW_BI_PYTHON_EXECUTABLE .agents/scripts/worker_runner/frontend_verifier.py run test:unit`를 사용하십시오. 부모 서비스는 `npm ls`, `npm run test:unit`, `npm run typecheck`, `npm run check`만 허용하며 출력과 종료 코드를 반환합니다. Cypress E2E 테스트를 작성하거나 실행하지 마십시오.
 
 ## execution-context
 

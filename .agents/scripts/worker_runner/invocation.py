@@ -174,7 +174,6 @@ def parse_invocation(raw_invocation: str) -> InvocationResult:
         _prompt("discovery-guidance"),
         _prompt("context-efficiency-guidance"),
         _prompt("task-worker-guidance"),
-        _prompt("browser-verification-guidance"),
         _prompt("backend-verification-guidance"),
         _prompt("backend-formatting-guidance"),
         _prompt("frontend-verification-guidance"),

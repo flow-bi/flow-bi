@@ -50,13 +50,11 @@ harness-plan은 계획 생성 전용이다.
 - 그 외 추가 구현 요청은 새 번호의 Plan을 생성한다.
 - Plan 제목은 파일명과 일치해야 한다.
 
-## 브라우저 검증 규칙
+## Frontend 검증 규칙
 
-- 화면 또는 사용자 흐름을 구현하는 Plan에는 Cypress E2E 검증을 포함한다.
-- Cypress가 구성되지 않은 경우 최초 Plan에 환경 구축 Task를 생성한다.
-- 환경 구축 이후에는 별도 공통 Task를 반복하지 않고 각 프론트엔드 기능 Task에 Cypress 테스트 작성을 포함한다.
-- Cypress 테스트는 `frontend/cypress/e2e/{기능명}/**`에 작성한다.
-- 프론트엔드 Task의 수정 가능 경로에는 해당 Cypress 테스트 경로를 포함한다.
+- Plan에 Cypress E2E 테스트 작성, 환경 구축, 실행 또는 검증을 포함하지 않는다.
+- 화면과 사용자 흐름은 기능 범위에 맞는 단위·컴포넌트 테스트와 Type Check, Lint, Build로 검증한다.
+- 프론트엔드 Task의 수정 가능 경로에 Cypress 경로를 추가하지 않는다.
 - 백엔드 API가 필요한 프론트엔드 Task는 해당 백엔드 Task를 선행 Task로 지정한다.
 
 ## 실행 Task 생성 규칙
