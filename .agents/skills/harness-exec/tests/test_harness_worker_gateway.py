@@ -10,8 +10,8 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 from harness_runner.models import Task, TaskExecutionContext, TaskInvocation
-from harness_runner.worker_gateway import WorkerGateway
-from harness_runner.worker_prompt import WorkerPromptTemplate
+from harness_runner.preparation.gateway import WorkerGateway
+from harness_runner.preparation.prompt import WorkerPromptTemplate
 
 
 class HarnessWorkerGatewayTests(unittest.TestCase):
@@ -43,7 +43,7 @@ class HarnessWorkerGatewayTests(unittest.TestCase):
         self.assertNotIn("{\"task\"", prompts[0])
 
     def test_template_is_loaded_once_and_task_inputs_are_reused_for_correction(self) -> None:
-        import harness_runner.worker_prompt as prompt_module
+        import harness_runner.preparation.prompt as prompt_module
 
         first = TaskInvocation("common", "", Task(1, "One", (), ("backend",), (), "Implement", (), ("unit",), 90), TaskExecutionContext("harness-04", "one", "new_or_changed"))
         second = TaskInvocation("common", "", Task(2, "Two", (), ("frontend",), (), "Implement", (), ("unit",), 90), TaskExecutionContext("harness-04", "two", "new_or_changed"))

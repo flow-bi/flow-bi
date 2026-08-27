@@ -5,12 +5,12 @@ from dataclasses import replace
 import heapq
 from pathlib import Path
 
-from .evidence import EvidenceRecordError, ExecutionRecordStore, revision_fingerprint
-from .models import ExecutionReport, HarnessRequest, ParsedPlan, Task, TaskExecutionContext, TaskInvocation, TaskResult
+from ..models import ExecutionReport, HarnessRequest, ParsedPlan, Task, TaskExecutionContext, TaskInvocation, TaskResult
+from ..preparation.gateway import invoke_task
+from ..results.evidence import EvidenceRecordError, ExecutionRecordStore, revision_fingerprint
+from ..results.state import PlanStateStore, StateRecordError
 from .scheduling import TaskGraph, block_failed_dependents, build_task_graph, enqueue_ready_tasks, ready_task_numbers, restore_succeeded_tasks
-from .state import PlanStateStore, StateRecordError
 from .task_executor import WorkerInvoker, execute_task
-from .worker_gateway import invoke_task
 
 
 MAX_PARALLEL_TASKS = 4

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from .models import ParsedPlan, Task
+from ..models import ParsedPlan, Task
 
 
 TASK_SECTION_PATTERN = re.compile(r"^## 2\. 실행 Task[ \t]*$", re.MULTILINE)

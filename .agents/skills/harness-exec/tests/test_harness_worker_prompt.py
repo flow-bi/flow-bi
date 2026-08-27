@@ -10,7 +10,7 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 from harness_runner.models import Task, TaskExecutionContext, TaskInvocation
-from harness_runner.worker_prompt import WorkerPromptTemplate
+from harness_runner.preparation.prompt import WorkerPromptTemplate
 
 
 def make_invocation(paths: tuple[str, ...] = ("backend",), mode: str = "new_or_changed") -> TaskInvocation:

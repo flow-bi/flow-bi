@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""저장소와 Active Plan의 물리 경로를 계산한다."""
+
 from pathlib import Path
 
 

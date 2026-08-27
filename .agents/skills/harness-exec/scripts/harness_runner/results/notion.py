@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""Harness 전체 실행 보고서를 Notion에 게시한다."""
+
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 import json

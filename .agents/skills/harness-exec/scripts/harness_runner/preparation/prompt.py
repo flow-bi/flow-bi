@@ -6,11 +6,11 @@ import re
 from pathlib import Path
 from typing import Mapping
 
-from .models import TaskExecutionContext, TaskInvocation
+from ..models import TaskExecutionContext, TaskInvocation
 
 
-HARNESS_PROMPT_FILE = Path(__file__).with_name("worker-prompt.md")
-WORKER_GUIDANCE_FILE = Path(__file__).resolve().parents[4] / "scripts" / "worker_runner" / "worker-guidance.md"
+HARNESS_PROMPT_FILE = Path(__file__).with_name("prompt.md")
+WORKER_GUIDANCE_FILE = Path(__file__).resolve().parents[5] / "scripts" / "worker_runner" / "worker-guidance.md"
 _HARNESS_SECTIONS = ("discovery-guidance", "context-efficiency-guidance", "execution-context", "execution-rerun", "execution-new-or-changed", "execution-existing-without-evidence", "decision-correction", "result-contract")
 _WORKER_SECTIONS = ("worker-execution-guidance", "backend-verification-guidance", "backend-formatting-guidance", "frontend-verification-guidance")
 

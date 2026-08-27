@@ -1,4 +1,4 @@
-# Harness worker prompt
+# Harness worker preparation prompt
 
 ## discovery-guidance
 

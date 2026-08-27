@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+"""Worker sandbox에 필요한 Toolchain 읽기 경로를 수집한다."""
+
 from collections.abc import Iterable
 from pathlib import Path
 import shutil
 import sys
 
-# 경로에서 node_modules/npm 패키지 루트를 찾아 반환 
+# 경로에서 node_modules/npm 패키지 루트를 찾아 반환
 def _npm_package_root(path: Path) -> Path | None:
     parts = tuple(part.lower() for part in path.parts)
     for index in range(len(parts) - 1):

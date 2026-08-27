@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from .models import ExecutionReport, TaskResult
+from ..models import ExecutionReport, TaskResult
 
 
 SEOUL = timezone(timedelta(hours=9), "Asia/Seoul")

@@ -9,9 +9,11 @@ import unittest
 from unittest import mock
 
 
-SCRIPTS = Path(__file__).resolve().parents[3] / "scripts"
-if str(SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS))
+HARNESS_SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
+WORKER_SCRIPTS = Path(__file__).resolve().parents[3] / "scripts"
+for scripts_root in (HARNESS_SCRIPTS, WORKER_SCRIPTS):
+    if str(scripts_root) not in sys.path:
+        sys.path.insert(0, str(scripts_root))
 
 
 class WorkerEnvironmentTests(unittest.TestCase):
@@ -23,7 +25,7 @@ class WorkerEnvironmentTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def test_rejects_non_positive_or_non_integer_task_numbers(self) -> None:
-        from worker_runner.runtime import _validate_task_number
+        from harness_runner.preparation.runtime import _validate_task_number
 
         for value in (None, True, False, 0, -1, "2", 1.5):
             with self.subTest(value=value):
@@ -31,7 +33,7 @@ class WorkerEnvironmentTests(unittest.TestCase):
                     _validate_task_number(value)
 
     def test_builds_isolated_environment_without_parent_only_values(self) -> None:
-        from worker_runner.environment import build_subprocess_environment
+        from harness_runner.preparation.environment import build_subprocess_environment
 
         base_environment = {
             "PATH": os.pathsep.join(("first", "second", "first")),
@@ -61,7 +63,7 @@ class WorkerEnvironmentTests(unittest.TestCase):
         self.assertNotIn("CODEX_PERMISSION_PROFILE", environment)
 
     def test_uses_project_java_home_once_at_the_front_of_path(self) -> None:
-        from worker_runner.environment import build_subprocess_environment
+        from harness_runner.preparation.environment import build_subprocess_environment
 
         java_home = self.root / "jdk"
         java_executable = java_home / "bin" / ("java.exe" if os.name == "nt" else "java")
@@ -82,15 +84,15 @@ class WorkerEnvironmentTests(unittest.TestCase):
         self.assertEqual(environment["PATH"].split(os.pathsep), [str(java_home / "bin"), "other"])
 
     def test_runtime_prepares_shared_values_once_and_isolates_task_environments(self) -> None:
-        from worker_runner.runtime import prepare_worker_runtime
+        from harness_runner.preparation.runtime import prepare_worker_runtime
 
         base_environment = {"PATH": "base", "CODEX_THREAD_ID": "parent"}
         with (
-            mock.patch("worker_runner.runtime.resolve_codex_executable", return_value="codex") as executable,
-            mock.patch("worker_runner.runtime.resolve_codex_home", return_value=self.root / "codex-home") as home,
-            mock.patch("worker_runner.runtime._read_project_java_home", return_value=None) as java_home,
-            mock.patch("worker_runner.runtime.collect_worker_readable_paths", return_value=("toolchain",)) as toolchains,
-            mock.patch("worker_runner.runtime.load_worker_config_template", return_value={"default_permissions": "task", "permissions": {"task": {"filesystem": {":workspace_roots": {}}}}}),
+            mock.patch("harness_runner.preparation.runtime.resolve_codex_executable", return_value="codex") as executable,
+            mock.patch("harness_runner.preparation.runtime.resolve_codex_home", return_value=self.root / "codex-home") as home,
+            mock.patch("harness_runner.preparation.runtime._read_project_java_home", return_value=None) as java_home,
+            mock.patch("harness_runner.preparation.runtime.collect_worker_readable_paths", return_value=("toolchain",)) as toolchains,
+            mock.patch("harness_runner.preparation.runtime.load_worker_config_template", return_value={"default_permissions": "task", "permissions": {"task": {"filesystem": {":workspace_roots": {}}}}}),
         ):
             runtime = prepare_worker_runtime(self.root, base_environment=base_environment)
 
@@ -116,11 +118,11 @@ class WorkerEnvironmentTests(unittest.TestCase):
 
 
 class WorkerRunnerPublicContractTests(unittest.TestCase):
-    def test_package_exports_only_runtime_contract(self) -> None:
+    def test_package_exports_only_execution_contract(self) -> None:
         import worker_runner
 
-        self.assertEqual(worker_runner.__all__, ("WorkerRuntime", "WorkerTaskRuntime", "prepare_worker_runtime"))
-        self.assertTrue(callable(worker_runner.prepare_worker_runtime))
+        self.assertEqual(worker_runner.__all__, ("execute_prepared_worker",))
+        self.assertTrue(callable(worker_runner.execute_prepared_worker))
 
     def test_runner_composes_specialized_modules(self) -> None:
         import worker_runner.runner as runner
@@ -130,8 +132,8 @@ class WorkerRunnerPublicContractTests(unittest.TestCase):
         self.assertFalse(hasattr(runner, "execute_worker"))
 
     def test_worker_guidance_owns_only_execution_and_verifier_instructions(self) -> None:
-        guidance_path = SCRIPTS / "worker_runner" / "worker-guidance.md"
-        legacy_harness_prompt = SCRIPTS / "worker_runner" / "worker-prompt.md"
+        guidance_path = WORKER_SCRIPTS / "worker_runner" / "worker-guidance.md"
+        legacy_harness_prompt = WORKER_SCRIPTS / "worker_runner" / "worker-prompt.md"
 
         guidance = guidance_path.read_text(encoding="utf-8")
 
@@ -166,8 +168,7 @@ class WorkerExecutionContractTests(unittest.TestCase):
 
     def test_returns_worker_json_and_cleans_isolated_files(self) -> None:
         import worker_runner.runner as runner_module
-        from worker_runner.paths import build_worker_paths
-        from worker_runner.runtime import WorkerRuntime, WorkerTaskRuntime
+        from harness_runner.preparation.runtime import WorkerRuntime, WorkerTaskRuntime
 
         logger = mock.Mock()
         prompt = "final prompt from harness"
@@ -182,12 +183,8 @@ class WorkerExecutionContractTests(unittest.TestCase):
             "build_codex_command",
             side_effect=lambda **kwargs: ["codex", "exec", "-o", str(kwargs["output_path"])],
         ):
-            runtime = WorkerRuntime(self.root, "codex", self.root / ".codex", {}, {}, (), build_worker_paths(self.root), process_runner=run, logger=logger)
-            result = runner_module.execute_prepared_worker(
-                prompt=prompt,
-                task_runtime=WorkerTaskRuntime(runtime, "1", (".agents",), (), {}, ()),
-                run_id="run-1",
-            )
+            runtime = WorkerRuntime(self.root, "codex", self.root / ".codex", {}, {}, (), process_runner=run, logger=logger)
+            result = WorkerTaskRuntime(runtime, "1", {}, ()).execute(prompt)
 
         self.assertEqual(result.output, {"final_status": "PASS"})
         self.assertEqual(result.output_error, "")
@@ -208,14 +205,9 @@ class WorkerExecutionContractTests(unittest.TestCase):
             side_effect=lambda **kwargs: ["codex", "exec", "-o", str(kwargs["output_path"])],
         ):
             with self.assertRaises(subprocess.TimeoutExpired):
-                from worker_runner.paths import build_worker_paths
-                from worker_runner.runtime import WorkerRuntime, WorkerTaskRuntime
-                runtime = WorkerRuntime(self.root, "codex", self.root / ".codex", {}, {}, (), build_worker_paths(self.root), timeout=1, process_runner=run, logger=logger)
-                runner_module.execute_prepared_worker(
-                    prompt="task",
-                    task_runtime=WorkerTaskRuntime(runtime, "1", (".agents",), (), {}, ()),
-                    run_id="run-timeout",
-                )
+                from harness_runner.preparation.runtime import WorkerRuntime, WorkerTaskRuntime
+                runtime = WorkerRuntime(self.root, "codex", self.root / ".codex", {}, {}, (), timeout=1, process_runner=run, logger=logger)
+                WorkerTaskRuntime(runtime, "1", {}, ()).execute("task")
 
         self.assertEqual(logger.call_args.args[1], 124)
         self.assertEqual(logger.call_args.args[4], "timeout")

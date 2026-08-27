@@ -11,13 +11,13 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
-from harness_runner.evidence import ExecutionRecordStore, revision_fingerprint
-from harness_runner.execution import execute_workers
+from harness_runner.execution.coordinator import execute_workers
+from harness_runner.execution.scheduling import block_failed_dependents, build_task_graph
 from harness_runner.models import HarnessRequest, ParsedPlan, Task
-from harness_runner.worker_result import completion_error, needs_decision_correction
-from harness_runner.invocation import parse_invocation
-from harness_runner.state import PlanStateStore, StateRecordError
-from harness_runner.scheduling import block_failed_dependents, build_task_graph
+from harness_runner.planning.invocation import parse_invocation
+from harness_runner.results.evidence import ExecutionRecordStore, revision_fingerprint
+from harness_runner.results.state import PlanStateStore, StateRecordError
+from harness_runner.results.worker_result import completion_error, needs_decision_correction
 
 
 def task(number: int, *, prerequisites: tuple[int, ...] = ()) -> Task:

@@ -1,42 +1,16 @@
 from __future__ import annotations
 
 from pathlib import Path
-import shutil
-
-from .config import build_config_overrides
-
-
-def resolve_codex_executable() -> str:
-    for candidate in ("codex", "codex.cmd"):
-        resolved = shutil.which(candidate)
-        if resolved is not None:
-            return resolved
-
-    raise RuntimeError("PATH에서 Codex CLI를 찾을 수 없습니다.")
-
-
-def resolve_codex_home() -> Path:
-    return Path.home() / ".codex"
 
 
 def build_codex_command(
     *,
-    writable_paths: tuple[str, ...],
-    read_only_paths: tuple[str, ...],
-    toolchain_readable_paths: tuple[str, ...],
     output_path: Path,
-    executable: str | None = None,
-    config_overrides: tuple[str, ...] | None = None,
+    executable: str,
+    config_overrides: tuple[str, ...],
 ) -> list[str]:
-    command = [executable or resolve_codex_executable(), "exec", "-o", str(output_path)]
-    overrides = config_overrides
-    if overrides is None:
-        overrides = tuple(build_config_overrides(
-            writable_paths=writable_paths,
-            read_only_paths=read_only_paths,
-            toolchain_readable_paths=toolchain_readable_paths,
-        ))
-    for override in overrides:
+    command = [executable, "exec", "-o", str(output_path)]
+    for override in config_overrides:
         command.extend(("-c", override))
     command.append("-")
     return command

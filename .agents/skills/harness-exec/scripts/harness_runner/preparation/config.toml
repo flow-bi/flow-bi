@@ -16,8 +16,8 @@ glob_scan_max_depth = 5
 "frontend/dist/**" = "write"
 "backend/build/" = "write"
 "backend/build/**" = "write"
-"backend/.gradle/" ="write"
-  "backend/.gradle/**" = "write"
+"backend/.gradle/" = "write"
+"backend/.gradle/**" = "write"
 "backend/.gradle-user-home/" = "write"
 "backend/.gradle-user-home/**" = "write"
 

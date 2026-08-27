@@ -3,18 +3,20 @@ import sys
 
 from collections.abc import Sequence
 
-from .invocation import parse_cli_invocation
-from .paths import PROJECT_ROOT
 
-from .execution import execute_workers
 from .models import PlanValidationError, TaskResult
-from .notion import NotionPublicationError, publish_report
-from .plan import complete_plan, load_active_plan
-from .report import build_execution_report
-from .worker_gateway import create_worker_gateway
-from .worker_prompt import WorkerPromptTemplate
 
-from worker_runner import prepare_worker_runtime
+from .planning.invocation import parse_cli_invocation
+from .planning.paths import PROJECT_ROOT
+from .planning.plan import complete_plan, load_active_plan
+
+from .execution.coordinator import execute_workers
+
+from .preparation.gateway import create_worker_gateway
+from .preparation.prompt import WorkerPromptTemplate
+from .preparation.runtime import prepare_worker_runtime
+from .results.notion import NotionPublicationError, publish_report
+from .results.report import build_execution_report
 
 from worker_runner.backend_verifier import BackendVerifier
 from worker_runner.frontend_verifier import FrontendVerifier
@@ -52,6 +54,8 @@ def _print_failure(failure: TaskResult) -> None:
 
 # 하네스 전체 흐름 담당
 def main(argv: Sequence[str] | None = None) -> int:
+
+    # plan 준비 시작
     arguments = list(sys.argv[1:] if argv is None else argv)
 
     try:
@@ -66,6 +70,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         _print_console(f"plan 준비 실패: {error}", file=sys.stderr)
         return 1
 
+    # worker 실행 준비 
     worker_executable: str | None = None
     with (
         BackendVerifier(PROJECT_ROOT) as backend_verifier,

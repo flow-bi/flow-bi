@@ -13,6 +13,8 @@ Harness는 `docs/plans/state/<feature>.json`에 기능별 상태를 한 개의 J
 
 지정된 active plan을 하네스 실행 스크립트에 전달하여 검증하고 실행한 후 실행 결과로 report를 작성해 알린다.
 
+Harness의 `planning`, `preparation`, `execution`, `results` package는 각각 Plan 입력 변환, Worker 실행 입력 준비, Task 조정, 상태·보고를 담당한다. Worker runner에는 준비된 executable·config override·환경·timeout만 전달하며, Worker runner는 이를 다시 해석하지 않고 subprocess 실행·로그·정리만 담당한다.
+
 ## DO NOT
 
 - Task 구현을 직접 수행하거나 Plan 범위를 확장하지않는다.

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from .models import Task, TaskInvocation, TaskResult, VerificationResult
+from ..models import Task, TaskInvocation, TaskResult, VerificationResult
 
 
 MANDATORY_GATES = (

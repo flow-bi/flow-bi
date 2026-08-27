@@ -7,7 +7,7 @@ import json
 import re
 import tomllib
 
-# worker config
+# Harness가 Worker 실행 권한 정책을 준비한다.
 CONFIG_PATH = Path(__file__).with_name("config.toml")
 
 

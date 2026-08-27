@@ -4,8 +4,9 @@ from pathlib import Path
 import os
 import sys
 
-from .codex_cli import resolve_codex_home
-from .paths import PROJECT_ROOT, build_worker_paths
+from ..planning.paths import PROJECT_ROOT
+from .codex import resolve_codex_home
+from .paths import build_worker_paths
 
 
 _PROTECTED_ENVIRONMENT_KEYS = (

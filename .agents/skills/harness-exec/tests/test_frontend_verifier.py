@@ -32,7 +32,7 @@ if str(HARNESS_SCRIPTS) not in sys.path:
 
 from harness_runner import cli
 from harness_runner.models import ExecutionReport, Task, TaskExecutionContext, TaskInvocation, TaskResult
-from harness_runner.worker_prompt import WorkerPromptTemplate
+from harness_runner.preparation.prompt import WorkerPromptTemplate
 
 
 class FrontendVerifierTests(unittest.TestCase):
@@ -201,8 +201,8 @@ class FrontendVerifierTests(unittest.TestCase):
             return ExecutionReport((TaskResult(1, "lifecycle", "succeeded"),))
 
         with (
-            mock.patch.object(cli, "parse_invocation", return_value=mock.Mock()),
-            mock.patch.object(cli, "repository_root", return_value=self.root),
+            mock.patch.object(cli, "parse_cli_invocation", return_value=mock.Mock()),
+            mock.patch.object(cli, "PROJECT_ROOT", self.root),
             mock.patch.object(
                 cli,
                 "load_active_plan",

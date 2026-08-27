@@ -9,9 +9,9 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
-from harness_runner.worker_result import completion_error
+from harness_runner.results.worker_result import completion_error
 from harness_runner.models import Task
-from harness_runner.plan_parser import parse_plan_text
+from harness_runner.planning.parser import parse_plan_text
 
 
 TASK = Task(1, "quality", (), (), (), "", (), ("verification",), 90)

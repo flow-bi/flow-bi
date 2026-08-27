@@ -4,7 +4,7 @@ import re
 from collections.abc import Sequence
 
 
-from .models import HarnessRequest, PlanValidationError
+from ..models import HarnessRequest, PlanValidationError
 
 
 INVOCATION_PATTERN = re.compile(

@@ -7,9 +7,9 @@ import unittest
 from unittest import mock
 
 
-SCRIPTS = Path(__file__).resolve().parents[3] / "scripts"
-if str(SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS))
+HARNESS_SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
+if str(HARNESS_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(HARNESS_SCRIPTS))
 
 
 class WorkerToolchainPathTests(unittest.TestCase):
@@ -25,7 +25,7 @@ class WorkerToolchainPathTests(unittest.TestCase):
         path.write_text("tool", encoding="utf-8")
 
     def test_collects_toolchains_in_discovery_order_without_duplicates(self) -> None:
-        from worker_runner.toolchain_paths import collect_worker_readable_paths
+        from harness_runner.preparation.toolchain import collect_worker_readable_paths
 
         bin_dir = self.root / "bin"
         java_home = self.root / "jdk"
@@ -39,7 +39,7 @@ class WorkerToolchainPathTests(unittest.TestCase):
 
         tools = {"node": str(node), "npm": str(npm), "git": str(git)}
         with mock.patch(
-            "worker_runner.toolchain_paths.shutil.which",
+            "harness_runner.preparation.toolchain.shutil.which",
             side_effect=lambda name, path: tools.get(name),
         ):
             paths = collect_worker_readable_paths(
@@ -57,7 +57,7 @@ class WorkerToolchainPathTests(unittest.TestCase):
         self.assertEqual(paths.count(str(git)), 1)
 
     def test_omits_missing_directory_candidates_but_keeps_read_policy_files(self) -> None:
-        from worker_runner.toolchain_paths import collect_worker_readable_paths
+        from harness_runner.preparation.toolchain import collect_worker_readable_paths
 
         npm = self.root / "nodejs" / "npm"
         self.make_file(npm)
@@ -66,7 +66,7 @@ class WorkerToolchainPathTests(unittest.TestCase):
         project.mkdir(parents=True)
 
         with mock.patch(
-            "worker_runner.toolchain_paths.shutil.which",
+            "harness_runner.preparation.toolchain.shutil.which",
             side_effect=lambda name, path: str(npm) if name == "npm" else None,
         ):
             paths = collect_worker_readable_paths(
@@ -84,7 +84,7 @@ class WorkerToolchainPathTests(unittest.TestCase):
         self.assertIn(str(project.parent / "package.json"), paths)
 
     def test_collects_macos_homebrew_and_windows_git_roots_at_os_boundaries(self) -> None:
-        from worker_runner.toolchain_paths import collect_worker_readable_paths
+        from harness_runner.preparation.toolchain import collect_worker_readable_paths
 
         cellar_python = self.root / "Cellar" / "python@3.14" / "3.14.6" / "bin" / "python3"
         opt_python = self.root / "opt" / "python@3.14" / "bin" / "python3"
@@ -109,7 +109,7 @@ class WorkerToolchainPathTests(unittest.TestCase):
             )
 
         with mock.patch(
-            "worker_runner.toolchain_paths.shutil.which",
+            "harness_runner.preparation.toolchain.shutil.which",
             side_effect=lambda name, path: str(git) if name == "git" else None,
         ):
             windows_paths = collect_worker_readable_paths(
@@ -128,8 +128,8 @@ class WorkerToolchainPathTests(unittest.TestCase):
         self.assertNotIn(str(Path("/Library/Developer/CommandLineTools")), windows_paths)
 
     def test_passes_collected_paths_to_the_codex_command_boundary(self) -> None:
-        from worker_runner.codex_cli import build_codex_command
-        from worker_runner.toolchain_paths import collect_worker_readable_paths
+        from harness_runner.preparation.config import build_worker_config
+        from harness_runner.preparation.toolchain import collect_worker_readable_paths
 
         python = self.root / "bin" / "python"
         self.make_file(python)
@@ -140,22 +140,17 @@ class WorkerToolchainPathTests(unittest.TestCase):
             python_executable=python,
             project_root=self.root,
         )
-        with mock.patch(
-            "worker_runner.codex_cli.build_config_overrides",
-            return_value=(),
-        ) as build_overrides:
-            build_codex_command(
-                writable_paths=("frontend",),
-                read_only_paths=("backend",),
-                toolchain_readable_paths=paths,
-                output_path=self.root / "result.json",
-                executable="codex",
-            )
+        template = {
+            "default_permissions": "task-worker",
+            "permissions": {
+                "task-worker": {"filesystem": {":workspace_roots": {}}}
+            },
+        }
+        config = build_worker_config((), (), paths, template=template)
 
-        self.assertEqual(
-            build_overrides.call_args.kwargs["toolchain_readable_paths"],
-            paths,
-        )
+        filesystem = config["permissions"]["task-worker"]["filesystem"]
+        for path in paths:
+            self.assertEqual(filesystem[path], "read")
 
 
 if __name__ == "__main__":

@@ -3,9 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import NamedTuple
 
-
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-
+from ..planning.paths import PROJECT_ROOT
 
 class WorkerPaths(NamedTuple):
     backend: Path

@@ -12,9 +12,9 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
-from harness_runner.evidence import ExecutionRecordStore
+from harness_runner.results.evidence import ExecutionRecordStore
 from harness_runner.models import Task, TaskExecutionContext, TaskInvocation
-from harness_runner.task_executor import execute_task
+from harness_runner.execution.task_executor import execute_task
 
 
 TASK = Task(1, "Task 1", (), (), (), "requirements", (), ("regression",), 90)
