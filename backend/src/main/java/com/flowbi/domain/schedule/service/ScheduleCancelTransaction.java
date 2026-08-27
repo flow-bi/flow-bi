@@ -29,7 +29,7 @@ class ScheduleCancelTransaction {
     if (actorId <= 0 || scheduleId <= 0) {
       throw new ScheduleNotFoundException();
     }
-    Schedule schedule = scheduleRepository.findByIdWithAssociationsForUpdate(scheduleId)
+    Schedule schedule = scheduleRepository.findByIdForUpdate(scheduleId)
         .orElseThrow(ScheduleNotFoundException::new);
     if (schedule.getCreatorId() != actorId) {
       throw new ScheduleNotFoundException();

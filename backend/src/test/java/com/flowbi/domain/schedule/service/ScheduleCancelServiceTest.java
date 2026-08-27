@@ -32,7 +32,7 @@ class ScheduleCancelServiceTest {
     ScheduleRoomReservationLookup reservations = mock(ScheduleRoomReservationLookup.class);
     ScheduleAuditWriter auditWriter = mock(ScheduleAuditWriter.class);
     Schedule schedule = activeSchedule();
-    when(repository.findByIdWithAssociationsForUpdate(100L)).thenReturn(Optional.of(schedule));
+    when(repository.findByIdForUpdate(100L)).thenReturn(Optional.of(schedule));
     ScheduleCancelService service = service(repository,reservations,auditWriter);
 
     service.cancel(1L,100L);
@@ -54,9 +54,8 @@ class ScheduleCancelServiceTest {
     ScheduleRepository repository = mock(ScheduleRepository.class);
     ScheduleRoomReservationLookup reservations = mock(ScheduleRoomReservationLookup.class);
     ScheduleAuditWriter auditWriter = mock(ScheduleAuditWriter.class);
-    when(repository.findByIdWithAssociationsForUpdate(100L))
-        .thenReturn(Optional.of(activeSchedule()));
-    when(repository.findByIdWithAssociationsForUpdate(101L)).thenReturn(Optional.empty());
+    when(repository.findByIdForUpdate(100L)).thenReturn(Optional.of(activeSchedule()));
+    when(repository.findByIdForUpdate(101L)).thenReturn(Optional.empty());
     ScheduleCancelService service = service(repository,reservations,auditWriter);
 
     assertThatThrownBy(() -> service.cancel(2L,100L)).isInstanceOf(ScheduleNotFoundException.class);
@@ -70,7 +69,7 @@ class ScheduleCancelServiceTest {
     ScheduleRoomReservationLookup reservations = mock(ScheduleRoomReservationLookup.class);
     ScheduleAuditWriter auditWriter = mock(ScheduleAuditWriter.class);
     Schedule schedule = activeSchedule();
-    when(repository.findByIdWithAssociationsForUpdate(100L)).thenReturn(Optional.of(schedule));
+    when(repository.findByIdForUpdate(100L)).thenReturn(Optional.of(schedule));
     when(reservations.isManagedSchedule(100L)).thenReturn(true);
 
     assertThatThrownBy(() -> service(repository,reservations,auditWriter).cancel(1L,100L))

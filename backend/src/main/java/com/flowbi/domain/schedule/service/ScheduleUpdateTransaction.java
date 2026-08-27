@@ -27,13 +27,15 @@ class ScheduleUpdateTransaction {
   @Transactional
   public Schedule update(long actorId,long scheduleId,ScheduleUpdateCommand command,
       ScheduleReferenceValidator referenceValidator) {
-    Schedule schedule = findCreatorSchedule(actorId,scheduleId);
+    Schedule schedule = findCreatorScheduleForUpdate(actorId,scheduleId);
     if (roomReservationLookup.isManagedSchedule(scheduleId)) {
       throw new RoomReservationManagedScheduleException();
     }
     if (schedule.getStatus() != ScheduleStatus.ACTIVE) {
       throw new ScheduleNotFoundException();
     }
+    schedule = scheduleRepository.findByIdWithAssociations(scheduleId)
+        .orElseThrow(ScheduleNotFoundException::new);
     PersonalScheduleRelationValidator.reject(command.type(),command.participantIds(),
         command.userTargetIds(),command.teamTargetIds(),command.projectTargetIds());
     referenceValidator.validateForUpdate(schedule.getCreatorId(),command);
@@ -41,11 +43,11 @@ class ScheduleUpdateTransaction {
     return schedule;
   }
 
-  private Schedule findCreatorSchedule(long actorId,long scheduleId) {
+  private Schedule findCreatorScheduleForUpdate(long actorId,long scheduleId) {
     if (actorId <= 0 || scheduleId <= 0) {
       throw new ScheduleNotFoundException();
     }
-    Schedule schedule = scheduleRepository.findByIdWithAssociationsForUpdate(scheduleId)
+    Schedule schedule = scheduleRepository.findByIdForUpdate(scheduleId)
         .orElseThrow(ScheduleNotFoundException::new);
     if (schedule.getCreatorId() != actorId) {
       throw new ScheduleNotFoundException();

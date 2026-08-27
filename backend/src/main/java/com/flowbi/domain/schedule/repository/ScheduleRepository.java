@@ -37,7 +37,10 @@ public interface ScheduleRepository extends JpaRepository<Schedule, Long> {
   Optional<Schedule> findActiveByIdWithAssociations(long scheduleId);
 
   @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("select schedule from Schedule schedule where schedule.id = :scheduleId")
+  Optional<Schedule> findByIdForUpdate(long scheduleId);
+
   @EntityGraph(attributePaths = {"detail", "targets", "participants"})
   @Query("select schedule from Schedule schedule where schedule.id = :scheduleId")
-  Optional<Schedule> findByIdWithAssociationsForUpdate(long scheduleId);
+  Optional<Schedule> findByIdWithAssociations(long scheduleId);
 }

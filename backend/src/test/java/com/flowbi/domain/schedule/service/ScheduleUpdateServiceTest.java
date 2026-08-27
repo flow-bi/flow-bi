@@ -28,7 +28,8 @@ class ScheduleUpdateServiceTest {
     ScheduleReferenceValidator validator = mock(ScheduleReferenceValidator.class);
     ScheduleRoomReservationLookup reservations = mock(ScheduleRoomReservationLookup.class);
     Schedule schedule = activeSchedule(1L);
-    when(repository.findByIdWithAssociationsForUpdate(100L)).thenReturn(Optional.of(schedule));
+    when(repository.findByIdForUpdate(100L)).thenReturn(Optional.of(schedule));
+    when(repository.findByIdWithAssociations(100L)).thenReturn(Optional.of(schedule));
     ScheduleUpdateService service = new ScheduleUpdateService(validator,
         new ScheduleUpdateTransaction(repository, reservations));
     ScheduleUpdateCommand command = updateCommand();
@@ -52,7 +53,7 @@ class ScheduleUpdateServiceTest {
     ScheduleReferenceValidator validator = mock(ScheduleReferenceValidator.class);
     ScheduleRoomReservationLookup reservations = mock(ScheduleRoomReservationLookup.class);
     Schedule schedule = activeSchedule(1L);
-    when(repository.findByIdWithAssociationsForUpdate(100L)).thenReturn(Optional.of(schedule));
+    when(repository.findByIdForUpdate(100L)).thenReturn(Optional.of(schedule));
     ScheduleUpdateService service = new ScheduleUpdateService(validator,
         new ScheduleUpdateTransaction(repository, reservations));
 
@@ -65,7 +66,7 @@ class ScheduleUpdateServiceTest {
         .isInstanceOf(ScheduleNotFoundException.class);
 
     Schedule managed = activeSchedule(1L);
-    when(repository.findByIdWithAssociationsForUpdate(101L)).thenReturn(Optional.of(managed));
+    when(repository.findByIdForUpdate(101L)).thenReturn(Optional.of(managed));
     when(reservations.isManagedSchedule(101L)).thenReturn(true);
     assertThatThrownBy(() -> service.update(1L,101L,updateCommand()))
         .isInstanceOf(RoomReservationManagedScheduleException.class);
@@ -96,7 +97,8 @@ class ScheduleUpdateServiceTest {
             ScheduleVisibility.PRIVATE,OffsetDateTime.parse("2026-08-10T09:00:00+09:00"),
             OffsetDateTime.parse("2026-08-10T10:00:00+09:00"),false,ScheduleColorLabel.BLUE,null,
             null,false,List.of(2L),List.of(),List.of(),List.of()));
-    when(repository.findByIdWithAssociationsForUpdate(100L)).thenReturn(Optional.of(schedule));
+    when(repository.findByIdForUpdate(100L)).thenReturn(Optional.of(schedule));
+    when(repository.findByIdWithAssociations(100L)).thenReturn(Optional.of(schedule));
     ScheduleUpdateService service = new ScheduleUpdateService(referenceValidator,
         new ScheduleUpdateTransaction(repository, reservations));
     ScheduleUpdateCommand command = ScheduleUpdateCommand.of("Personal",ScheduleType.PERSONAL,
