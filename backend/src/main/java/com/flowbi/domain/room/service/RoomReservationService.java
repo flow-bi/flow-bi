@@ -18,13 +18,9 @@ import com.flowbi.domain.schedule.service.ScheduleCreationService;
 import com.flowbi.domain.schedule.service.ScheduleModificationService;
 import com.flowbi.domain.schedule.service.ScheduleModificationService.ReservationSchedule;
 import com.flowbi.domain.schedule.service.ScheduleModificationService.UpdateReservationScheduleCommand;
-import com.flowbi.domain.user.service.ReservationParticipantAccessService;
-import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
-import java.util.LinkedHashSet;
 import java.util.List;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -34,43 +30,38 @@ import org.springframework.transaction.annotation.Transactional;
 public class RoomReservationService {
 
   private static final Logger AUDIT_LOG = LoggerFactory.getLogger(RoomReservationService.class);
-  private static final LocalTime BUSINESS_START = LocalTime.of(9,0);
-  private static final LocalTime BUSINESS_END = LocalTime.of(18,0);
   private static final ZoneId KOREA_ZONE = ZoneId.of("Asia/Seoul");
 
   private final RoomRepository roomRepository;
   private final RoomReservationRepository reservationRepository;
-  private final ReservationParticipantAccessService participantAccessService;
   private final ScheduleCreationService scheduleCreationService;
   private final ScheduleModificationService scheduleModificationService;
+  private final RoomReservationRequestValidator requestValidator;
+  private final ReservationAttendeeResolver attendeeResolver;
+  private final ReservationScheduleOwnershipVerifier scheduleOwnershipVerifier;
 
   public RoomReservationService(RoomRepository roomRepository,
       RoomReservationRepository reservationRepository,
-      ReservationParticipantAccessService participantAccessService,
-      ScheduleCreationService scheduleCreationService) {
-    this(roomRepository, reservationRepository, participantAccessService, scheduleCreationService,
-        null);
-  }
-
-  @Autowired
-  public RoomReservationService(RoomRepository roomRepository,
-      RoomReservationRepository reservationRepository,
-      ReservationParticipantAccessService participantAccessService,
       ScheduleCreationService scheduleCreationService,
-      ScheduleModificationService scheduleModificationService) {
+      ScheduleModificationService scheduleModificationService,
+      RoomReservationRequestValidator requestValidator,
+      ReservationAttendeeResolver attendeeResolver,
+      ReservationScheduleOwnershipVerifier scheduleOwnershipVerifier) {
     this.roomRepository = roomRepository;
     this.reservationRepository = reservationRepository;
-    this.participantAccessService = participantAccessService;
     this.scheduleCreationService = scheduleCreationService;
     this.scheduleModificationService = scheduleModificationService;
+    this.requestValidator = requestValidator;
+    this.attendeeResolver = attendeeResolver;
+    this.scheduleOwnershipVerifier = scheduleOwnershipVerifier;
   }
 
   @Transactional
   public CreateRoomReservationResult create(ReservationActor actor,
       CreateRoomReservationCommand command) {
-    validateActor(actor);
-    validateCommand(command);
-    List<Long> attendeeIds = resolveAttendeeIds(actor,command.attendeeIds(),
+    requestValidator.validateActor(actor);
+    validateCreateCommand(command);
+    List<Long> attendeeIds = attendeeResolver.resolve(actor,command.attendeeIds(),
         command.creatorAttends());
 
     Room room = roomRepository.findByIdForUpdate(command.roomId())
@@ -94,17 +85,18 @@ public class RoomReservationService {
   @Transactional
   public UpdateRoomReservationResult update(ReservationActor actor,
       UpdateRoomReservationCommand command) {
-    validateActor(actor);
+    requestValidator.validateActor(actor);
     validateUpdateCommand(command);
-    List<Long> normalizedAttendeeIds = normalizeAttendees(command.attendeeIds());
+    List<Long> normalizedAttendeeIds = attendeeResolver.normalize(command.attendeeIds());
 
     RoomReservation reservation = reservationRepository.findByIdForUpdate(command.reservationId())
         .orElseThrow(() -> new RoomReservationApplicationException("ROOM_RESERVATION_NOT_FOUND"));
-    ReservationSchedule schedule = findOwnedSchedule(reservation,actor);
+    ReservationSchedule schedule = scheduleOwnershipVerifier
+        .findOwnedForUpdate(reservation.getScheduleId(),actor);
     if (reservation.getStatus() != ReservationStatus.RESERVED) {
       throw new RoomReservationApplicationException("ROOM_RESERVATION_NOT_EDITABLE");
     }
-    List<Long> attendeeIds = resolveAttendeeIds(actor,normalizedAttendeeIds,
+    List<Long> attendeeIds = attendeeResolver.resolveNormalized(actor,normalizedAttendeeIds,
         command.creatorAttends());
     Room room = roomRepository.findByIdForUpdate(command.roomId())
         .orElseThrow(() -> new RoomReservationApplicationException("ROOM_NOT_FOUND"));
@@ -125,13 +117,12 @@ public class RoomReservationService {
 
   @Transactional
   public void cancel(ReservationActor actor,Long reservationId) {
-    validateActor(actor);
-    if (reservationId == null || reservationId < 1) {
-      throw new RoomReservationApplicationException("ROOM_RESERVATION_NOT_FOUND");
-    }
+    requestValidator.validateActor(actor);
+    requestValidator.validateCancellationReservationId(reservationId);
     RoomReservation reservation = reservationRepository.findByIdForUpdate(reservationId)
         .orElseThrow(() -> new RoomReservationApplicationException("ROOM_RESERVATION_NOT_FOUND"));
-    ReservationSchedule schedule = findScheduleForCancellation(reservation,actor);
+    ReservationSchedule schedule = scheduleOwnershipVerifier
+        .findOwnedForCancellation(reservation.getScheduleId(),actor);
     if (reservation.getStatus() == ReservationStatus.CANCELED) {
       writeCancellationAudit(actor.userId(),OffsetDateTime.now(),reservation.getId(),
           schedule.scheduleId(),"ALREADY_CANCELED");
@@ -151,107 +142,20 @@ public class RoomReservationService {
         "CANCELED");
   }
 
-  private void validateActor(ReservationActor actor) {
-    if (actor == null || actor.userId() == null || actor.userId() < 1) {
-      throw new RoomReservationApplicationException("RESERVATION_ACTOR_REQUIRED");
-    }
-  }
-
-  private void validateCommand(CreateRoomReservationCommand command) {
+  private void validateCreateCommand(CreateRoomReservationCommand command) {
     if (command == null) {
       throw new RoomReservationApplicationException("ROOM_RESERVATION_INVALID");
     }
-    validateReservationDetails(command.roomId(),command.title(),command.startAt(),command.endAt(),
-        command.description());
+    requestValidator.validateCreate(command.roomId(),command.title(),command.startAt(),
+        command.endAt(),command.description());
   }
 
   private void validateUpdateCommand(UpdateRoomReservationCommand command) {
-    if (command == null || command.reservationId() == null || command.reservationId() < 1) {
+    if (command == null) {
       throw new RoomReservationApplicationException("ROOM_RESERVATION_INVALID");
     }
-    validateReservationDetails(command.roomId(),command.title(),command.startAt(),command.endAt(),
-        command.description());
-  }
-
-  private void validateReservationDetails(Long roomId,String title,java.time.LocalDateTime startAt,
-      java.time.LocalDateTime endAt,String description) {
-    if (roomId == null || roomId < 1 || title == null || title.isBlank() || title.length() > 200
-        || startAt == null || endAt == null || !startAt.toLocalDate().equals(endAt.toLocalDate())
-        || !startAt.toLocalTime().isBefore(endAt.toLocalTime())
-        || startAt.toLocalTime().isBefore(BUSINESS_START)
-        || endAt.toLocalTime().isAfter(BUSINESS_END)
-        || description != null && description.length() > 200) {
-      throw new RoomReservationApplicationException("ROOM_RESERVATION_INVALID");
-    }
-  }
-
-  private List<Long> normalizeAttendees(List<Long> attendeeIds) {
-    if (attendeeIds == null) {
-      throw new RoomReservationApplicationException("ROOM_RESERVATION_INVALID");
-    }
-    if (attendeeIds.stream().anyMatch(id -> id == null || id < 1)) {
-      throw new RoomReservationApplicationException("ROOM_RESERVATION_INVALID");
-    }
-    List<Long> normalized = List.copyOf(new LinkedHashSet<>(attendeeIds));
-    return normalized;
-  }
-
-  private List<Long> resolveAttendeeIds(ReservationActor actor,List<Long> rawAttendeeIds,
-      Boolean creatorAttends) {
-    List<Long> normalized = normalizeAttendees(rawAttendeeIds);
-    if (creatorAttends == null) {
-      if (normalized.isEmpty()) {
-        throw new RoomReservationApplicationException("ROOM_RESERVATION_INVALID");
-      }
-      validateAttendees(actor,normalized);
-      return normalized;
-    }
-    boolean includesCreator = creatorAttends;
-    List<Long> selectedAttendeeIds = normalized.stream()
-        .filter(attendeeId -> !attendeeId.equals(actor.userId())).toList();
-    if (!includesCreator && selectedAttendeeIds.isEmpty()) {
-      throw new RoomReservationApplicationException("ROOM_RESERVATION_INVALID");
-    }
-    validateAttendees(actor,selectedAttendeeIds);
-    if (!includesCreator) {
-      return selectedAttendeeIds;
-    }
-    return java.util.stream.Stream
-        .concat(java.util.stream.Stream.of(actor.userId()),selectedAttendeeIds.stream()).toList();
-  }
-
-  private void validateAttendees(ReservationActor actor,List<Long> attendeeIds) {
-    if (attendeeIds.stream().anyMatch(id -> !participantAccessService.canAttend(actor,id))) {
-      throw new RoomReservationApplicationException("RESERVATION_PARTICIPANT_FORBIDDEN");
-    }
-  }
-
-  private ReservationSchedule findOwnedSchedule(RoomReservation reservation,
-      ReservationActor actor) {
-    if (scheduleModificationService == null) {
-      throw new IllegalStateException("Reservation schedule modification is not configured");
-    }
-    ReservationSchedule schedule = scheduleModificationService
-        .findReservationSchedule(reservation.getScheduleId())
-        .orElseThrow(() -> new RoomReservationApplicationException("ROOM_RESERVATION_NOT_FOUND"));
-    if (!actor.userId().equals(schedule.creatorId())) {
-      throw new RoomReservationApplicationException("ROOM_RESERVATION_NOT_FOUND");
-    }
-    return schedule;
-  }
-
-  private ReservationSchedule findScheduleForCancellation(RoomReservation reservation,
-      ReservationActor actor) {
-    if (scheduleModificationService == null) {
-      throw new IllegalStateException("Reservation schedule modification is not configured");
-    }
-    ReservationSchedule schedule = scheduleModificationService
-        .findReservationScheduleForCancellation(reservation.getScheduleId())
-        .orElseThrow(() -> new RoomReservationApplicationException("ROOM_RESERVATION_NOT_FOUND"));
-    if (!actor.userId().equals(schedule.creatorId())) {
-      throw new RoomReservationApplicationException("ROOM_RESERVATION_NOT_FOUND");
-    }
-    return schedule;
+    requestValidator.validateUpdate(command.reservationId(),command.roomId(),command.title(),
+        command.startAt(),command.endAt(),command.description());
   }
 
   private void writeCancellationAudit(long actorId,OffsetDateTime occurredAt,Long reservationId,

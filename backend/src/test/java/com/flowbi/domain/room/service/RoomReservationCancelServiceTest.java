@@ -10,8 +10,11 @@ import com.flowbi.domain.room.dto.RoomReservationApplicationException;
 import com.flowbi.domain.room.entity.ReservationStatus;
 import com.flowbi.domain.room.entity.Room;
 import com.flowbi.domain.room.entity.RoomReservation;
+import com.flowbi.domain.room.repository.RoomRepository;
 import com.flowbi.domain.room.repository.RoomReservationRepository;
+import com.flowbi.domain.schedule.service.ScheduleCreationService;
 import com.flowbi.domain.schedule.service.ScheduleModificationService;
+import com.flowbi.domain.user.service.ReservationParticipantAccessService;
 import com.flowbi.domain.schedule.service.ScheduleModificationService.ReservationSchedule;
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -27,6 +30,12 @@ class RoomReservationCancelServiceTest {
 
   @Mock
   private RoomReservationRepository reservationRepository;
+  @Mock
+  private RoomRepository roomRepository;
+  @Mock
+  private ReservationParticipantAccessService participantAccessService;
+  @Mock
+  private ScheduleCreationService scheduleCreationService;
   @Mock
   private ScheduleModificationService scheduleModificationService;
 
@@ -71,8 +80,10 @@ class RoomReservationCancelServiceTest {
   }
 
   private RoomReservationService service() {
-    return new RoomReservationService(null, reservationRepository, null, null,
-        scheduleModificationService);
+    return new RoomReservationService(roomRepository, reservationRepository,
+        scheduleCreationService, scheduleModificationService, new RoomReservationRequestValidator(),
+        new ReservationAttendeeResolver(participantAccessService),
+        new ReservationScheduleOwnershipVerifier(scheduleModificationService));
   }
 
   private RoomReservation reservation(ReservationStatus status) {

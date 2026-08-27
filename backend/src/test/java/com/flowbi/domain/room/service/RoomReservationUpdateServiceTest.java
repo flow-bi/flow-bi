@@ -145,7 +145,10 @@ class RoomReservationUpdateServiceTest {
 
   private RoomReservationService service() {
     return new RoomReservationService(roomRepository, reservationRepository,
-        participantAccessService, null, scheduleModificationService);
+        org.mockito.Mockito.mock(com.flowbi.domain.schedule.service.ScheduleCreationService.class),
+        scheduleModificationService, new RoomReservationRequestValidator(),
+        new ReservationAttendeeResolver(participantAccessService),
+        new ReservationScheduleOwnershipVerifier(scheduleModificationService));
   }
 
   private UpdateRoomReservationCommand command(List<Long> attendeeIds) {
