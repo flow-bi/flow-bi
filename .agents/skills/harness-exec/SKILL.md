@@ -68,8 +68,7 @@ Backend verifier 명령이 실행 중이거나 shell session을 반환한 경우
 - Notion MCP OAuth는 각 개발자의 로컬 Codex 환경에 설정되어 있어야 한다.
 - 성공·실패 실행 모두 부모 Harness가 완성된 Report 전체를 실행당 하나의 새 Notion Page로 한 번 게시한다. Worker는 Notion에 게시하지 않는다.
 - 부모 전용 `FLOW_BI_NOTION_PARENT` 값은 Worker 자식 프로세스 환경에서 제거한다.
-- 환경변수 누락, OAuth 또는 Notion MCP 게시 실패는 숨기지 않고 실행 실패로 보고하며
-  Active Plan을 완료 위치로 이동하지 않는다.
+- 환경변수 누락, OAuth 또는 Notion MCP 게시 실패는 숨기지 않고 실행 실패로 보고하지만 게시 실패이외의 작업이 모두 완료된 경우 plan을 complete로 옮긴다.
 
 ## 결과 보고
 
