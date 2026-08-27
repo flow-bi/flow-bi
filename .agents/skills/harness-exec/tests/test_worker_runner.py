@@ -245,7 +245,7 @@ class WorkerReadablePathTests(unittest.TestCase):
             project_root=self.root,
         )
 
-        expected = self.root / "backend" / ".gradle-user-home" / "tmp"
+        expected = self.root / ".agents" / "skills" / "harness-exec" / ".worker-tmp"
         self.assertEqual(environment["TEMP"], str(expected))
         self.assertEqual(environment["TMP"], str(expected))
         self.assertEqual(environment["TMPDIR"], str(expected))
@@ -298,7 +298,7 @@ class WorkerReadablePathTests(unittest.TestCase):
 
         self.assertEqual(workspace_permissions["backend"], "read")
         self.assertEqual(
-            workspace_permissions["backend/.gradle-user-home/**"],
+            workspace_permissions[".agents/skills/harness-exec/.worker-tmp/**"],
             "write",
         )
 
@@ -532,6 +532,12 @@ class WorkerExecutionTests(unittest.TestCase):
 
 class WorkerInvocationTests(unittest.TestCase):
     def payload(self, execution_context: dict[str, object]) -> str:
+        execution_context = dict(execution_context)
+        if execution_context.get("mode") == "rerun":
+            execution_context.setdefault("effective_tdd_policy", "REUSE_ALLOWED")
+            execution_context.setdefault("prior_evidence_id", "plan:rerun-01:task:2:fingerprint:same-fingerprint")
+        else:
+            execution_context.setdefault("effective_tdd_policy", "REQUIRED")
         return json.dumps(
             {
                 "common_prompt": "common",
@@ -543,6 +549,7 @@ class WorkerInvocationTests(unittest.TestCase):
                     "forbidden_paths": ["backend"],
                     "task_prompt": "implement",
                     "verification_items": ["unit test"],
+                    "tdd_policy": "REQUIRED",
                 },
                 "execution_context": execution_context,
             }
@@ -636,6 +643,22 @@ class WorkerInvocationTests(unittest.TestCase):
         self.assertIn("현재 Green 및 회귀 검증", prompt)
         self.assertIn("reused_evidence", prompt)
         self.assertIn("current_verification_evidence", prompt)
+
+    def test_reuse_allowed_is_rejected_for_non_required_declaration(self) -> None:
+        payload = json.loads(
+            self.payload(
+                {
+                    "plan_id": "rerun-01",
+                    "fingerprint": "same-fingerprint",
+                    "mode": "rerun",
+                    "prior_tdd_evidence": {"result": "PASS", "evidence": "record"},
+                }
+            )
+        )
+        payload["task"]["tdd_policy"] = "REGRESSION_ONLY"
+
+        with self.assertRaisesRegex(ValueError, "일치하지 않습니다"):
+            parse_invocation(json.dumps(payload))
 
     def test_existing_implementation_without_evidence_requires_human_review(self) -> None:
         prompt, _allowed, _forbidden = parse_invocation(

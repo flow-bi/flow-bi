@@ -216,8 +216,12 @@ def build_subprocess_environment(
     environment["CODEX_HOME"] = str(resolve_codex_home())
 
     gradle_user_home = project_root / "backend" / ".gradle-user-home"
-    worker_temp = gradle_user_home / "tmp"
-    worker_home = gradle_user_home / "worker-home"
+    # A task contract can make backend read-only. Keep generic Worker
+    # temporary files in the Harness-owned writable area instead.
+    worker_temp = (
+        project_root / ".agents" / "skills" / "harness-exec" / ".worker-tmp"
+    )
+    worker_home = worker_temp / "worker-home"
 
     worker_temp.mkdir(parents=True, exist_ok=True)
     worker_home.mkdir(parents=True, exist_ok=True)

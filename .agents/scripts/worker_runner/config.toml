@@ -20,6 +20,8 @@ glob_scan_max_depth = 5
   "backend/.gradle/**" = "write"
 "backend/.gradle-user-home/" = "write"
 "backend/.gradle-user-home/**" = "write"
+".agents/skills/harness-exec/.worker-tmp/" = "write"
+".agents/skills/harness-exec/.worker-tmp/**" = "write"
 
 [permissions.task-worker.network]
 enabled = true

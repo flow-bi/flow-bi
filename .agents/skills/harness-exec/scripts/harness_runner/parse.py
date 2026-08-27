@@ -1,4 +1,4 @@
-from .models import HarnessRequest, PlanValidationError
+from .models import DECLARED_TDD_POLICIES, HarnessRequest, PlanValidationError
 from .models import ParsedPlan, Task
 
 import re
@@ -148,6 +148,13 @@ def _minimum_quality_score(body: str) -> int | None:
     )
     return int(match.group(1)) if match else None
 
+
+def _tdd_policy(body: str) -> str:
+    values = _bullet_values(body)
+    if len(values) != 1 or values[0] not in DECLARED_TDD_POLICIES:
+        raise PlanValidationError("Task의 TDD 정책은 REQUIRED, REGRESSION_ONLY, NOT_APPLICABLE 중 하나여야 합니다.")
+    return values[0]
+
 def parse_plan_text(text: str) -> ParsedPlan:
     """Active Plan 문자열을 ParsedPlan으로 변환"""
 
@@ -181,6 +188,7 @@ def parse_plan_text(text: str) -> ParsedPlan:
         implementation_body = _section_body(sections, "구현 항목")
         verification_body = _section_body(sections, "검증 항목")
         completion_body = _section_body(sections, "완료 조건")
+        tdd_policy_body = _section_body(sections, "TDD 정책")
 
         task_prompt = "\n\n".join(
             raw
@@ -204,13 +212,13 @@ def parse_plan_text(text: str) -> ParsedPlan:
                 implementation_items=_bullet_values(implementation_body),
                 verification_items=_bullet_values(verification_body),
                 minimum_quality_score=_minimum_quality_score(completion_body),
+                tdd_policy=_tdd_policy(tdd_policy_body),
             )
         )
 
     return ParsedPlan(common_prompt=common_prompt, tasks=tuple(tasks))
 
 ################ plan-end ###############
-
 
 
 

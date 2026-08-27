@@ -17,6 +17,7 @@ from .models import (
     TaskInvocation,
     TaskResult,
     VerificationResult,
+    REUSE_ALLOWED,
 )
 from .evidence import EvidenceRecordError, ExecutionRecordStore, revision_fingerprint
 from .state import PlanStateStore, StateRecordError
@@ -68,8 +69,34 @@ def _report_contract_error(worker_result: object) -> str:
         return "final_status가 PASS, FAILED 또는 BLOCKED가 아닙니다."
     return ""
 
+
+def _tdd_contract_error(task: Task, context: TaskExecutionContext | None, gate: object) -> str:
+    if not isinstance(gate, dict) or context is None:
+        return "TDD 정책 실행 컨텍스트가 누락되었습니다."
+    policy = context.effective_tdd_policy
+    if policy != task.tdd_policy and not (
+        policy == REUSE_ALLOWED and task.tdd_policy == "REQUIRED"
+    ):
+        return "선언 TDD 정책과 유효 정책이 모순됩니다."
+    if gate.get("effective_policy") != policy:
+        return "Worker TDD 유효 정책이 실행 컨텍스트와 일치하지 않습니다."
+    if not _non_empty_text(gate.get("evidence")) or not _non_empty_text(gate.get("current_verification_evidence")):
+        return f"{policy} TDD에는 현재 검증 증거가 필요합니다."
+    if policy == "NOT_APPLICABLE":
+        if gate.get("result") != "N/A" or not _non_empty_text(gate.get("reason")):
+            return "NOT_APPLICABLE TDD에는 N/A 결과와 적용 제외 사유가 필요합니다."
+    elif gate.get("result") != "PASS":
+        return f"{policy} TDD Gate는 PASS여야 합니다."
+    reused = gate.get("reused_evidence")
+    if policy == REUSE_ALLOWED:
+        if not isinstance(reused, dict) or reused.get("record_id") != context.prior_evidence_id or reused.get("fingerprint") != context.fingerprint:
+            return "REUSE_ALLOWED TDD에는 동일 fingerprint의 선행 증거 식별자가 필요합니다."
+    elif reused not in (None, {"record_id": None, "fingerprint": None}):
+        return "재사용이 아닌 TDD 정책에는 선행 증거를 지정할 수 없습니다."
+    return ""
+
 # Worker가 제출한 JSON 결과 중 판정을 제외한 객관적 완료 조건을 검증한다.
-def _objective_completion_error(task: Task, worker_result: object) -> str:
+def _objective_completion_error(task: Task, worker_result: object, context: TaskExecutionContext | None = None) -> str:
     output = getattr(worker_result, "output", None)
     output_error = getattr(worker_result, "output_error", "")
 
@@ -90,9 +117,10 @@ def _objective_completion_error(task: Task, worker_result: object) -> str:
         if not isinstance(gate, dict):
             return f"Mandatory Gate {gate_name} 결과가 누락되었습니다."
         result = gate.get("result")
-        if gate_name == "tdd" and result == "N/A":
-            if not _non_empty_text(gate.get("reason")):
-                return "TDD N/A에는 사유가 필요합니다."
+        if gate_name == "tdd":
+            tdd_error = _tdd_contract_error(task, context, gate)
+            if tdd_error:
+                return tdd_error
         elif result != "PASS":
             return f"Mandatory Gate {gate_name}이 PASS가 아닙니다."
         if not _non_empty_text(gate.get("evidence")):
@@ -138,8 +166,8 @@ def _objective_completion_error(task: Task, worker_result: object) -> str:
 
 
 # Worker가 제출한 JSON 결과 검증
-def _completion_error(task: Task, worker_result: object) -> str:
-    objective_error = _objective_completion_error(task, worker_result)
+def _completion_error(task: Task, worker_result: object, context: TaskExecutionContext | None = None) -> str:
+    objective_error = _objective_completion_error(task, worker_result, context)
     if objective_error:
         return objective_error
 
@@ -151,8 +179,8 @@ def _completion_error(task: Task, worker_result: object) -> str:
     return ""
 
 
-def _needs_decision_correction(task: Task, worker_result: object) -> bool:
-    if _objective_completion_error(task, worker_result):
+def _needs_decision_correction(task: Task, worker_result: object, context: TaskExecutionContext | None) -> bool:
+    if _objective_completion_error(task, worker_result, context):
         return False
     output = getattr(worker_result, "output", None)
     decision = output.get("decision") if isinstance(output, dict) else None
@@ -198,8 +226,8 @@ def _execute_task(
             status = "failed"
             message = f"Worker 종료 코드 {return_code}"
         else:
-            message = _completion_error(task, worker_result)
-            if message and _needs_decision_correction(task, worker_result):
+            message = _completion_error(task, worker_result, invocation.execution_context)
+            if message and _needs_decision_correction(task, worker_result, invocation.execution_context):
                 corrected_result = call_worker(_decision_correction(invocation, worker_result))
                 corrected_return_code = _return_code(corrected_result)
                 if corrected_return_code != 0:
@@ -207,7 +235,7 @@ def _execute_task(
                     return_code = corrected_return_code
                     message = "판정 교정 요청 Worker 호출이 실패했습니다."
                 else:
-                    corrected_message = _completion_error(task, corrected_result)
+                    corrected_message = _completion_error(task, corrected_result, invocation.execution_context)
                     if corrected_message:
                         status = "failed"
                         message = f"판정 교정 후에도 완료 계약을 충족하지 않습니다: {corrected_message}"
@@ -475,6 +503,8 @@ def execute_workers(
                         fingerprint=fingerprint,
                         mode="rerun" if prior_record else "new_or_changed",
                         prior_tdd_evidence=prior_record["tdd_evidence"] if prior_record else None,
+                        prior_evidence_id=(f"plan:{request.plan_id}:task:{task.number}:fingerprint:{fingerprint}" if prior_record else None),
+                        effective_tdd_policy=(REUSE_ALLOWED if prior_record and task.tdd_policy == "REQUIRED" else task.tdd_policy),
                     ),
                 )
                 future = executor.submit(

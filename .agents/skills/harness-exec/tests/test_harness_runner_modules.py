@@ -32,7 +32,14 @@ def task(number: int, *, prerequisites: tuple[int, ...] = ()) -> Task:
     )
 
 
-def worker_result(*, quality_score: object = 90, decision: str = "PASS") -> object:
+def worker_result(
+    *,
+    quality_score: object = 90,
+    decision: str = "PASS",
+    effective_tdd_policy: str = "REQUIRED",
+    prior_evidence_id: str | None = None,
+    fingerprint: str | None = None,
+) -> object:
     class Result:
         returncode = 0
         output_error = ""
@@ -51,8 +58,18 @@ def worker_result(*, quality_score: object = 90, decision: str = "PASS") -> obje
             "final_status": "PASS",
             "quality_score": quality_score,
         }
-
-    return Result()
+    response = Result()
+    tdd_gate = {
+        "effective_policy": effective_tdd_policy,
+        "current_verification_evidence": "current regression",
+    }
+    if effective_tdd_policy == "REUSE_ALLOWED":
+        tdd_gate["reused_evidence"] = {
+            "record_id": prior_evidence_id,
+            "fingerprint": fingerprint,
+        }
+    response.output["mandatory_gates"]["tdd"].update(tdd_gate)
+    return response
 
 
 class RevisionEvidenceTests(unittest.TestCase):
@@ -140,7 +157,11 @@ class RevisionEvidenceTests(unittest.TestCase):
         report = execute_workers(
             self.plan,
             HarnessRequest("rerun-plan-01", start_task_number=2),
-            lambda invocation: calls.append(invocation.task.number) or worker_result(),
+            lambda invocation: calls.append(invocation.task.number) or worker_result(
+                effective_tdd_policy=invocation.execution_context.effective_tdd_policy,
+                prior_evidence_id=invocation.execution_context.prior_evidence_id,
+                fingerprint=invocation.execution_context.fingerprint,
+            ),
             project_root=self.root,
             record_store=self.store,
         )

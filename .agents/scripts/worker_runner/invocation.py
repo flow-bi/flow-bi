@@ -96,6 +96,7 @@ def _result_contract(
             "tdd": {
                 "result": "PASS | FAIL | N/A",
                 "evidence": "근거",
+                "effective_policy": "실행 컨텍스트의 effective_tdd_policy",
                 "reason": "N/A인 경우 필수 사유",
                 "reused_evidence": {
                     "record_id": "재사용한 실행 기록 ID 또는 null",
@@ -165,6 +166,8 @@ def _execution_context(invocation: dict[str, Any], number: int) -> ExecutionCont
             "fingerprint": "unknown",
             "mode": EXISTING_WITHOUT_EVIDENCE,
             "prior_tdd_evidence": None,
+            "prior_evidence_id": None,
+            "effective_tdd_policy": "REQUIRED",
         }
     if not isinstance(raw_context, dict):
         raise ValueError("실행 컨텍스트 형식이 유효하지 않습니다.")
@@ -173,6 +176,8 @@ def _execution_context(invocation: dict[str, Any], number: int) -> ExecutionCont
     fingerprint = raw_context.get("fingerprint")
     mode = raw_context.get("mode")
     prior_evidence = raw_context.get("prior_tdd_evidence")
+    prior_evidence_id = raw_context.get("prior_evidence_id")
+    effective_tdd_policy = raw_context.get("effective_tdd_policy", "REQUIRED")
     if not isinstance(plan_id, str) or not plan_id.strip():
         raise ValueError("실행 컨텍스트의 plan_id가 유효하지 않습니다.")
     if not isinstance(fingerprint, str) or not fingerprint.strip():
@@ -180,24 +185,29 @@ def _execution_context(invocation: dict[str, Any], number: int) -> ExecutionCont
     if mode not in EXECUTION_MODES:
         raise ValueError("실행 컨텍스트의 mode가 유효하지 않습니다.")
     if mode == RERUN:
-        if not _valid_prior_tdd_evidence(prior_evidence):
+        if not _valid_prior_tdd_evidence(prior_evidence) or not isinstance(prior_evidence_id, str) or not prior_evidence_id.strip() or effective_tdd_policy != "REUSE_ALLOWED":
             raise ValueError("동일 리비전 재실행에는 검증된 선행 TDD 증거가 필요합니다.")
-    elif prior_evidence is not None:
+    elif prior_evidence is not None or prior_evidence_id is not None:
         raise ValueError("변경되었거나 증거 없는 리비전에는 선행 TDD 증거를 재사용할 수 없습니다.")
+    if effective_tdd_policy not in {"REQUIRED", "REUSE_ALLOWED", "REGRESSION_ONLY", "NOT_APPLICABLE"}:
+        raise ValueError("실행 컨텍스트의 유효 TDD 정책이 유효하지 않습니다.")
 
     return {
         "plan_id": plan_id,
         "fingerprint": fingerprint,
         "mode": mode,
         "prior_tdd_evidence": prior_evidence,
-        "prior_evidence_id": (
-            _record_id(plan_id, number, fingerprint) if mode == RERUN else None
-        ),
+        "prior_evidence_id": prior_evidence_id,
+        "effective_tdd_policy": effective_tdd_policy,
     }
 
 
 def _execution_guidance(context: ExecutionContext) -> str:
     mode = context["mode"]
+    if context["effective_tdd_policy"] == "REGRESSION_ONLY":
+        return "통합 회귀·최종 검증 Task입니다. 새로운 Red 재현은 요구하지 않습니다. 현재 회귀 검증을 실행하고 `tdd.current_verification_evidence`에 근거를 기록하십시오. `tdd.effective_policy`는 `REGRESSION_ONLY`로 기록해야 하며, 근거가 없으면 PASS로 보고하지 마십시오."
+    if context["effective_tdd_policy"] == "NOT_APPLICABLE":
+        return "문서·단순 설정 Task입니다. TDD Gate를 N/A로 기록하고 비어 있지 않은 적용 제외 사유와 대체 검증 근거를 `tdd.current_verification_evidence`에 기록하십시오. `tdd.effective_policy`는 `NOT_APPLICABLE`로 기록해야 하며, 둘 중 하나라도 없으면 PASS로 보고하지 마십시오."
     if mode == RERUN:
         return (
             "동일 Task 계약 fingerprint 재실행입니다. 제공된 `prior_tdd_evidence`와 `prior_evidence_id`는 "
@@ -266,7 +276,15 @@ def parse_invocation(raw_invocation: str) -> InvocationResult:
     allowed_paths = tuple(task["allowed_paths"])
     forbidden_paths = tuple(task["forbidden_paths"])
     verification_items = tuple(task["verification_items"])
+    declared_tdd_policy = task.get("tdd_policy", "REQUIRED")
+    if declared_tdd_policy not in {"REQUIRED", "REGRESSION_ONLY", "NOT_APPLICABLE"}:
+        raise ValueError("Task의 선언 TDD 정책이 유효하지 않습니다.")
     execution_context = _execution_context(invocation, number)
+    if execution_context["effective_tdd_policy"] != declared_tdd_policy and not (
+        execution_context["effective_tdd_policy"] == "REUSE_ALLOWED"
+        and declared_tdd_policy == "REQUIRED"
+    ):
+        raise ValueError("선언 TDD 정책과 실행 유효 정책이 일치하지 않습니다.")
     decision_correction_guidance = _decision_correction_guidance(
         invocation.get("decision_correction")
     )

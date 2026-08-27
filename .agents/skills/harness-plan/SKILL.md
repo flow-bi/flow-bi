@@ -93,6 +93,9 @@ activePlan의 Task는 worker가 직접 수행할 수 있는 구현 작업이어�
 
 ## TDD 규칙
 
+- 모든 Task에는 `#### TDD 정책` 섹션과 하나의 선언값이 필요하다. 선언값은 `REQUIRED`, `REGRESSION_ONLY`, `NOT_APPLICABLE`만 허용한다.
+- `REQUIRED`는 신규 기능·버그 수정에 사용하며 `Red → Green → Refactor` 증거를 요구한다. 동일 Task 계약 fingerprint의 검증된 선행 증거가 있는 재실행에서만 실행기가 유효 정책을 `REUSE_ALLOWED`로 전환한다.
+- `REGRESSION_ONLY`는 통합 회귀·최종 검증에 사용하며 현재 회귀 검증 증거를 요구한다. `NOT_APPLICABLE`은 문서·단순 설정에 사용하며 적용 제외 사유와 대체 검증 증거를 요구한다.
 - 기능 구현 Task는 실패 테스트 작성, 최소 구현, 리팩터링 순서로 작성한다.
 - 테스트와 해당 기능 구현은 같은 Task에 포함한다.
 - 각 Task는 자신의 구현 범위에 해당하는 테스트만 실행한다.
