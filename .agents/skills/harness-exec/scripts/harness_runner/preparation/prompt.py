@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 from typing import Mapping
 
-from ..models import TaskExecutionContext, TaskInvocation
+from ..models import Task, TaskExecutionContext, TaskInvocation
 
 
 HARNESS_PROMPT_FILE = Path(__file__).with_name("prompt.md")
@@ -80,8 +80,9 @@ class WorkerPromptTemplate:
     def load(cls, harness_prompt_file: Path = HARNESS_PROMPT_FILE, worker_guidance_file: Path = WORKER_GUIDANCE_FILE) -> "WorkerPromptTemplate":
         return cls(_load_sections(harness_prompt_file, _HARNESS_SECTIONS), _load_sections(worker_guidance_file, _WORKER_SECTIONS))
 
-    def prepare_task(self, invocation: TaskInvocation) -> PreparedWorkerPrompt:
-        task = invocation.task
+    def prepare_task(self, task: Task | TaskInvocation) -> PreparedWorkerPrompt:
+        if isinstance(task, TaskInvocation):
+            task = task.task
         return PreparedWorkerPrompt(task.number, select_worker_guidance(task.allowed_paths, self.worker_guidance_sections), build_result_contract(task.number, task.verification_items, sections=self.harness_sections))
 
     def render(self, invocation: TaskInvocation, prepared: PreparedWorkerPrompt) -> str:

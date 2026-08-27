@@ -10,17 +10,16 @@ from .planning.invocation import parse_cli_invocation
 from .planning.paths import PROJECT_ROOT
 from .planning.plan import complete_plan, load_active_plan
 
+from .preparation.prompt import WorkerPromptTemplate
+from .preparation.runtime import (
+    prepare_common_worker_runtime,
+    prepare_worker_tasks,
+)
+
 from .execution.coordinator import execute_workers
 
-from .preparation.gateway import create_worker_gateway
-from .preparation.prompt import WorkerPromptTemplate
-from .preparation.runtime import prepare_worker_runtime
 from .results.notion import NotionPublicationError, publish_report
 from .results.report import build_execution_report
-
-from worker_runner.backend_verifier import BackendVerifier
-from worker_runner.frontend_verifier import FrontendVerifier
-
 
 def _print_console(message: object, *, file=None) -> None:
     stream = sys.stdout if file is None else file
@@ -70,44 +69,27 @@ def main(argv: Sequence[str] | None = None) -> int:
         _print_console(f"plan 준비 실패: {error}", file=sys.stderr)
         return 1
 
-    # worker 실행 준비 
-    worker_executable: str | None = None
-    with (
-        BackendVerifier(PROJECT_ROOT) as backend_verifier,
-        FrontendVerifier(PROJECT_ROOT) as frontend_verifier,
-    ):
-        gateway = create_worker_gateway(
-            PROJECT_ROOT,
-            runtime=prepare_worker_runtime(PROJECT_ROOT),
-            prompt_template=WorkerPromptTemplate.load(),
-        )
-        worker_executable = gateway.runtime.executable
+    # Worker 전체에서 공유할 실행 환경과 Prompt 원본을 준비
+    common_runtime = prepare_common_worker_runtime()
+    prompt_template = WorkerPromptTemplate.load()
 
-        def worker_call(invocation):
-            allowed_paths = invocation.task.allowed_paths
-            frontend_environment = (
-                frontend_verifier.environment
-                if isinstance(allowed_paths, tuple) and any(
-                    path == "frontend" or path.startswith("frontend/")
-                    for path in allowed_paths
-                )
-                else {}
-            )
-            return gateway.invoke_task(
-                invocation,
-                environment_overrides={
-                    **backend_verifier.environment_for_task(
-                        invocation.task.allowed_paths,
-                        invocation.task.read_only_paths,
-                    ),
-                    **frontend_environment,
-                },
-            )
+    prepared_workers = prepare_worker_tasks(
+        plan.tasks,
+        common_runtime=common_runtime,
+        prompt_template=prompt_template,
+    )
 
-        report = execute_workers(plan, request, call_worker=worker_call)
+    report = execute_workers(
+        plan,
+        request,
+        prepared_workers=prepared_workers,
+        project_root=PROJECT_ROOT
+    )
 
     rendered_report = build_execution_report(request.plan_id, report)
     _print_console(rendered_report.body)
+
+    worker_executable = common_runtime.executable
     try:
         published_page = publish_report(
             rendered_report.title,

@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 import subprocess
 
 from ..models import Task, TaskInvocation, TaskResult
+from ..preparation.runtime import PreparedWorkerTask
 from ..results.evidence import EvidenceRecordError, ExecutionRecordStore
 from ..results.worker_result import completion_error, decision_correction, needs_decision_correction, return_code, task_result_from_worker
-
-
-WorkerInvoker = Callable[[TaskInvocation], object]
 
 
 def _worker_output(result: object) -> dict[str, object] | None:
@@ -17,50 +14,81 @@ def _worker_output(result: object) -> dict[str, object] | None:
 
 
 def _record_failure(task: Task, code: int | None, output: dict[str, object] | None, error: Exception) -> TaskResult:
-    message = f"\uc2e4\ud589 \uae30\ub85d \uc800\uc7a5 \uc2e4\ud328: {error}"
+    message = f"실행 기록 저장 실패: {error}"
     return task_result_from_worker(task, "failed", code, False, message, output)
 
 
-def execute_task(task: Task, invocation: TaskInvocation, call_worker: WorkerInvoker, store: ExecutionRecordStore) -> TaskResult:
+def execute_task(
+    task: Task,
+    invocation: TaskInvocation,
+    prepared_worker: PreparedWorkerTask,
+    store: ExecutionRecordStore,
+) -> TaskResult:
+
     """Run one Worker invocation, correct its decision once, and persist PASS evidence."""
     try:
-        result = call_worker(invocation)
+        result = prepared_worker.execute(invocation)
+
     except subprocess.TimeoutExpired as error:
-        return task_result_from_worker(task, "failed", 124, True, str(error), None)
+        message = (
+            "Worker 실행 시간이 제한을 초과"
+            f"제한 시간 : {error.timeout}초, 상세 오류 : {error}"
+        )
+        return task_result_from_worker(task, "failed", 124, True, message, None)
+
     except subprocess.CalledProcessError as error:
+        message = (
+            "Worker 프로세스가 비정상 종료되었습니다. "
+            f"종료 코드: {error.returncode}, 상세 오류: {error}"
+        )
         return task_result_from_worker(task, "failed", error.returncode, False, str(error), None)
+
     except Exception as error:
+        message = (
+            "Worker 실행 중 예상하지 못한 예외가 발생했습니다. "
+            f"예외 종류: {type(error).__name__}, 상세 오류: {error}"
+        )
         return task_result_from_worker(task, "failed", None, False, str(error), None)
 
     output = _worker_output(result)
     code = return_code(result)
+
     if code:
-        return task_result_from_worker(task, "failed", code, False, f"Worker \uc885\ub8cc \ucf54\ub4dc {code}", output)
+        return task_result_from_worker(task, "failed", code, False, f"Worker 종료 코드 {code}", output)
 
     message = completion_error(task, result)
+
     if message and not needs_decision_correction(task, result):
         return task_result_from_worker(task, "failed", code, False, message, output)
+
     if message:
         try:
-            result = call_worker(decision_correction(invocation, result))
+            result = prepared_worker.execute(decision_correction(invocation, result))
         except subprocess.TimeoutExpired as error:
             return task_result_from_worker(task, "failed", 124, True, str(error), output)
         except subprocess.CalledProcessError as error:
             return task_result_from_worker(task, "failed", error.returncode, False, str(error), output)
         except Exception as error:
             return task_result_from_worker(task, "failed", None, False, str(error), output)
+
         output = _worker_output(result)
         code = return_code(result)
+
         if code:
-            return task_result_from_worker(task, "failed", code, False, "\ud310\uc815 \uad50\uc815 \uc694\uccad Worker \ud638\ucd9c\uc774 \uc2e4\ud328\ud588\uc2b5\ub2c8\ub2e4.", output)
+            return task_result_from_worker(task, "failed", code, False, "재시도 Worker 호출이 실패했습니다..", output)
         corrected_message = completion_error(task, result)
         if corrected_message:
-            return task_result_from_worker(task, "failed", code, False, f"\ud310\uc815 \uad50\uc815 \ud6c4\uc5d0\ub3c4 \uc644\ub8cc \uacc4\uc57d\uc744 \ucda9\uc871\ud558\uc9c0 \uc54a\uc2b5\ub2c8\ub2e4: {corrected_message}", output)
+            return task_result_from_worker(task, "failed", code, False, f"재시도 후에도 완료되지 못했습니다.: {corrected_message}", output)
 
     if output is None:
-        return task_result_from_worker(task, "failed", code, False, "Worker \uacb0\uacfc JSON\uc774 \uc720\ud6a8\ud558\uc9c0 \uc54a\uc2b5\ub2c8\ub2e4.", None)
+        return task_result_from_worker(task, "failed", code, False, "Worker 결과 JSON이 유효하지 않습니다.", None)
     try:
-        store.save(invocation.execution_context.plan_id, task, invocation.execution_context.fingerprint, output)
+        store.save(
+            invocation.execution_context.plan_id,
+            task,
+            invocation.execution_context.fingerprint,
+            output,
+        )
     except (OSError, EvidenceRecordError) as error:
         return _record_failure(task, code, output, error)
     return task_result_from_worker(task, "succeeded", code, False, "", output)
