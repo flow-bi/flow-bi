@@ -73,6 +73,7 @@ class BackendVerifier:
         self._wrapper_name = "gradlew.bat" if os_name == "nt" else "gradlew"
         self._gradlew = self._backend / self._wrapper_name
         self._runner, self._timeout = runner, timeout
+        self._base_environment = self._prepare_base_environment()
         self._token = secrets.token_urlsafe(32)
         self._formatter_tokens: dict[str, FormatterScope] = {}
         self._formatter = BackendFormatter(self._root, self._backend, self._wrapper_name, runner, self._subprocess_environment)
@@ -97,11 +98,15 @@ class BackendVerifier:
         host, port = self._server.server_address
         return {**self.environment, BACKEND_FORMATTER_URL: f"http://{host}:{port}/format/java", BACKEND_VERIFIER_TOKEN: token}
 
-    def _subprocess_environment(self) -> dict[str, str]:
+    @staticmethod
+    def _prepare_base_environment() -> dict[str, str]:
         environment = os.environ.copy()
         for key in (BACKEND_VERIFIER_URL, BACKEND_VERIFIER_TOKEN, BACKEND_FORMATTER_URL):
             environment.pop(key, None)
         return environment
+
+    def _subprocess_environment(self) -> dict[str, str]:
+        return self._base_environment.copy()
 
     def _run_single_flight(self, key: tuple[object, ...], operation: Callable[[], BackendVerificationResult]) -> BackendVerificationResult | None:
         with self._in_flight_lock:

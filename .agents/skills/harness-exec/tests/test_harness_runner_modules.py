@@ -17,6 +17,7 @@ from harness_runner.models import HarnessRequest, ParsedPlan, Task
 from harness_runner.worker_result import completion_error, needs_decision_correction
 from harness_runner.invocation import parse_invocation
 from harness_runner.state import PlanStateStore, StateRecordError
+from harness_runner.scheduling import block_failed_dependents, build_task_graph
 
 
 def task(number: int, *, prerequisites: tuple[int, ...] = ()) -> Task:
@@ -106,9 +107,9 @@ class RevisionEvidenceTests(unittest.TestCase):
         self.assertEqual(calls, [1, 2, 2])
         self.assertTrue(second.results[0].restored)
         self.assertFalse(second.results[1].restored)
-        state = self.state_store.load(self.request.plan_id, self.plan.tasks)
-        self.assertEqual(state["01"]["task1"], {"status": "succeeded"})
-        self.assertEqual(state["01"]["task2"], {"status": "succeeded"})
+        state = self.state_store.load_task_records(self.request.plan_id, self.plan.tasks)
+        self.assertEqual(state["task1"], {"status": "succeeded"})
+        self.assertEqual(state["task2"], {"status": "succeeded"})
 
     def test_feature_state_uses_one_root_object_and_preserves_parallel_updates(self) -> None:
         other = HarnessRequest("rerun-plan-02")
@@ -152,12 +153,28 @@ class RevisionEvidenceTests(unittest.TestCase):
         path.parent.mkdir(parents=True)
         path.write_text("[]", encoding="utf-8")
         with self.assertRaises(StateRecordError):
-            self.state_store.load(self.request.plan_id, self.plan.tasks)
+            self.state_store.load_task_records(self.request.plan_id, self.plan.tasks)
         path.write_text('{"01":{"task1":{"status":"failed"}}}', encoding="utf-8")
         with self.assertRaises(StateRecordError):
-            self.state_store.load(self.request.plan_id, self.plan.tasks)
+            self.state_store.load_task_records(self.request.plan_id, self.plan.tasks)
         with self.assertRaises(ValueError):
             self.state_store.update(self.request.plan_id, task(1), "succeeded", reason="evidence")
+
+    def test_invalid_plan_id_is_a_state_record_error_and_load_has_no_public_wrapper(self) -> None:
+        with self.assertRaises(StateRecordError):
+            self.state_store.load_task_records("invalid", self.plan.tasks)
+        self.assertFalse(hasattr(self.state_store, "load"))
+
+    def test_reverse_dependency_index_blocks_only_affected_descendants(self) -> None:
+        tasks = (task(1), task(2, prerequisites=(1,)), task(3, prerequisites=(2,)), task(4))
+        graph = build_task_graph(tasks)
+        statuses = {1: "failed", 2: "pending", 3: "pending", 4: "pending"}
+        results = {}
+
+        blocked = block_failed_dependents(graph, statuses, results)
+
+        self.assertEqual(blocked, (2, 3))
+        self.assertEqual(statuses, {1: "failed", 2: "blocked", 3: "blocked", 4: "pending"})
 
     def test_from_task_reuses_prior_pass_records_without_invoking_earlier_workers(self) -> None:
         execute_workers(

@@ -69,6 +69,22 @@ class BackendVerifierTests(unittest.TestCase):
         self.assertEqual(runner.call_args.kwargs["cwd"], (self.root / "backend").resolve())
         self.assertFalse(runner.call_args.kwargs.get("shell", False))
 
+    def test_prepares_sanitized_base_environment_once_and_copies_it_per_request(self) -> None:
+        runner = mock.Mock(return_value=subprocess.CompletedProcess(["gradlew", "test"], 0, stdout="ok"))
+        with mock.patch(
+            "worker_runner.verifiers.backend_service.os.environ.copy",
+            wraps=os.environ.copy,
+        ) as environment_copy:
+            with BackendVerifier(self.root, runner=runner, os_name="posix") as verifier:
+                request_backend_verification(["test"], verifier.environment)
+                first_environment = runner.call_args.kwargs["env"]
+                first_environment["REQUEST_ONLY"] = "first"
+                request_backend_verification(["compileJava"], verifier.environment)
+                second_environment = runner.call_args.kwargs["env"]
+
+        self.assertEqual(environment_copy.call_count, 1)
+        self.assertNotIn("REQUEST_ONLY", second_environment)
+
     def test_selects_platform_specific_gradle_wrapper(self) -> None:
         runner = mock.Mock(
             return_value=subprocess.CompletedProcess(["gradlew", "compileJava"], 0, stdout="ok")

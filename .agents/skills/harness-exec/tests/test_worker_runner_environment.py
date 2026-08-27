@@ -126,8 +126,30 @@ class WorkerRunnerPublicContractTests(unittest.TestCase):
         import worker_runner.runner as runner
 
         self.assertTrue(callable(runner.build_codex_command))
-        self.assertTrue(callable(runner.execute_worker))
         self.assertTrue(callable(runner.execute_prepared_worker))
+        self.assertFalse(hasattr(runner, "execute_worker"))
+
+    def test_worker_guidance_owns_only_execution_and_verifier_instructions(self) -> None:
+        guidance_path = SCRIPTS / "worker_runner" / "worker-guidance.md"
+        legacy_harness_prompt = SCRIPTS / "worker_runner" / "worker-prompt.md"
+
+        guidance = guidance_path.read_text(encoding="utf-8")
+
+        for section in (
+            "worker-execution-guidance",
+            "backend-verification-guidance",
+            "backend-formatting-guidance",
+            "frontend-verification-guidance",
+        ):
+            self.assertIn(section, guidance)
+        for harness_policy in (
+            "execution-context",
+            "prior_tdd_evidence",
+            "decision-correction",
+            "result-contract",
+        ):
+            self.assertNotIn(harness_policy, guidance)
+        self.assertFalse(legacy_harness_prompt.exists())
 
 
 class WorkerExecutionContractTests(unittest.TestCase):
@@ -144,26 +166,11 @@ class WorkerExecutionContractTests(unittest.TestCase):
 
     def test_returns_worker_json_and_cleans_isolated_files(self) -> None:
         import worker_runner.runner as runner_module
-        from worker_runner.prompt import build_worker_prompt, load_prompt_sections
+        from worker_runner.paths import build_worker_paths
+        from worker_runner.runtime import WorkerRuntime, WorkerTaskRuntime
 
         logger = mock.Mock()
-        prompt = build_worker_prompt(
-            sections=load_prompt_sections(),
-            common_prompt="common guidance",
-            additional_request="",
-            title="Task title",
-            task_prompt="Implement the task.",
-            number=1,
-            verification_items=("unit test",),
-            execution_context={
-                "plan_id": "harness-03",
-                "fingerprint": "fingerprint",
-                "mode": "new_or_changed",
-                "prior_tdd_evidence": None,
-                "prior_evidence_id": None,
-            },
-            decision_correction=None,
-        )
+        prompt = "final prompt from harness"
 
         def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
             self.assertEqual(kwargs["input"], prompt)
@@ -175,14 +182,11 @@ class WorkerExecutionContractTests(unittest.TestCase):
             "build_codex_command",
             side_effect=lambda **kwargs: ["codex", "exec", "-o", str(kwargs["output_path"])],
         ):
-            result = runner_module.execute_worker(
-                prompt,
-                (".agents",),
-                (),
-                task_number=1,
-                project_root=self.root,
-                runner=run,
-                logger=logger,
+            runtime = WorkerRuntime(self.root, "codex", self.root / ".codex", {}, {}, (), build_worker_paths(self.root), process_runner=run, logger=logger)
+            result = runner_module.execute_prepared_worker(
+                prompt=prompt,
+                task_runtime=WorkerTaskRuntime(runtime, "1", (".agents",), (), {}, ()),
+                run_id="run-1",
             )
 
         self.assertEqual(result.output, {"final_status": "PASS"})
@@ -204,15 +208,13 @@ class WorkerExecutionContractTests(unittest.TestCase):
             side_effect=lambda **kwargs: ["codex", "exec", "-o", str(kwargs["output_path"])],
         ):
             with self.assertRaises(subprocess.TimeoutExpired):
-                runner_module.execute_worker(
-                    "task",
-                    (".agents",),
-                    (),
-                    task_number=1,
-                    project_root=self.root,
-                    runner=run,
-                    logger=logger,
-                    timeout=1,
+                from worker_runner.paths import build_worker_paths
+                from worker_runner.runtime import WorkerRuntime, WorkerTaskRuntime
+                runtime = WorkerRuntime(self.root, "codex", self.root / ".codex", {}, {}, (), build_worker_paths(self.root), timeout=1, process_runner=run, logger=logger)
+                runner_module.execute_prepared_worker(
+                    prompt="task",
+                    task_runtime=WorkerTaskRuntime(runtime, "1", (".agents",), (), {}, ()),
+                    run_id="run-timeout",
                 )
 
         self.assertEqual(logger.call_args.args[1], 124)

@@ -1,9 +1,24 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import heapq
 
 from .models import Task, TaskResult
-from .state import PlanStateStore, StateRecordError
+
+
+@dataclass(frozen=True)
+class TaskGraph:
+    tasks: dict[int, Task]
+    dependents: dict[int, tuple[int, ...]]
+
+
+def build_task_graph(tasks: tuple[Task, ...]) -> TaskGraph:
+    indexed = {task.number: task for task in tasks}
+    dependents: dict[int, list[int]] = {number: [] for number in indexed}
+    for task in tasks:
+        for prerequisite in task.prerequisite_numbers:
+            dependents.setdefault(prerequisite, []).append(task.number)
+    return TaskGraph(indexed, {number: tuple(values) for number, values in dependents.items()})
 
 
 def restore_succeeded_tasks(tasks: tuple[Task, ...], records: dict[str, object], statuses: dict[int, str], results: dict[int, TaskResult]) -> None:
@@ -14,22 +29,26 @@ def restore_succeeded_tasks(tasks: tuple[Task, ...], records: dict[str, object],
             results[task.number] = TaskResult(task.number, task.title, "succeeded", message="이전 실행의 완료 상태를 복원했습니다.", restored=True)
 
 
-def block_failed_dependents(tasks: dict[int, Task], statuses: dict[int, str], results: dict[int, TaskResult], states: PlanStateStore, plan_id: str) -> None:
-    changed = True
-    while changed:
-        changed = False
-        for number, task in sorted(tasks.items()):
-            failed = tuple(dependency for dependency in task.prerequisite_numbers if statuses.get(dependency) in {"failed", "blocked"})
-            if statuses[number] != "pending" or not failed:
+def block_failed_dependents(graph: TaskGraph, statuses: dict[int, str], results: dict[int, TaskResult]) -> tuple[int, ...]:
+    """Block only descendants of failed nodes using the cohort reverse index."""
+    pending = [number for number, status in statuses.items() if status in {"failed", "blocked"}]
+    visited: set[int] = set()
+    blocked: list[int] = []
+    while pending:
+        failed = pending.pop(0)
+        for number in graph.dependents.get(failed, ()):
+            if number in visited or statuses.get(number) != "pending":
                 continue
-            message = "실패하거나 차단된 선행 Task: " + ", ".join(f"Task {dependency}" for dependency in failed)
+            visited.add(number)
+            task = graph.tasks[number]
+            failed_prerequisites = tuple(dependency for dependency in task.prerequisite_numbers if statuses.get(dependency) in {"failed", "blocked"})
+            if not failed_prerequisites:
+                continue
             statuses[number] = "blocked"
-            try:
-                states.update(plan_id, task, "blocked", reason=message)
-            except StateRecordError as error:
-                message = f"{message}; 상태 기록 저장 실패: {error}"
-            results[number] = TaskResult(number, task.title, "blocked", message=message)
-            changed = True
+            results[number] = TaskResult(number, task.title, "blocked", message="실패하거나 차단된 선행 Task: " + ", ".join(f"Task {dependency}" for dependency in failed_prerequisites))
+            blocked.append(number)
+            pending.append(number)
+    return tuple(blocked)
 
 
 def ready_task_numbers(tasks: dict[int, Task], statuses: dict[int, str]) -> list[int]:

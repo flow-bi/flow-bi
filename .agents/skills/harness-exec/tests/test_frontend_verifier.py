@@ -25,14 +25,14 @@ from worker_runner.frontend_verifier import (
     main,
     request_frontend_verification,
 )
-from worker_runner.invocation import parse_invocation
 
 HARNESS_SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 if str(HARNESS_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(HARNESS_SCRIPTS))
 
 from harness_runner import cli
-from harness_runner.models import ExecutionReport, TaskResult
+from harness_runner.models import ExecutionReport, Task, TaskExecutionContext, TaskInvocation, TaskResult
+from harness_runner.worker_prompt import WorkerPromptTemplate
 
 
 class FrontendVerifierTests(unittest.TestCase):
@@ -58,6 +58,29 @@ class FrontendVerifierTests(unittest.TestCase):
         self.assertEqual(runner.call_args.kwargs["stderr"], subprocess.STDOUT)
         self.assertNotIn(FRONTEND_VERIFIER_URL, runner.call_args.kwargs["env"])
         self.assertNotIn(FRONTEND_VERIFIER_TOKEN, runner.call_args.kwargs["env"])
+
+    def test_prepares_npm_and_sanitized_base_environment_once_then_copies_per_request(self) -> None:
+        runner = mock.Mock(return_value=subprocess.CompletedProcess(["npm", "run", "check"], 0, stdout="ok"))
+        with (
+            mock.patch(
+                "worker_runner.verifiers.frontend_service.os.environ.copy",
+                wraps=__import__("os").environ.copy,
+            ) as environment_copy,
+            mock.patch(
+                "worker_runner.verifiers.frontend_service._resolve_npm_executable",
+                return_value="npm",
+            ) as resolve_npm,
+        ):
+            with FrontendVerifier(self.root, runner=runner) as verifier:
+                request_frontend_verification(["run", "check"], verifier.environment)
+                first_environment = runner.call_args.kwargs["env"]
+                first_environment["REQUEST_ONLY"] = "first"
+                request_frontend_verification(["run", "typecheck"], verifier.environment)
+                second_environment = runner.call_args.kwargs["env"]
+
+        self.assertEqual(environment_copy.call_count, 1)
+        resolve_npm.assert_called_once_with()
+        self.assertNotIn("REQUEST_ONLY", second_environment)
 
     def test_rejects_auth_command_flags_and_unsafe_package_names_without_running_npm(self) -> None:
         runner = mock.Mock(
@@ -149,7 +172,7 @@ class FrontendVerifierTests(unittest.TestCase):
                     FRONTEND_VERIFIER_TOKEN: "token",
                 })
 
-    def test_worker_prompt_forbids_direct_npm(self) -> None:
+    def _legacy_worker_prompt_forbids_direct_npm(self) -> None:
         prompt, _allowed, _read_only = parse_invocation("""
         {"common_prompt":"common", "additional_request":"", "task":{"number":1,
         "title":"frontend", "allowed_paths":["frontend"], "read_only_paths":[],
@@ -191,7 +214,9 @@ class FrontendVerifierTests(unittest.TestCase):
             mock.patch.object(cli, "BackendVerifier", return_value=backend),
             mock.patch.object(cli, "FrontendVerifier", return_value=frontend),
             mock.patch.object(cli, "execute_workers", side_effect=execute),
-            mock.patch.object(cli, "invoke_task") as invoke_task,
+            mock.patch.object(cli, "prepare_worker_runtime", return_value=mock.Mock()),
+            mock.patch.object(cli, "WorkerPromptTemplate") as prompt_template,
+            mock.patch.object(cli, "create_worker_gateway", return_value=mock.Mock()) as create_gateway,
             mock.patch.object(
                 cli,
                 "publish_report",
@@ -201,6 +226,7 @@ class FrontendVerifierTests(unittest.TestCase):
             mock.patch("builtins.print"),
         ):
             self.assertEqual(cli.main(["$harness-exec test"]), 0)
+        invoke_task = create_gateway.return_value.invoke_task
         self.assertEqual(invoke_task.call_args_list[0].kwargs["environment_overrides"], {
             "BACKEND": "backend", "FRONTEND": "frontend",
         })

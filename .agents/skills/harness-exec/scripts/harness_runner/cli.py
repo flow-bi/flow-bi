@@ -9,7 +9,10 @@ from .models import ExecutionReport, PlanValidationError, TaskResult
 from .notion import NotionPublicationError, publish_report
 from .plan import complete_plan, load_active_plan, repository_root
 from .report import build_execution_report
-from .worker_gateway import invoke_task
+from .worker_gateway import create_worker_gateway
+from .worker_prompt import WorkerPromptTemplate
+
+from worker_runner import prepare_worker_runtime
 
 from worker_runner.backend_verifier import BackendVerifier
 from worker_runner.frontend_verifier import FrontendVerifier
@@ -75,12 +78,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         path for task in tasks.tasks for path in task.read_only_paths
     )
     acl_paths = worker_permission_paths(writable_paths, read_only_paths)
+    worker_executable: str | None = None
     try:
         with (
             preserve_windows_acls(root, acl_paths),
             BackendVerifier(root) as backend_verifier,
             FrontendVerifier(root) as frontend_verifier,
         ):
+            gateway = create_worker_gateway(
+                root,
+                runtime=prepare_worker_runtime(root),
+                prompt_template=WorkerPromptTemplate.load(),
+            )
+            worker_executable = gateway.runtime.executable
             def worker_call(invocation):
                 allowed_paths = invocation.task.allowed_paths
                 frontend_environment = (
@@ -91,7 +101,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     )
                     else {}
                 )
-                return invoke_task(
+                return gateway.invoke_task(
                     invocation,
                     environment_overrides={
                         **backend_verifier.environment_for_task(
@@ -114,6 +124,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             rendered_report.title,
             rendered_report.body,
             project_root=root,
+            executable=worker_executable,
         )
     except NotionPublicationError as error:
         for failure in report.failures:

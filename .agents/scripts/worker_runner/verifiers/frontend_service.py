@@ -37,7 +37,8 @@ def validate_npm_arguments(arguments: object) -> tuple[str, ...]:
 
 class FrontendVerifier:
     def __init__(self, project_root: Path, *, runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run, npm_executable: str | None = None, timeout: int = DEFAULT_FRONTEND_TIMEOUT_SECONDS) -> None:
-        self._frontend, self._runner, self._npm, self._timeout = (project_root.resolve() / "frontend").resolve(), runner, npm_executable, timeout
+        self._frontend, self._runner, self._npm, self._timeout = (project_root.resolve() / "frontend").resolve(), runner, npm_executable or _resolve_npm_executable(), timeout
+        self._base_environment = self._prepare_base_environment()
         self._token, self._lock = secrets.token_urlsafe(32), threading.Lock()
         self._server: ThreadingHTTPServer | None = None; self._server_thread: threading.Thread | None = None
     @property
@@ -45,12 +46,15 @@ class FrontendVerifier:
         if self._server is None: raise RuntimeError("Frontend verifier has not started")
         host, port = self._server.server_address
         return {FRONTEND_VERIFIER_URL: f"http://{host}:{port}/verify/npm", FRONTEND_VERIFIER_TOKEN: self._token}
-    def _environment(self) -> dict[str, str]:
+    @staticmethod
+    def _prepare_base_environment() -> dict[str, str]:
         environment = os.environ.copy(); environment.pop(FRONTEND_VERIFIER_URL, None); environment.pop(FRONTEND_VERIFIER_TOKEN, None); return environment
+    def _environment(self) -> dict[str, str]:
+        return self._base_environment.copy()
     def _verify_npm(self, arguments: tuple[str, ...]) -> FrontendVerificationResult | None:
         if not self._lock.acquire(blocking=False): return None
         try:
-            try: result = self._runner([self._npm or _resolve_npm_executable(), *arguments], cwd=self._frontend, env=self._environment(), timeout=self._timeout, text=True, encoding="utf-8", errors="replace", stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
+            try: result = self._runner([self._npm, *arguments], cwd=self._frontend, env=self._environment(), timeout=self._timeout, text=True, encoding="utf-8", errors="replace", stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
             except subprocess.TimeoutExpired as error: return FrontendVerificationResult(124, _timeout_output(error), timed_out=True)
             except OSError: return FrontendVerificationResult(1, "Frontend npm verification could not start.")
             return FrontendVerificationResult(result.returncode, result.stdout or "")
