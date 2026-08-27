@@ -1,13 +1,15 @@
 from __future__ import annotations
-
-from collections.abc import Sequence
 import sys
 
-from .invocation import parse_invocation
+from collections.abc import Sequence
+
+from .invocation import parse_cli_invocation
+from .paths import PROJECT_ROOT
+
 from .execution import execute_workers
 from .models import PlanValidationError, TaskResult
 from .notion import NotionPublicationError, publish_report
-from .plan import complete_plan, load_active_plan, repository_root
+from .plan import complete_plan, load_active_plan
 from .report import build_execution_report
 from .worker_gateway import create_worker_gateway
 from .worker_prompt import WorkerPromptTemplate
@@ -48,32 +50,30 @@ def _print_failure(failure: TaskResult) -> None:
         file=sys.stderr,
     )
 
-
+# 하네스 전체 흐름 담당
 def main(argv: Sequence[str] | None = None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
-    if len(arguments) != 1:
-        _print_console("오류: 전체 요청을 하나의 인자로 전달해야 합니다.", file=sys.stderr)
-        return 2
 
     try:
-        request = parse_invocation(arguments[0])
-        root = repository_root()
-        plan_path, tasks = load_active_plan(request.plan_id, root)
+        request = parse_cli_invocation(arguments)
+        plan_path, plan = load_active_plan(request.plan_id)
+
     except PlanValidationError as error:
         _print_console(f"검증 오류: {error}", file=sys.stderr)
         return 2
+    
     except OSError as error:
         _print_console(f"plan 준비 실패: {error}", file=sys.stderr)
         return 1
 
     worker_executable: str | None = None
     with (
-        BackendVerifier(root) as backend_verifier,
-        FrontendVerifier(root) as frontend_verifier,
+        BackendVerifier(PROJECT_ROOT) as backend_verifier,
+        FrontendVerifier(PROJECT_ROOT) as frontend_verifier,
     ):
         gateway = create_worker_gateway(
-            root,
-            runtime=prepare_worker_runtime(root),
+            PROJECT_ROOT,
+            runtime=prepare_worker_runtime(PROJECT_ROOT),
             prompt_template=WorkerPromptTemplate.load(),
         )
         worker_executable = gateway.runtime.executable
@@ -99,7 +99,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 },
             )
 
-        report = execute_workers(tasks, request, call_worker=worker_call)
+        report = execute_workers(plan, request, call_worker=worker_call)
 
     rendered_report = build_execution_report(request.plan_id, report)
     _print_console(rendered_report.body)
@@ -107,7 +107,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         published_page = publish_report(
             rendered_report.title,
             rendered_report.body,
-            project_root=root,
+            project_root=PROJECT_ROOT,
             executable=worker_executable,
         )
     except NotionPublicationError as error:
@@ -125,10 +125,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
 
     try:
-        destination = complete_plan(plan_path, root)
+        destination = complete_plan(plan_path)
     except OSError as error:
         _print_console(f"plan 실행은 완료했지만 plan 이동 실패: {error}", file=sys.stderr)
         return 1
 
-    _print_console(f"plan 완료: {destination.relative_to(root).as_posix()}")
+    _print_console(f"plan 완료: {destination.relative_to(PROJECT_ROOT).as_posix()}")
     return 0

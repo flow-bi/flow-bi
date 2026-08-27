@@ -22,7 +22,7 @@ TASK_PROMPT_SECTION_NAMES = {
     "남은 문제",
 }
 
-
+# task section 찾기 
 def _task_region(text: str) -> tuple[int, int]:
     task_section = TASK_SECTION_PATTERN.search(text)
     overall_section = OVERALL_SECTION_PATTERN.search(text)
@@ -30,13 +30,13 @@ def _task_region(text: str) -> tuple[int, int]:
     end = overall_section.start() if overall_section else len(text)
     return start, end
 
-
+# 공통 내용 추출 
 def _common_prompt(text: str, task_region_start: int) -> str:
     task_section = TASK_SECTION_PATTERN.search(text)
     basic_end = task_section.start() if task_section else task_region_start
     return text[:basic_end].strip()
 
-
+# 제목을 기준으로 세부 섹션 분리
 def _detail_sections(task_body: str) -> list[tuple[str, str, str]]:
     headings = list(DETAIL_HEADING_PATTERN.finditer(task_body))
     sections: list[tuple[str, str, str]] = []
@@ -86,17 +86,21 @@ def _minimum_quality_score(body: str) -> int | None:
 def parse_plan_text(text: str) -> ParsedPlan:
     region_start, region_end = _task_region(text)
     task_region = text[region_start:region_end]
+
     headings = list(TASK_HEADING_PATTERN.finditer(task_region))
+    
     tasks: list[Task] = []
     for index, heading in enumerate(headings):
         end = headings[index + 1].start() if index + 1 < len(headings) else len(task_region)
         sections = _detail_sections(task_region[heading.end() : end])
+
         prerequisite_body = _section_body(sections, "선행 Task")
         allowed_paths_body = _section_body(sections, "수정 가능 경로")
         read_only_paths_body = _section_body(sections, "수정 금지 경로")
         implementation_body = _section_body(sections, "구현 항목")
         verification_body = _section_body(sections, "검증 항목")
         completion_body = _section_body(sections, "완료 조건")
+
         task_prompt = "\n\n".join(
             raw for name, _, raw in sections if name in TASK_PROMPT_SECTION_NAMES
         )
