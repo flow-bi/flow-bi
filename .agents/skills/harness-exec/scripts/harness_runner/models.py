@@ -43,6 +43,7 @@ class TaskInvocation:
     task: Task
     execution_context: "TaskExecutionContext | None" = None
     decision_correction: dict[str, object] | None = None
+    verification_result_collection: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)

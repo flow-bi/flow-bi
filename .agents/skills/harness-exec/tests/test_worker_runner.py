@@ -21,7 +21,11 @@ from worker_runner.codex import (
 )
 from worker_runner.runner import execute_worker
 import worker_runner.runner as worker_runner_module
-from worker_runner.invocation import parse_invocation
+from worker_runner.invocation import (
+    BACKEND_VERIFICATION_GUIDANCE,
+    FRONTEND_VERIFICATION_GUIDANCE,
+    parse_invocation,
+)
 from worker_runner.config import load_config
 
 
@@ -237,18 +241,26 @@ class WorkerReadablePathTests(unittest.TestCase):
         self.assertIn(str(node_install), paths)
         self.assertIn(str(git_root), paths)
 
-    def test_worker_environment_uses_workspace_backed_tmpdir(self) -> None:
-        environment = build_subprocess_environment(
-            "test-run",
-            task_number=12,
-            base_environment={"PATH": os.environ.get("PATH", "")},
-            project_root=self.root,
-        )
+    def test_worker_environment_uses_run_scoped_system_tmpdir(self) -> None:
+        project_root = self.root / "workspace"
+        project_root.mkdir()
+        system_temp = self.root / "system-temp"
+        with mock.patch(
+            "worker_runner.codex.tempfile.gettempdir",
+            return_value=str(system_temp),
+        ):
+            environment = build_subprocess_environment(
+                "test-run",
+                task_number=12,
+                base_environment={"PATH": os.environ.get("PATH", "")},
+                project_root=project_root,
+            )
 
-        expected = self.root / ".agents" / "skills" / "harness-exec" / ".worker-tmp"
+        expected = system_temp / "flow-bi-harness-worker" / "test-run"
         self.assertEqual(environment["TEMP"], str(expected))
         self.assertEqual(environment["TMP"], str(expected))
         self.assertEqual(environment["TMPDIR"], str(expected))
+        self.assertFalse(expected.is_relative_to(project_root))
         self.assertEqual(
             environment["FLOW_BI_PYTHON_EXECUTABLE"],
             sys.executable,
@@ -292,15 +304,16 @@ class WorkerReadablePathTests(unittest.TestCase):
                         project_root=self.root,
                     )
 
-    def test_worker_temp_directory_keeps_recursive_write_permission(self) -> None:
-        config = load_config((), ("backend",))
+    def test_worker_temp_directory_gets_external_recursive_write_permission(self) -> None:
+        worker_temp = self.root / "system-temp" / "flow-bi-harness-worker" / "run-id"
+        config = load_config((), ("backend",), writable_directories=(str(worker_temp),))
+        filesystem = config["permissions"]["task-worker"]["filesystem"]
         workspace_permissions = config["permissions"]["task-worker"]["filesystem"][":workspace_roots"]
 
         self.assertEqual(workspace_permissions["backend"], "read")
-        self.assertEqual(
-            workspace_permissions[".agents/skills/harness-exec/.worker-tmp/**"],
-            "write",
-        )
+        self.assertNotIn(".agents/skills/harness-exec/.worker-tmp/**", workspace_permissions)
+        self.assertEqual(filesystem[str(worker_temp)], "write")
+        self.assertEqual(filesystem[f"{worker_temp}/**"], "write")
 
     def test_execute_worker_forwards_collected_paths_to_codex_permissions(self) -> None:
         readable_paths = ("/toolchain/node", "/toolchain/npm")
@@ -312,7 +325,7 @@ class WorkerReadablePathTests(unittest.TestCase):
             mock.patch.object(
                 worker_runner_module,
                 "build_subprocess_environment",
-                return_value={"PATH": ""},
+                return_value={"PATH": "", "TMPDIR": str(self.root / "worker-temp")},
             ) as build_environment,
             mock.patch.object(
                 worker_runner_module,
@@ -339,8 +352,12 @@ class WorkerReadablePathTests(unittest.TestCase):
             build_command.call_args.kwargs["readable_paths"],
             readable_paths,
         )
+        self.assertEqual(
+            build_command.call_args.kwargs["writable_directories"],
+            (str(self.root / "worker-temp"),),
+        )
         collect_paths.assert_called_once_with(
-            {"PATH": ""},
+            {"PATH": "", "TMPDIR": str(self.root / "worker-temp")},
             project_root=self.root,
         )
         self.assertEqual(
@@ -384,6 +401,7 @@ class WorkerExecutionTests(unittest.TestCase):
 
     def test_execute_worker_isolates_progress_streams_and_cleans_temporary_files(self) -> None:
         captured_streams: list[object] = []
+        captured_worker_temp: list[Path] = []
 
         def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
             stdout = kwargs["stdout"]
@@ -392,6 +410,10 @@ class WorkerExecutionTests(unittest.TestCase):
             self.assertNotIn(stdout, (None, subprocess.PIPE))
             stdout.write("progress that must stay internal\n")
             stdout.flush()
+            worker_temp = Path(kwargs["env"]["TMPDIR"])
+            (worker_temp / "nested").mkdir()
+            (worker_temp / "nested" / "artifact.txt").write_text("temporary", encoding="utf-8")
+            captured_worker_temp.append(worker_temp)
             self.output_path(command).write_text('{"final_status":"PASS"}', encoding="utf-8")
             captured_streams.append(stdout)
             return subprocess.CompletedProcess(command, 0)
@@ -411,6 +433,7 @@ class WorkerExecutionTests(unittest.TestCase):
         self.assertEqual(result.output, {"final_status": "PASS"})
         self.assertEqual(result.output_error, "")
         self.assertTrue(captured_streams[0].closed)
+        self.assertFalse(captured_worker_temp[0].exists())
         self.assertEqual(self.pending_files(), ())
 
     def test_execute_worker_returns_only_a_bounded_failure_log_tail(self) -> None:
@@ -622,6 +645,25 @@ class WorkerInvocationTests(unittest.TestCase):
                 self.assertIn("automated_verification` 또는 `decision`", prompt)
                 self.assertIn("최종 JSON에는 완료된 최신 검증 결과만", prompt)
 
+    def test_verifier_prompts_wait_for_in_flight_execution_before_rerunning(self) -> None:
+        prompt, _allowed, _forbidden = parse_invocation(
+            self.payload(
+                {
+                    "plan_id": "rerun-01",
+                    "fingerprint": "new-fingerprint",
+                    "mode": "new_or_changed",
+                    "prior_tdd_evidence": None,
+                }
+            )
+        )
+
+        for guidance in (BACKEND_VERIFICATION_GUIDANCE, FRONTEND_VERIFICATION_GUIDANCE):
+            with self.subTest(guidance=guidance):
+                self.assertIn("기존 실행을 wait/poll", guidance)
+                self.assertIn("같은 verifier CLI를 새 shell 명령으로 시작하지 마십시오", guidance)
+                self.assertIn("single-flight", guidance)
+                self.assertIn("최종 JSON에는 완료된 최신 검증 결과만", guidance)
+
     def test_same_revision_rerun_references_prior_evidence_and_current_regression(self) -> None:
         prompt, _allowed, _forbidden = parse_invocation(
             self.payload(
@@ -706,6 +748,25 @@ class WorkerInvocationTests(unittest.TestCase):
         self.assertIn("성공 판정은 정확히 `PASS`만", prompt)
         self.assertIn("제품 구현, 테스트, 검증을 다시 수행하거나 변경하지 마십시오", prompt)
         self.assertIn("PASS_WITH_FOLLOW_UP", prompt)
+
+    def test_verification_collection_prompt_rejoins_existing_single_flight_request(self) -> None:
+        prompt, _allowed, _forbidden = parse_invocation(
+            self.payload(
+                {
+                    "plan_id": "rerun-01",
+                    "fingerprint": "same-fingerprint",
+                    "mode": "new_or_changed",
+                    "prior_tdd_evidence": None,
+                }
+            )[:-1]
+            + ', "verification_result_collection": {"attempt": 2, "verification": [{"item": "unit test", "result": "NOT_RUN", "evidence": "shell session running"}]}}'
+        )
+
+        self.assertIn("검증 결과 수집 continuation 요청", prompt)
+        self.assertIn("제품 구현이나 테스트를 수정하지 말고", prompt)
+        self.assertIn("완료된 검증을 재실행하지도 마십시오", prompt)
+        self.assertIn("single-flight verifier 요청", prompt)
+        self.assertIn("총 3회까지만", prompt)
 
 
 if __name__ == "__main__":

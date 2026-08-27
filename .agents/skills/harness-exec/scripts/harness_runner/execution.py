@@ -24,6 +24,13 @@ from .state import PlanStateStore, StateRecordError
 from .worker_gateway import invoke_task
 
 MAX_PARALLEL_TASKS = 4
+MAX_VERIFICATION_RESULT_COLLECTION_ATTEMPTS = 3
+IN_PROGRESS_EVIDENCE_MARKERS = (
+    "session",
+    "진행 중",
+    "in progress",
+    "running",
+)
 
 WorkerInvoker = Callable[[TaskInvocation], object]
 MANDATORY_GATES = (
@@ -187,6 +194,42 @@ def _needs_decision_correction(task: Task, worker_result: object, context: TaskE
     return decision != "PASS" and decision not in EXPLICIT_FAILURE_DECISIONS
 
 
+def _in_progress_not_run_verification(worker_result: object) -> list[dict[str, object]]:
+    """Return only NOT_RUN items that prove an existing verifier is still running."""
+
+    output = getattr(worker_result, "output", None)
+    if not isinstance(output, dict) or not isinstance(output.get("verification"), list):
+        return []
+    pending: list[dict[str, object]] = []
+    for item in output["verification"]:
+        if not isinstance(item, dict):
+            return []
+        result = item.get("result")
+        if result == "PASS":
+            continue
+        if result != "NOT_RUN" or not _non_empty_text(item.get("evidence")):
+            return []
+        evidence = item["evidence"].lower()
+        if not any(marker in evidence for marker in IN_PROGRESS_EVIDENCE_MARKERS):
+            return []
+        pending.append(item)
+    return pending
+
+
+def _verification_result_collection(
+    invocation: TaskInvocation,
+    attempt: int,
+    verification: list[dict[str, object]],
+) -> TaskInvocation:
+    return replace(
+        invocation,
+        verification_result_collection={
+            "attempt": attempt,
+            "verification": verification,
+        },
+    )
+
+
 def _decision_correction(invocation: TaskInvocation, worker_result: object) -> TaskInvocation:
     output = getattr(worker_result, "output")
     return replace(
@@ -227,6 +270,38 @@ def _execute_task(
             message = f"Worker 종료 코드 {return_code}"
         else:
             message = _completion_error(task, worker_result, invocation.execution_context)
+            collection_attempts = 1
+            pending_verification = _in_progress_not_run_verification(worker_result)
+            while message and pending_verification:
+                if collection_attempts >= MAX_VERIFICATION_RESULT_COLLECTION_ATTEMPTS:
+                    status = "failed"
+                    message = (
+                        "진행 중 verifier 결과 수집이 "
+                        f"{MAX_VERIFICATION_RESULT_COLLECTION_ATTEMPTS}회 후에도 완료되지 않았습니다: "
+                        + "; ".join(
+                            str(item["evidence"]) for item in pending_verification
+                        )
+                    )
+                    break
+                collection_attempts += 1
+                collected_result = call_worker(
+                    _verification_result_collection(
+                        invocation,
+                        collection_attempts,
+                        pending_verification,
+                    )
+                )
+                collected_return_code = _return_code(collected_result)
+                if collected_return_code != 0:
+                    status = "failed"
+                    return_code = collected_return_code
+                    message = "검증 결과 수집 continuation Worker 호출이 실패했습니다."
+                    break
+                worker_result = collected_result
+                collected_output = getattr(collected_result, "output", None)
+                worker_output = collected_output if isinstance(collected_output, dict) else None
+                message = _completion_error(task, worker_result, invocation.execution_context)
+                pending_verification = _in_progress_not_run_verification(worker_result)
             if message and _needs_decision_correction(task, worker_result, invocation.execution_context):
                 corrected_result = call_worker(_decision_correction(invocation, worker_result))
                 corrected_return_code = _return_code(corrected_result)

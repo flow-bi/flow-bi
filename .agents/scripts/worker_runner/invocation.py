@@ -37,6 +37,16 @@ TASK_WORKER_GUIDANCE = (
     "Skill과 실행 스크립트를 재호출하지 마십시오. 또한  모든 timeout은 90분으로 설정해 확인합니다."
 )
 
+IN_FLIGHT_VERIFIER_GUIDANCE = (
+    "shell 도구가 verifier 명령에 진행 중 상태 또는 실행 session을 반환하면 같은 verifier CLI를 새 "
+    "shell 명령으로 시작하지 마십시오. 기존 실행을 wait/poll하여 최종 종료 코드와 출력을 "
+    "확인하십시오. 동일 요청은 부모 verifier에서 single-flight로 결합됩니다. 이전 실행이 "
+    "확정적으로 종료된 뒤에만, 실패 원인을 수정했거나 명시적인 재검증이 필요한 경우에 같은 명령을 "
+    "재실행하십시오. HTTP 429 등 실행 중 충돌 응답만으로 필수 검증을 실패 처리하지 말고 기존 실행의 "
+    "최종 결과를 먼저 확인하십시오. 최종 JSON에는 완료된 최신 검증 결과만 반영하고, 나중에 도착한 "
+    "완료 결과와 모순되는 `automated_verification` 또는 `decision`을 제출하지 마십시오. "
+)
+
 BACKEND_VERIFICATION_GUIDANCE = (
     "Backend Gradle 검증은 Worker에서 `gradlew`를 직접 실행하지 말고 부모가 전달한 "
     "`FLOW_BI_PYTHON_EXECUTABLE`로 "
@@ -46,15 +56,9 @@ BACKEND_VERIFICATION_GUIDANCE = (
     "Windows PowerShell에서는 "
     "`& $env:FLOW_BI_PYTHON_EXECUTABLE .agents/scripts/worker_runner/backend_verifier.py test`를 "
     "사용하십시오. 부모 서비스는 `test`, `spotlessCheck`, `build`, `assemble`, `compileJava`와 "
-    "안전한 `--tests` 필터만 허용하며 출력과 종료 코드를 반환합니다. shell 도구가 이 Backend "
-    "verifier 명령에 진행 중 상태 또는 실행 session을 반환하면 같은 verifier CLI를 새 shell 명령으로 "
-    "시작하지 마십시오. 기존 실행을 wait/poll하여 최종 종료 코드와 출력을 확인하십시오. 동일 "
-    "요청은 부모 verifier에서 single-flight로 결합됩니다. 이전 실행이 확정적으로 종료된 뒤에만, 실패 "
-    "원인을 수정했거나 명시적인 재검증이 필요한 경우에 같은 명령을 재실행하십시오. HTTP 429 등 실행 "
-    "중 충돌 응답만으로 필수 검증을 실패 처리하지 말고 기존 실행의 최종 결과를 먼저 확인하십시오. "
-    "최종 JSON에는 완료된 최신 검증 결과만 반영하고, 나중에 도착한 완료 결과와 모순되는 "
-    "`automated_verification` 또는 `decision`을 제출하지 마십시오. "
-    "실패하면 로그를 분석해 허용 범위 구현 또는 테스트를 수정한 뒤 같은 명령을 재실행하여 Green을 "
+    "안전한 `--tests` 필터만 허용하며 출력과 종료 코드를 반환합니다. "
+    + IN_FLIGHT_VERIFIER_GUIDANCE
+    + "실패하면 로그를 분석해 허용 범위 구현 또는 테스트를 수정한 뒤 같은 명령을 재실행하여 Green을 "
     "확인하십시오."
 )
 
@@ -78,7 +82,8 @@ FRONTEND_VERIFICATION_GUIDANCE = (
     "`& $env:FLOW_BI_PYTHON_EXECUTABLE .agents/scripts/worker_runner/frontend_verifier.py run test:unit`를 "
     "사용하십시오. 부모 서비스는 `npm ls`, `npm run test:unit`, `npm run typecheck`, "
     "`npm run check`만 허용하며 출력과 종료 코드를 반환합니다. "
-    "Cypress E2E 테스트를 작성하거나 실행하지 마십시오."
+    + IN_FLIGHT_VERIFIER_GUIDANCE
+    + "Cypress E2E 테스트를 작성하거나 실행하지 마십시오."
 )
 
 
@@ -257,6 +262,31 @@ def _decision_correction_guidance(correction: object) -> str:
     )
 
 
+def _verification_result_collection_guidance(collection: object) -> str:
+    if collection is None:
+        return ""
+    if not isinstance(collection, dict):
+        raise ValueError("검증 결과 수집 컨텍스트 형식이 유효하지 않습니다.")
+    attempt = collection.get("attempt")
+    verification = collection.get("verification")
+    if not isinstance(attempt, int) or attempt < 2 or not isinstance(verification, list):
+        raise ValueError("검증 결과 수집 컨텍스트가 유효하지 않습니다.")
+    return (
+        "검증 결과 수집 continuation 요청입니다. 이전 결과의 NOT_RUN은 shell session 또는 진행 중 "
+        "verifier 증거 때문에 아직 최종 종료 상태가 수집되지 않았다는 뜻입니다. 제품 구현이나 테스트를 "
+        "수정하지 말고, 완료된 검증을 재실행하지도 마십시오. 기존 single-flight verifier 요청에 "
+        "wait/poll로 재결합하여 최종 PASS 또는 FAIL과 비어 있지 않은 증거를 수집하십시오. 진행 중 "
+        "응답을 최종 NOT_RUN으로 제출하지 마십시오. 이 수집은 총 3회까지만 허용되므로, 최종 결과를 "
+        "확인할 수 없으면 원인을 포함해 실패로 기록하십시오. 일반 판정 교정이 아니며 기존 검증 결과를 "
+        "PASS로 바꾸거나 숨기지 마십시오.\n"
+        + json.dumps(
+            {"attempt": attempt, "prior_verification": verification},
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+
+
 def parse_invocation(raw_invocation: str) -> InvocationResult:
     """단일 TaskInvocation JSON을 실행 Prompt와 경로 계약으로 변환한다."""
     try:
@@ -288,6 +318,9 @@ def parse_invocation(raw_invocation: str) -> InvocationResult:
     decision_correction_guidance = _decision_correction_guidance(
         invocation.get("decision_correction")
     )
+    verification_result_collection_guidance = _verification_result_collection_guidance(
+        invocation.get("verification_result_collection")
+    )
 
     prompt_parts = [
         common_prompt,
@@ -304,6 +337,8 @@ def parse_invocation(raw_invocation: str) -> InvocationResult:
 
     if decision_correction_guidance:
         prompt_parts.append(decision_correction_guidance)
+    if verification_result_collection_guidance:
+        prompt_parts.append(verification_result_collection_guidance)
 
     if additional_request:
         prompt_parts.append(additional_request)

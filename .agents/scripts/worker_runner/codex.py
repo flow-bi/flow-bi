@@ -4,6 +4,7 @@ from pathlib import Path
 import os
 import shutil
 import sys
+import tempfile
 
 from .config import read_config_overrides
 
@@ -41,6 +42,7 @@ def build_codex_command(
     output_path: Path,
     executable: str | None = None,
     readable_paths: tuple[str, ...] = (),
+    writable_directories: tuple[str, ...] = (),
 ) -> list[str]:
     command = [executable or resolve_codex_executable(), "exec", "-o", str(output_path)]
     
@@ -48,6 +50,7 @@ def build_codex_command(
         allowed_paths,
         forbidden_paths,
         readable_paths=readable_paths,
+        writable_directories=writable_directories,
     ):
         command.extend(["-c", override])
     
@@ -216,10 +219,13 @@ def build_subprocess_environment(
     environment["CODEX_HOME"] = str(resolve_codex_home())
 
     gradle_user_home = project_root / "backend" / ".gradle-user-home"
-    # A task contract can make backend read-only. Keep generic Worker
-    # temporary files in the Harness-owned writable area instead.
+    # Keep generic Worker temporary files outside Task path contracts. The
+    # parent runner grants only this run-scoped directory and removes it after
+    # the sandboxed process exits.
     worker_temp = (
-        project_root / ".agents" / "skills" / "harness-exec" / ".worker-tmp"
+        Path(tempfile.gettempdir())
+        / "flow-bi-harness-worker"
+        / run_id
     )
     worker_home = worker_temp / "worker-home"
 
