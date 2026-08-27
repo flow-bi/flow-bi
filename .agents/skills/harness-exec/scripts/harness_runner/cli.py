@@ -5,7 +5,7 @@ import sys
 
 from .invocation import parse_invocation
 from .execution import execute_workers
-from .models import ExecutionReport, PlanValidationError, TaskResult
+from .models import PlanValidationError, TaskResult
 from .notion import NotionPublicationError, publish_report
 from .plan import complete_plan, load_active_plan, repository_root
 from .report import build_execution_report
@@ -16,11 +16,6 @@ from worker_runner import prepare_worker_runtime
 
 from worker_runner.backend_verifier import BackendVerifier
 from worker_runner.frontend_verifier import FrontendVerifier
-from worker_runner.verifiers.windows_acl import (
-    AclRestorationError,
-    preserve_windows_acls,
-    worker_permission_paths,
-)
 
 
 def _print_console(message: object, *, file=None) -> None:
@@ -71,51 +66,40 @@ def main(argv: Sequence[str] | None = None) -> int:
         _print_console(f"plan 준비 실패: {error}", file=sys.stderr)
         return 1
 
-    writable_paths = tuple(
-        path for task in tasks.tasks for path in task.allowed_paths
-    )
-    read_only_paths = tuple(
-        path for task in tasks.tasks for path in task.read_only_paths
-    )
-    acl_paths = worker_permission_paths(writable_paths, read_only_paths)
     worker_executable: str | None = None
-    try:
-        with (
-            preserve_windows_acls(root, acl_paths),
-            BackendVerifier(root) as backend_verifier,
-            FrontendVerifier(root) as frontend_verifier,
-        ):
-            gateway = create_worker_gateway(
-                root,
-                runtime=prepare_worker_runtime(root),
-                prompt_template=WorkerPromptTemplate.load(),
+    with (
+        BackendVerifier(root) as backend_verifier,
+        FrontendVerifier(root) as frontend_verifier,
+    ):
+        gateway = create_worker_gateway(
+            root,
+            runtime=prepare_worker_runtime(root),
+            prompt_template=WorkerPromptTemplate.load(),
+        )
+        worker_executable = gateway.runtime.executable
+
+        def worker_call(invocation):
+            allowed_paths = invocation.task.allowed_paths
+            frontend_environment = (
+                frontend_verifier.environment
+                if isinstance(allowed_paths, tuple) and any(
+                    path == "frontend" or path.startswith("frontend/")
+                    for path in allowed_paths
+                )
+                else {}
             )
-            worker_executable = gateway.runtime.executable
-            def worker_call(invocation):
-                allowed_paths = invocation.task.allowed_paths
-                frontend_environment = (
-                    frontend_verifier.environment
-                    if isinstance(allowed_paths, tuple) and any(
-                        path == "frontend" or path.startswith("frontend/")
-                        for path in allowed_paths
-                    )
-                    else {}
-                )
-                return gateway.invoke_task(
-                    invocation,
-                    environment_overrides={
-                        **backend_verifier.environment_for_task(
-                            invocation.task.allowed_paths,
-                            invocation.task.read_only_paths,
-                        ),
-                        **frontend_environment,
-                    },
-                )
-            report = execute_workers(tasks, request, call_worker=worker_call)
-    except AclRestorationError as error:
-        report = ExecutionReport((
-            TaskResult(0, "Windows ACL 복원 검증", "failed", message=str(error)),
-        ))
+            return gateway.invoke_task(
+                invocation,
+                environment_overrides={
+                    **backend_verifier.environment_for_task(
+                        invocation.task.allowed_paths,
+                        invocation.task.read_only_paths,
+                    ),
+                    **frontend_environment,
+                },
+            )
+
+        report = execute_workers(tasks, request, call_worker=worker_call)
 
     rendered_report = build_execution_report(request.plan_id, report)
     _print_console(rendered_report.body)
