@@ -1,11 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { createDevelopmentMeetingRoomGateway } from './development-meeting-room-gateway'
-import {
-  productionMeetingRoomGateway,
-  resolveMeetingRoomGateway,
-  type MeetingRoomGateway,
-} from './meeting-room-gateway'
+import { resolveMeetingRoomGateway } from './meeting-room-gateway'
+import { type MeetingRoomGateway } from './meeting-room-gateway-contract'
+import { productionMeetingRoomGateway } from './production-meeting-room-gateway'
 
 describe('developmentMeetingRoomGateway', () => {
   it('uses production in normal development and only uses an injected Cypress gateway', () => {

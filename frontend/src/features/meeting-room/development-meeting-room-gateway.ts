@@ -7,7 +7,7 @@ import {
   type RoomReservationSummary,
   type RoomSummary,
   type UpdateRoomReservationCommand,
-} from './meeting-room-gateway'
+} from './meeting-room-gateway-contract'
 
 interface DevelopmentReservation extends EditableRoomReservation {
   scheduleId: number
