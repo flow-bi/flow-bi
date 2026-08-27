@@ -39,7 +39,8 @@
 - `worker_runner`가 Harness 정책인 공통 Prompt section, Task 실행 mode, 이전 TDD evidence와 결과 JSON 계약을 해석·생성하여 의존 방향이 뒤집혀 있다.
 - `worker_runner.__init__`가 Harness 전용 `parse_invocation()`을 공개하고 Harness가 이를 import하므로 Worker 실행 facade와 Harness 조립 책임이 섞여 있다.
 - Plan의 `수정 금지 경로`는 Worker가 읽을 수 있고 쓸 수만 없는 경로인데, 내부 모델과 payload에서는 `forbidden_paths`로 전달되어 접근 금지처럼 해석된다.
-- Harness CLI, Plan model, gateway, Worker runner, Codex config, verifier와 Windows ACL까지 동일한 경로 목록이 서로 다른 이름으로 반복 전달된다.
+- Harness CLI, Plan model, gateway, Worker runner, Codex config와 verifier까지 동일한 경로 목록이 서로 다른 이름으로 반복 전달된다.
+- Windows ACL snapshot·복원은 Worker가 삭제·이동한 정상 경로까지 실행 전 상태로 되돌리려 하며, 사라진 경로에서 전체 Harness 결과를 실패로 대체하므로 제거한다. Worker 쓰기 범위는 Codex permission config와 verifier 경로 검증으로 제한한다.
 - `collect_worker_readable_paths()`가 모든 Task에서 거의 같은 Python·Java·Node·npm·Git 설치 경로를 다시 탐색하여 Worker cohort 공통 runtime 정보가 매 호출마다 재생성된다.
 - `execute_worker()`가 project root, executable, base environment, timeout과 Toolchain 경로 준비까지 매 Task마다 조정하여 cohort 공통 값과 Task별 값의 구분이 없다.
 - 단일 Task의 Worker 호출·판정 교정·evidence 저장은 분리되었지만, 예외 변환과 상태 전이의 소유권 및 호출 순서가 coordinator와 자연스럽게 맞물리는지 회귀 검증이 부족하다.
@@ -132,7 +133,6 @@
 | `verifiers/frontend_client.py` | `request_frontend_verification()` | Worker 유지 | Worker와 부모 Frontend verifier service 사이 client 계약이다. |
 | `verifiers/frontend_service.py` | `validate_npm_arguments()`, `_resolve_npm_executable()`, `_timeout_output()`, `FrontendVerifier`의 environment·검증·server lifecycle 메서드 | Worker 유지 | 허용 npm 명령과 Frontend 검증 실행을 소유한다. npm executable과 service base environment는 초기화 시 한 번 준비하고 각 검증은 copy를 사용하며, Harness는 cohort 시작·종료 시점만 결정한다. |
 | `verifiers/transport.py` | `validate_loopback_http_url()`, `post_json()` | Worker 유지 | verifier client의 loopback 전송 보안과 JSON 통신 구현이다. |
-| `verifiers/windows_acl.py` | `WindowsAclBackend`, `worker_permission_paths()`, `_existing_paths()`, `preserve_windows_acls()` | Worker 유지, Harness가 호출 시점 소유 | Windows Worker sandbox 권한 계산·복원 기술은 Worker에 두되, 모든 병렬 Worker 전후로 한 번 실행하는 cohort 시점은 Harness CLI가 소유한다. |
 | `worker-guidance.md` | 실행·종료·Backend/Frontend 검증 section | Worker 유지 | Worker가 실제로 사용할 도구와 verifier 운영법의 원본이다. Harness는 Task 경로에 필요한 section을 선택할 뿐 내용을 복제하지 않는다. |
 
 #### 제거하거나 이동할 현재 함수
@@ -152,7 +152,7 @@
 | Harness 실행 cohort | Codex executable/home, Worker 물리 경로, project Java home, cache 디렉터리 준비, 정리된 base environment | `worker_runner.runtime/environment/paths/codex_cli` | `prepare_worker_runtime()`이 한 번 계산·생성하고 immutable runtime에 저장한다. |
 | Harness 실행 cohort | Python·Java·Node·npm·Git Toolchain read 경로 | `worker_runner.toolchain_paths` | 준비된 base environment로 한 번 탐색하여 runtime에 tuple로 저장한다. Harness와 Task 호출은 목록을 다시 계산하거나 해석하지 않는다. |
 | Harness 실행 cohort | `config.toml` read·syntax·permission profile validation | `worker_runner.config/runtime` | immutable base config template을 한 번 읽고, Task마다 깊은 복사본에 writable/read-only 경로만 병합한다. shared template을 직접 변경하지 않는다. |
-| Harness 실행 cohort | Backend·Frontend verifier server와 Windows ACL snapshot | Worker verifier 구현, Harness CLI 호출 시점 | server는 pool 전 한 번 시작·종료하고 ACL은 모든 Worker 전 한 번 capture, 모든 Worker 후 한 번 restore한다. |
+| Harness 실행 cohort | Backend·Frontend verifier server | Worker verifier 구현, Harness CLI 호출 시점 | server는 pool 전 한 번 시작하고 모든 Worker 종료 후 한 번 정리한다. |
 | Harness 실행 cohort | Codex executable | `worker_runner.runtime` 준비, Harness Notion 게시 재사용 | Worker 실행과 Notion 게시가 같은 실행 파일을 사용하며 Notion 단계에서 PATH를 다시 탐색하지 않는다. |
 | Task | writable/read-only 경로, 관련 Backend/Frontend guidance, verifier environment, 결과 contract, revision fingerprint와 prior evidence | `harness_runner.worker_gateway/worker_prompt/execution` | `TaskWorkerContext` 또는 동등한 immutable Task 준비 객체를 Task당 한 번 생성해 최초 호출과 판정 교정 호출에서 재사용한다. |
 | Task | Task permission config override와 Codex command의 고정 부분 | `worker_runner.runtime/config/codex_cli` | Task 경로가 서로 다르므로 Task당 한 번 생성하고, 판정 교정 시 output 경로처럼 시도별 값만 교체한다. |
@@ -197,7 +197,7 @@ Plan의 `수정 금지 경로`를 문서 경계에서 읽기 전용 경로로 �
 
 #### 구현 항목
 
-- [ ] Red: Plan parsing, Task model, invocation JSON, Worker command, verifier formatting scope와 Windows ACL에서 `수정 금지 경로`가 read-only 권한으로 유지되는 실패 테스트를 먼저 작성한다.
+- [ ] Red: Plan parsing, Task model, invocation JSON, Worker command와 verifier formatting scope에서 `수정 금지 경로`가 read-only 권한으로 유지되는 실패 테스트를 먼저 작성한다.
 - [ ] Green: Markdown heading `수정 금지 경로`는 호환성을 위해 유지하되 `plan_parser.py`가 이를 `Task.read_only_paths`로 변환하고 이후 모델·payload·함수 인자·지역 변수 이름을 `read_only_paths`로 통일한다.
 - [ ] Backend formatter의 수정 차단과 Backend·Frontend verifier 환경 범위도 `read_only_paths`라는 동일한 의미를 사용하며, 해당 경로의 읽기까지 차단하는 정책은 추가하지 않는다.
 - [ ] writable 경로와 read-only 경로가 겹치면 기존처럼 write 권한이 우선하고, Toolchain read 권한 및 저장소 밖 경로 거부 계약은 유지한다.
@@ -286,7 +286,6 @@ Plan의 `수정 금지 경로`를 문서 경계에서 읽기 전용 경로로 �
 - [ ] Task 번호는 `WorkerRuntime.bind_task()`에서 양의 정수로 한 번만 검증하고 environment builder와 internal runner에는 검증된 문자열을 전달하며, `valids.py`의 단일 helper module과 중복 검증을 제거한다.
 - [ ] `WorkerTaskRuntime.execute()`는 최종 Prompt만 받아 시도별 run ID·환경 copy·output/log를 생성하고, project root·executable·base environment·timeout·Toolchain과 Task 경로를 반복 인자로 받지 않게 한다.
 - [ ] Harness CLI 또는 gateway는 `prepare_worker_runtime()`을 Worker pool 생성 전에 한 번 호출하고 같은 immutable runtime을 모든 future에서 공유하되 내부 필드의 의미를 해석하거나 변경하지 않는다.
-- [ ] Windows ACL 대상 경로는 WorkerRuntime의 검증된 base config와 전체 Task writable/read-only 합집합으로 한 번 계산하여 ACL 준비를 위해 `config.toml`을 다시 읽지 않는다.
 - [ ] Refactor: `prepare_worker_runtime → toolchain/environment/config/codex resolution`, `WorkerRuntime.bind_task → Task config`, `WorkerTaskRuntime.execute → runner → command/process`의 단방향 호출을 유지하고 Red → Green → Refactor 결과를 실행 기록에 남긴다.
 
 #### 검증 항목
@@ -457,7 +456,7 @@ Worker runner가 완성된 Prompt를 받아 권한·환경·명령을 구성하�
 - [ ] `worker_process.py`는 output/log 임시 파일 생성부터 subprocess 실행, 결과 JSON 읽기, timeout·예외 log tail과 성공·실패·timeout 완료 Hook 호출 및 cleanup까지 한 Worker 수명주기를 소유한다.
 - [ ] `worker_log.py`는 로그 tail과 Worker 종료 Hook만 소유하고 Harness의 Task 판정·evidence·상태를 해석하지 않는다.
 - [ ] `worker-guidance.md`는 Worker 실행 방식, 종료 시 결과 제출, Backend·Frontend verifier와 formatter 사용법만 소유하고 Task별 Plan 내용·실행 mode·이전 evidence·판정 교정·결과 schema를 정의하지 않는다.
-- [ ] Backend·Frontend verifier와 formatter는 허용된 명령·Task 경로·single-flight·Windows ACL 계약을 유지하며 Harness Prompt나 Task 상태를 생성하지 않는다.
+- [ ] Backend·Frontend verifier와 formatter는 허용된 명령·Task 경로·single-flight 계약을 유지하며 Harness Prompt나 Task 상태를 생성하지 않는다.
 - [ ] Backend·Frontend verifier service는 초기화 시 부모 전용 변수를 제거한 base subprocess environment와 executable을 한 번 준비하고, 각 검증 요청에서는 독립 copy에 요청별 값만 적용한다.
 - [ ] Worker runner 내부에서 공통 Prompt, 실행 mode, 이전 TDD evidence, 판정 교정과 Harness 결과 계약을 재생성하거나 보완하지 않는다.
 - [ ] Refactor: import 방향을 `runner → command/environment/process`, `process → log`, verifier CLI → verifier service로 유지하고 Red → Green → Refactor 결과를 실행 기록에 남긴다.
@@ -467,7 +466,7 @@ Worker runner가 완성된 Prompt를 받아 권한·환경·명령을 구성하�
 - [ ] `python -B -m unittest discover -s .agents/skills/harness-exec/tests -p 'test_worker_runner*.py'`를 통과한다.
 - [ ] `python -B -m unittest discover -s .agents/skills/harness-exec/tests -p 'test_backend_verifier.py'`를 통과한다.
 - [ ] `python -B -m unittest discover -s .agents/skills/harness-exec/tests -p 'test_frontend_verifier.py'`를 통과한다.
-- [ ] `python -B -m unittest discover -s .agents/skills/harness-exec/tests -p 'test_windows_acl_verifier.py'`를 통과한다.
+- [ ] `python -B -m unittest discover -s .agents/skills/harness-exec/tests -p 'test_harness_no_windows_acl.py'`를 통과한다.
 - [ ] Worker runner 실행·종료 처리와 verifier의 통합 경계 테스트를 통과한다.
 - [ ] `rg -n "TaskInvocation|TaskExecutionContext|common_prompt|prior_tdd_evidence|decision_correction" .agents/scripts/worker_runner` 결과가 없어야 한다.
 - [ ] Worker guidance section 테스트로 실행·종료·Backend·Frontend 지침은 Worker 쪽에 존재하고 Harness 정책 section은 존재하지 않는지 검증한다.
