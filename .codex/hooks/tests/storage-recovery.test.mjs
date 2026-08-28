@@ -37,7 +37,10 @@ test("preserves malformed JSON bytes, resets only the damaged store, and records
     );
     const recovery = readdirSync(testFixture.paths.logDirectory).find((name) => name.includes("user-prompt-detail-submit.json.corrupt."));
     assert.deepEqual(fs.readFileSync(join(testFixture.paths.logDirectory, recovery)), damaged);
-    assert.equal(readJson(testFixture.paths.logFile, []).length, 1);
+    assert.deepEqual(
+      readJson(testFixture.paths.logFile, []).map((record) => record.record_type),
+      ["task_start", "worker_phase_start"],
+    );
     assert.deepEqual(diagnostics[0], {
       stage: "read", store: "records", event: "UserPromptSubmit", session_id: "session-4", turn_id: "turn-4",
       run_id: "run-4", task_number: 4, error_code: "INVALID_JSON",

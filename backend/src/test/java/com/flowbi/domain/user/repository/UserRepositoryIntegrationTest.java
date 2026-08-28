@@ -8,6 +8,7 @@ import com.flowbi.domain.team.entity.Team;
 import com.flowbi.domain.team.repository.TeamRepository;
 import com.flowbi.domain.user.entity.User;
 import com.flowbi.domain.user.entity.UserStatus;
+import com.flowbi.domain.user.entity.WorkStatus;
 import org.hibernate.SessionFactory;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -53,7 +54,7 @@ class UserRepositoryIntegrationTest {
   private jakarta.persistence.EntityManager entityManager;
 
   @Test
-  void fetchesTheActiveDetailWithTeamAndPositionInOneQuery() {
+  void fetchesOrganizationChartListAndDetailWithTheRequiredMappingsInOneQueryEach() {
     Position position = positions.save(Position.create("Engineer"));
     Team team = teams.save(Team.create("Platform"));
     User user = users
@@ -64,16 +65,21 @@ class UserRepositoryIntegrationTest {
         .unwrap(SessionFactory.class);
     sessionFactory.getStatistics().clear();
 
-    UserDetailProjection detail = users.findActiveDetailByUserId(user.getUserId()).orElseThrow();
+    OrganizationChartUserListProjection listUser = users
+        .findOrganizationChartUsersByTeamId(team.getTeamId()).get(0);
+    OrganizationChartUserDetailProjection detail = users
+        .findOrganizationChartDetailByUserId(user.getUserId()).orElseThrow();
 
-    assertThat(detail.userId()).isEqualTo(user.getUserId());
+    assertThat(listUser.userId()).isEqualTo(user.getUserId());
+    assertThat(listUser.position()).isEqualTo("Engineer");
+    assertThat(listUser.accountStatus()).isEqualTo(UserStatus.ACTIVE);
+    assertThat(listUser.workStatus()).isEqualTo(WorkStatus.OFFLINE);
     assertThat(detail.name()).isEqualTo("Fixture User");
-    assertThat(detail.status()).isEqualTo(UserStatus.ACTIVE);
-    assertThat(detail.teamId()).isNotNull();
-    assertThat(detail.teamName()).isEqualTo("Platform");
-    assertThat(detail.positionId()).isNotNull();
-    assertThat(detail.positionName()).isEqualTo("Engineer");
-    assertThat(sessionFactory.getStatistics().getPrepareStatementCount()).isEqualTo(1);
+    assertThat(detail.team()).isEqualTo("Platform");
+    assertThat(detail.position()).isEqualTo("Engineer");
+    assertThat(detail.accountStatus()).isEqualTo(UserStatus.ACTIVE);
+    assertThat(detail.workStatus()).isEqualTo(WorkStatus.OFFLINE);
+    assertThat(sessionFactory.getStatistics().getPrepareStatementCount()).isEqualTo(2);
   }
 
   @Test

@@ -59,6 +59,8 @@ function nodeFor(record, kind) {
     request: { prompt: record.prompt ?? null },
     usage: null,
     usage_status: null,
+    duration_ms: null,
+    timing: null,
     result: normalizedResult(null),
     children: [],
   };
@@ -100,9 +102,15 @@ export function buildPromptDetailTree(records) {
     if (!END_TYPES.has(record?.record_type) || !id || !entries.has(id)) continue;
     const node = entries.get(id).node;
     node.ended_at = record.occurred_at ?? null;
+    const startedAt = Date.parse(node.started_at ?? "");
+    const endedAt = Date.parse(node.ended_at ?? "");
+    node.duration_ms = Number.isFinite(startedAt) && Number.isFinite(endedAt)
+      ? Math.max(endedAt - startedAt, 0)
+      : null;
     node.result = normalizedResult(record);
     node.usage = record.usage ?? null;
     node.usage_status = record.usage_status ?? null;
+    node.timing = record.timing ?? null;
   }
 
   for (const entry of entries.values()) {

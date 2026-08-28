@@ -71,6 +71,14 @@ class TeamHierarchyQueryServiceTest {
   }
 
   @Test
+  void returnsAnEmptyOrganizationTreeWhenThereAreNoTeams() {
+    when(teams.findAllHierarchyRows()).thenReturn(List.of());
+    when(closures.findAllHierarchyRows()).thenReturn(List.of());
+
+    assertThat(service.findOrganizationTree()).isEmpty();
+  }
+
+  @Test
   void returnsEmptyResultsForMissingRelationsAndUsesAtMostTwoBatchQueries() {
     fixture();
 

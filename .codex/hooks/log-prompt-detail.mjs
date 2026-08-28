@@ -17,5 +17,12 @@ export {
   handleSubagentStart,
   handleSubagentStop,
 } from "./prompt-detail/subagent-events.mjs";
+export {
+  classifyToolPhase,
+  handlePostToolUse,
+  handlePreToolUse,
+  recordWorkerPhase,
+  WORKER_PHASES,
+} from "./prompt-detail/tool-events.mjs";
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await runCli();

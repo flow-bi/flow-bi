@@ -218,6 +218,36 @@ the session or Redis; it is resolved from the authoritative user store for each 
 | `PUT`    | `/api/teams/{teamId}/parent` | 관리자 팀 이동               |
 | `DELETE` | `/api/teams/{teamId}`        | 관리자 leaf 팀 삭제          |
 
+#### 8.2.1 Organization chart user read contract
+
+Both organization chart user endpoints require an authenticated server session. Missing sessions
+return `401 UNAUTHENTICATED`; an unknown team or user returns `404` with no internal detail. Both
+responses use `Cache-Control: no-store` and never expose employee numbers, credentials, roles, or
+session identifiers.
+
+`GET /api/users?teamId={teamId}` returns every employee directly assigned to the selected team,
+including `ACTIVE` and `INACTIVE` accounts. An existing team with no employees returns `[]`. The
+array is ordered by `name` and then `userId`, ascending. Each array item has only:
+
+```json
+{
+  "userId": 7,
+  "name": "Kim Flow",
+  "position": "Engineer",
+  "accountStatus": "ACTIVE",
+  "workStatus": "WORKING",
+  "profileImageUrl": "https://images.example.test/7"
+}
+```
+
+`GET /api/users/{userId}` returns the selected employee's organization-chart profile, including
+inactive accounts. Its response has only `profileImageUrl`, `name`, `position`, `team`,
+`extensionNumber` (the stored `phone_number`), `email`, `accountStatus`, and `workStatus`.
+
+`accountStatus` is the independent account state `ACTIVE` or `INACTIVE`. `workStatus` is one of
+`WORKING`, `IN_MEETING`, `OUT_OF_OFFICE`, `ON_LEAVE`, or `OFFLINE`; it is not inferred from login,
+calendar, or account status.
+
 직원과 팀은 물리 삭제하지 않으며 직원·팀 `DELETE` Endpoint를 제공하지 않는다. 직원 등록, 비밀번호 초기화와 계정 재활성화 요청은 임시 비밀번호를 받지 않는다. 서버가 CSPRNG로 대문자·소문자·숫자·특수문자를 포함한 20자 값을 생성하고 BCrypt 해시만 저장한다. 성공 응답은 다음 값을 한 번만 반환하며 `Cache-Control: no-store`를 적용한다.
 
 ```json
@@ -248,6 +278,7 @@ All team endpoints require an authenticated user. Read endpoints are available t
 | `GET`    | `/api/teams/{teamId}/descendants` | `200` descendant list excluding self     |
 | `GET`    | `/api/teams/{teamId}/path`        | `200` root-to-team path                  |
 | `GET`    | `/api/teams/{teamId}/tree`        | `200` requested subtree                  |
+| `GET`    | `/api/teams/tree`                 | `200` complete organization team tree    |
 | `POST`   | `/api/teams`                      | `201` created team                       |
 | `PATCH`  | `/api/teams/{teamId}/name`        | `200` renamed team                       |
 | `PUT`    | `/api/teams/{teamId}/parent`      | `200` moved team                         |
@@ -256,6 +287,8 @@ All team endpoints require an authenticated user. Read endpoints are available t
 `TeamCreateRequest` is `{ "teamName": "Platform", "parentTeamId": 1 }`; `parentTeamId` may be `null` for a root. `TeamNameUpdateRequest` is `{ "teamName": "Platform" }` and `TeamMoveRequest` is `{ "newParentTeamId": 1 }`, where `null` moves the team to the root. Names are trimmed, must be 1-50 non-control characters, and IDs must be positive when present. The normal response is `{ "teamId": 1, "teamName": "Platform", "parentTeamId": null }`.
 
 Ancestor and descendant entries return `{ "teamId", "teamName", "distance" }`; `distance` is the Closure Table edge distance (the direct relation is `1`). Path entries return `{ "teamId", "teamName", "depth" }`, where display `depth` starts at `0` for the root. Tree entries return `{ "teamId", "teamName", "depth", "children" }`, where display `depth` starts at `0` for the requested tree root. Thus Closure distance and display depth are distinct.
+
+`GET /api/teams/tree` returns every root and its descendants as a JSON array of tree entries. Roots and every `children` array are ordered by `teamName`, then `teamId`; each root has `depth: 0`, and descendant depths are relative to that root. When no teams exist, it returns `200 OK` with `[]`. The response never contains closure-table rows or employee data. As with every team endpoint, a missing server-provided authenticated user receives `401` with `UNAUTHENTICATED`. If the stored hierarchy is inconsistent, the endpoint returns `500` with `TEAM_HIERARCHY_INCONSISTENT` and the safe message `The team hierarchy is unavailable.` without internal details.
 
 Errors use `{ "code", "message", "fieldErrors" }` without internal exception details. Malformed input is `400 TEAM_INVALID`; missing authentication is `401 UNAUTHENTICATED`; a non-admin mutation is `403 TEAM_ADMIN_REQUIRED`; missing team or parent is `404 TEAM_NOT_FOUND`; duplicate names, self/cyclic/same-parent moves, non-leaf deletion, and assigned users are `409` with `TEAM_NAME_CONFLICT`, `TEAM_MOVE_CONFLICT`, `TEAM_HAS_CHILDREN`, or `TEAM_IN_USE`. Detected Closure/adjacency inconsistency is `500 TEAM_HIERARCHY_INCONSISTENT`. OpenAPI is available only in the `local` and `harness` profiles; it remains unavailable by default.
 

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from contextlib import nullcontext
+from contextlib import nullcontext, redirect_stderr
 from pathlib import Path
+import io
 import json
 import os
 import subprocess
@@ -24,8 +25,10 @@ import worker_runner.runner as worker_runner_module
 from worker_runner.invocation import (
     BACKEND_VERIFICATION_GUIDANCE,
     FRONTEND_VERIFICATION_GUIDANCE,
+    PHASE_TIMING_GUIDANCE,
     parse_invocation,
 )
+from worker_runner.phase_marker import main as mark_phase
 from worker_runner.config import load_config
 
 
@@ -266,6 +269,7 @@ class WorkerReadablePathTests(unittest.TestCase):
             sys.executable,
         )
         self.assertEqual(environment["FLOW_BI_TASK_NUMBER"], "12")
+        self.assertEqual(environment["FLOW_BI_PROJECT_ROOT"], str(project_root))
 
     def test_worker_environment_discards_removed_browser_verifier_values(self) -> None:
         browser_url = "FLOW_BI_" + "BROWSER_VERIFIER_URL"
@@ -286,6 +290,7 @@ class WorkerReadablePathTests(unittest.TestCase):
 
         self.assertEqual(environment["FLOW_BI_RUN_ID"], "worker-run-id")
         self.assertEqual(environment["FLOW_BI_TASK_NUMBER"], "12")
+        self.assertEqual(environment["FLOW_BI_PROJECT_ROOT"], str(self.root))
         self.assertEqual(
             environment["FLOW_BI_PARENT_SESSION_ID"],
             "parent-session-id",
@@ -612,6 +617,47 @@ class WorkerInvocationTests(unittest.TestCase):
         self.assertIn("patch가 실패한 경우에만 해당 구간을 다시 조회", prompt)
         self.assertIn("최종 `git diff`는 한 번만", prompt)
         self.assertIn("긴 테스트 로그는 실패 원인 주변의 제한된 구간", prompt)
+
+    def test_worker_guidance_marks_detailed_phase_timings(self) -> None:
+        prompt, _allowed, _forbidden = parse_invocation(
+            self.payload(
+                {
+                    "plan_id": "rerun-01",
+                    "fingerprint": "phase-fingerprint",
+                    "mode": "new_or_changed",
+                    "prior_tdd_evidence": None,
+                }
+            )
+        )
+
+        self.assertIn(PHASE_TIMING_GUIDANCE, prompt)
+        self.assertIn("phase_marker.py <phase>", prompt)
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout='{"status":"recorded"}', stderr=""
+        )
+        environment = {
+            "FLOW_BI_RUN_ID": "worker-run-id",
+            "FLOW_BI_TASK_NUMBER": "12",
+            "FLOW_BI_PROJECT_ROOT": str(Path.cwd()),
+        }
+        with (
+            mock.patch(
+                "worker_runner.phase_marker.shutil.which",
+                return_value="/usr/bin/node",
+            ),
+            mock.patch(
+                "worker_runner.phase_marker.subprocess.run",
+                return_value=completed,
+            ) as run,
+        ):
+            for phase in (
+                "analysis", "test_code", "implementation", "implementation_and_test",
+                "refactor", "documentation", "verification", "finalization",
+            ):
+                self.assertEqual(mark_phase([phase], environment=environment), 0)
+        self.assertEqual(run.call_count, 8)
+        with redirect_stderr(io.StringIO()):
+            self.assertEqual(mark_phase(["unknown"], environment=environment), 2)
 
     def test_backend_verifier_prompt_waits_for_in_flight_execution_before_rerunning(self) -> None:
         contexts = (

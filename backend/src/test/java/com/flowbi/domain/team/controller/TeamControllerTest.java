@@ -52,6 +52,41 @@ class TeamControllerTest {
   }
 
   @Test
+  void returnsTheEntireOrganizationTreeForAuthenticatedUsersWithoutInternalData() throws Exception {
+    when(hierarchy.findOrganizationTree()).thenReturn(List.of(
+        new TeamHierarchyResponse(1L, "Headquarters", 0,
+            List.of(new TeamHierarchyResponse(2L, "Development", 1, List.of()))),
+        new TeamHierarchyResponse(3L, "Sales", 0, List.of())));
+
+    mockMvc.perform(get("/api/teams/tree").requestAttr("authenticatedUser",user()))
+        .andExpect(status().isOk()).andExpect(jsonPath("$[0].teamId").value(1))
+        .andExpect(jsonPath("$[0].children[0].teamId").value(2))
+        .andExpect(jsonPath("$[1].teamId").value(3))
+        .andExpect(jsonPath("$[0].ancestorTeamId").doesNotExist())
+        .andExpect(jsonPath("$[0].descendantTeamId").doesNotExist())
+        .andExpect(jsonPath("$[0].employeeNumber").doesNotExist());
+  }
+
+  @Test
+  void rejectsUnauthenticatedOrganizationTreeRequestsBeforeCallingServices() throws Exception {
+    mockMvc.perform(get("/api/teams/tree")).andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
+
+    verify(hierarchy,never()).findOrganizationTree();
+  }
+
+  @Test
+  void mapsOrganizationHierarchyInconsistencyToASafeError() throws Exception {
+    when(hierarchy.findOrganizationTree())
+        .thenThrow(new com.flowbi.domain.team.service.TeamHierarchyInconsistentException());
+
+    mockMvc.perform(get("/api/teams/tree").requestAttr("authenticatedUser",user()))
+        .andExpect(status().isInternalServerError())
+        .andExpect(jsonPath("$.code").value("TEAM_HIERARCHY_INCONSISTENT"))
+        .andExpect(jsonPath("$.message").value("The team hierarchy is unavailable."));
+  }
+
+  @Test
   void rejectsUnauthenticatedRequestsBeforeCallingServices() throws Exception {
     mockMvc.perform(get("/api/teams")).andExpect(status().isUnauthorized())
         .andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));

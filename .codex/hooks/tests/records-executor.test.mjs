@@ -64,7 +64,7 @@ test("keeps same task number runs separate and inherits the task executor for ag
     );
 
     const records = readJson(storagePaths(projectRoot).logFile, []);
-    const starts = records.filter((record) => record.record_type.endsWith("start"));
+    const starts = records.filter((record) => ["task_start", "agent_start"].includes(record.record_type));
     assert.deepEqual(
       starts.map((record) => [record.run_id, record.executor]),
       [

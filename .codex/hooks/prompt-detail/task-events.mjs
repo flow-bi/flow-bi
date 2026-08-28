@@ -8,6 +8,11 @@ import {
   terminalRecordForState,
 } from "./records.mjs";
 import { withStorage } from "./storage.mjs";
+import {
+  closeWorkerTiming,
+  startWorkerTiming,
+  summarizeWorkerTiming,
+} from "./tool-events.mjs";
 import { readSessionUsage, terminalUsage } from "./usage.mjs";
 
 function captureUsage(sessionId, usageReader) {
@@ -53,6 +58,7 @@ export async function handleUserPromptSubmit(
       record_type: "task_start", tree_version: state.tree_version, ...commonRecord(state, occurredAt),
       prompt: input.prompt, cwd: input.cwd, model: input.model, permission_mode: input.permission_mode,
     });
+    startWorkerTiming(records, state, occurredAt);
     pending.push(state);
     return state;
   }, {
@@ -95,10 +101,13 @@ export async function recordWorkerEnd(
       return { status: "cleanup_retry" };
     }
     const terminalStatus = status || (exitCode === 0 ? "completed" : "failed");
+    const occurredAt = now().toISOString();
+    closeWorkerTiming(records, state, occurredAt);
     records.push({
-      record_type: "task_end", tree_version: state.tree_version, ...commonRecord(state, now().toISOString()),
+      record_type: "task_end", tree_version: state.tree_version, ...commonRecord(state, occurredAt),
       status: { type: terminalStatus, exit_code: exitCode }, ...usageForTerminal(state, usageReader),
       summary: summary?.trim() || (exitCode === 0 ? "Worker completed without a captured final summary." : `Worker failed with exit code ${exitCode}.`),
+      timing: summarizeWorkerTiming(records, state, occurredAt),
     });
     pending.splice(index, 1);
     return { status: terminalStatus };

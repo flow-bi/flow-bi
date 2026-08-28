@@ -37,6 +37,21 @@ TASK_WORKER_GUIDANCE = (
     "Skill과 실행 스크립트를 재호출하지 마십시오. 또한  모든 timeout은 90분으로 설정해 확인합니다."
 )
 
+PHASE_TIMING_GUIDANCE = (
+    "`.codex-logs`에 실제 단계별 경과 시간을 남기기 위해 단계가 바뀌기 직전에 "
+    "macOS/Linux에서는 `\"$FLOW_BI_PYTHON_EXECUTABLE\" "
+    ".agents/scripts/worker_runner/phase_marker.py <phase>`, Windows PowerShell에서는 "
+    "`& $env:FLOW_BI_PYTHON_EXECUTABLE .agents/scripts/worker_runner/phase_marker.py <phase>`를 "
+    "한 번 실행하십시오. 허용 phase는 `analysis`, `test_code`, `implementation`, "
+    "`implementation_and_test`, `refactor`, `documentation`, `verification`, `finalization`입니다. "
+    "최초 탐색은 자동으로 `analysis`로 시작합니다. 실패 테스트를 작성하기 직전 `test_code`, "
+    "제품 코드를 작성하기 직전 `implementation`, 구조를 정리하기 직전 `refactor`, 문서를 "
+    "갱신하기 직전 `documentation`, 테스트·정적 분석·빌드를 실행하기 직전 `verification`, "
+    "최종 결과를 정리하기 직전 `finalization`을 표시하십시오. 테스트와 제품 코드를 하나의 "
+    "patch에서 불가피하게 함께 수정할 때만 `implementation_and_test`를 사용하십시오. 이 marker는 "
+    "시간 기록 전용이며 TDD 순서나 검증 명령을 대체하지 않습니다."
+)
+
 IN_FLIGHT_VERIFIER_GUIDANCE = (
     "shell 도구가 verifier 명령에 진행 중 상태 또는 실행 session을 반환하면 같은 verifier CLI를 새 "
     "shell 명령으로 시작하지 마십시오. 기존 실행을 wait/poll하여 최종 종료 코드와 출력을 "
@@ -327,6 +342,7 @@ def parse_invocation(raw_invocation: str) -> InvocationResult:
         DISCOVERY_GUIDANCE,
         CONTEXT_EFFICIENCY_GUIDANCE,
         TASK_WORKER_GUIDANCE,
+        PHASE_TIMING_GUIDANCE,
         BACKEND_VERIFICATION_GUIDANCE,
         BACKEND_FORMATTING_GUIDANCE,
         FRONTEND_VERIFICATION_GUIDANCE,

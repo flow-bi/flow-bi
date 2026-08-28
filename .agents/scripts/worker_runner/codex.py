@@ -269,6 +269,7 @@ def build_subprocess_environment(
 
     environment["FLOW_BI_RUN_ID"] = run_id
     environment["FLOW_BI_TASK_NUMBER"] = task_number_text
+    environment["FLOW_BI_PROJECT_ROOT"] = str(project_root)
     environment["FLOW_BI_PYTHON_EXECUTABLE"] = sys.executable
     environment.pop("FLOW_BI_NOTION_PARENT", None)
     environment.pop("FLOW_BI_" + "BROWSER_VERIFIER_URL", None)

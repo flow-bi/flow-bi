@@ -17,6 +17,7 @@ import {
   resolveMeetingRoomGateway,
   type MeetingRoomGateway,
 } from './features/meeting-room'
+import { OrganizationChart } from './features/organization-chart'
 import { ScheduleCalendar, ScheduleCreateModal } from './features/schedule-calendar'
 
 declare global {
@@ -224,6 +225,7 @@ function AuthenticatedApp({ onLoggedOut, queryClient }: AuthenticatedAppProps) {
   const [logoutError, setLogoutError] = useState<string>()
   const [locationSearch, setLocationSearch] = useState(() => window.location.search)
   const isCalendarRoute = new URLSearchParams(locationSearch).has('view')
+  const isOrganizationChartRoute = new URLSearchParams(locationSearch).has('organization-chart')
   const isTestHarness = isMeetingRoomTestHarness()
   const meetingRoomGateway = resolveMeetingRoomGateway({
     isTestHarness,
@@ -239,6 +241,12 @@ function AuthenticatedApp({ onLoggedOut, queryClient }: AuthenticatedAppProps) {
     const calendarSearch = '?view=month'
     window.history.pushState({}, '', `${window.location.pathname}${calendarSearch}`)
     setLocationSearch(calendarSearch)
+  }
+
+  const navigateToOrganizationChart = () => {
+    const organizationChartSearch = '?organization-chart'
+    window.history.pushState({}, '', `${window.location.pathname}${organizationChartSearch}`)
+    setLocationSearch(organizationChartSearch)
   }
 
   useEffect(() => {
@@ -274,9 +282,9 @@ function AuthenticatedApp({ onLoggedOut, queryClient }: AuthenticatedAppProps) {
   const sidebar = (onNavigate: () => void) => (
     <div className="flex flex-col gap-1">
       <a
-        aria-current={isCalendarRoute ? undefined : 'page'}
+        aria-current={!isCalendarRoute && !isOrganizationChartRoute ? 'page' : undefined}
         aria-label="회의실"
-        className={navigationClass(!isCalendarRoute)}
+        className={navigationClass(!isCalendarRoute && !isOrganizationChartRoute)}
         href="#meeting-room"
         onClick={(event) => {
           event.preventDefault()
@@ -285,7 +293,7 @@ function AuthenticatedApp({ onLoggedOut, queryClient }: AuthenticatedAppProps) {
         }}
       >
         회의실
-        {!isCalendarRoute && <span aria-hidden="true" />}
+        {!isCalendarRoute && !isOrganizationChartRoute && <span aria-hidden="true" />}
       </a>
       <a
         aria-current={isCalendarRoute ? 'page' : undefined}
@@ -300,6 +308,20 @@ function AuthenticatedApp({ onLoggedOut, queryClient }: AuthenticatedAppProps) {
       >
         캘린더
         {isCalendarRoute && <span aria-hidden="true" />}
+      </a>
+      <a
+        aria-current={isOrganizationChartRoute ? 'page' : undefined}
+        aria-label="조직도"
+        className={navigationClass(isOrganizationChartRoute)}
+        href="?organization-chart"
+        onClick={(event) => {
+          event.preventDefault()
+          navigateToOrganizationChart()
+          onNavigate()
+        }}
+      >
+        조직도
+        {isOrganizationChartRoute && <span aria-hidden="true" />}
       </a>
     </div>
   )
@@ -326,7 +348,13 @@ function AuthenticatedApp({ onLoggedOut, queryClient }: AuthenticatedAppProps) {
   return (
     <QueryClientProvider client={queryClient}>
       <AppShell logout={logoutButton} sidebar={sidebar}>
-        {isCalendarRoute ? <CalendarStarter /> : <MeetingRoomPage gateway={meetingRoomGateway} />}
+        {isOrganizationChartRoute ? (
+          <OrganizationChart />
+        ) : isCalendarRoute ? (
+          <CalendarStarter />
+        ) : (
+          <MeetingRoomPage gateway={meetingRoomGateway} />
+        )}
       </AppShell>
     </QueryClientProvider>
   )

@@ -26,6 +26,7 @@
 | `email`             | `VARCHAR(255)` | UNIQUE, NOT NULL                    | 이메일            |
 | `phone_number`      | `VARCHAR(20)`  | NULL                                | 전화번호          |
 | `status`            | `VARCHAR(30)`  | NOT NULL                            | 계정 상태         |
+| `work_status`       | `VARCHAR(30)`  | NOT NULL, DEFAULT `OFFLINE`          | 현재 근무 상태    |
 | `employment_status` | `VARCHAR(30)`  | NOT NULL                            | 재직 상태         |
 | `profile_image_url` | `VARCHAR(512)` | NULL                                | 프로필 이미지 URL |
 | `created_at`        | `TIMESTAMPTZ`  | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 생성일시          |
@@ -33,7 +34,7 @@
 
 관계: Position N:1, Team N:1, User Credentials 1:1. 로그인 세션은 PostgreSQL이 아니라 Redis의 Spring Session 저장소에서 관리한다.
 
-`status`는 계정 활성화 상태인 `ACTIVE`, `INACTIVE`만 허용하고 `employment_status`는 `EMPLOYED`, `TERMINATED`만 허용하는 CHECK를 둔다. 신규 사용자의 기본 상태는 `ACTIVE + EMPLOYED`다. 퇴직은 한 트랜잭션에서 `TERMINATED + INACTIVE`로 변경하며 `TERMINATED`를 되돌리지 않는다. 재입사자는 새 사번의 새 사용자로 등록한다. V2 Migration은 기존 사용자 이메일을 추측해 생성하지 않으며, 기존 사용자가 있으면 승인된 이메일 Backfill 전까지 적용을 중단한다.
+`status`는 계정 활성화 상태인 `ACTIVE`, `INACTIVE`만 허용하고 `employment_status`는 `EMPLOYED`, `TERMINATED`만 허용하는 CHECK를 둔다. `work_status`는 계정·재직 상태와 별개로 `WORKING`, `IN_MEETING`, `OUT_OF_OFFICE`, `ON_LEAVE`, `OFFLINE`만 허용하는 CHECK를 둔다. 신규 사용자와 Migration 이전 사용자의 기본 근무 상태는 `OFFLINE`이다. 신규 사용자의 기본 계정·재직 상태는 `ACTIVE + EMPLOYED`다. 퇴직은 한 트랜잭션에서 `TERMINATED + INACTIVE`로 변경하며 `TERMINATED`를 되돌리지 않는다. 재입사자는 새 사번의 새 사용자로 등록한다. V2 Migration은 기존 사용자 이메일을 추측해 생성하지 않으며, 기존 사용자가 있으면 승인된 이메일 Backfill 전까지 적용을 중단한다.
 
 ### 2.2 `user_credentials`
 

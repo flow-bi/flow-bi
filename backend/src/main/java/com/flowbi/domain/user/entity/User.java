@@ -61,6 +61,10 @@ public class User {
   @Column(nullable = false, length = 30)
   private UserStatus status;
 
+  @Enumerated(EnumType.STRING)
+  @Column(name = "work_status", nullable = false, length = 30)
+  private WorkStatus workStatus;
+
   @Column(name = "profile_image_url", length = PROFILE_IMAGE_URL_MAX_LENGTH)
   private String profileImageUrl;
 
@@ -80,6 +84,7 @@ public class User {
     this.position = requirePosition(position);
     this.team = requireTeam(team);
     this.status = UserStatus.ACTIVE;
+    this.workStatus = WorkStatus.OFFLINE;
   }
 
   public static User create(String employeeNumber,String email,String name,Position position,

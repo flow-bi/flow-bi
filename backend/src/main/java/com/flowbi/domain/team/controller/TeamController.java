@@ -66,6 +66,17 @@ public class TeamController {
     return TeamResponse.from(teams.findExisting(teamId));
   }
 
+  @Operation(summary = "Get the organization team tree")
+  @ApiResponses({@ApiResponse(responseCode = "200", description = "Organization team tree"),
+      @ApiResponse(responseCode = "401", description = "Authentication required"),
+      @ApiResponse(responseCode = "500", description = "Team hierarchy unavailable")})
+  @GetMapping("/tree")
+  public List<TeamHierarchyResponse> findOrganizationTree(
+      @RequestAttribute(value = "authenticatedUser", required = false) @Parameter(hidden = true) AuthenticatedUser actor) {
+    requireAuthenticated(actor);
+    return hierarchy.findOrganizationTree();
+  }
+
   @GetMapping("/{teamId}/parent")
   public ResponseEntity<TeamRelationResponse> findParent(
       @RequestAttribute(value = "authenticatedUser", required = false) AuthenticatedUser actor,

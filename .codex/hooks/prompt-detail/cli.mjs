@@ -2,6 +2,11 @@ import { readFileSync } from "node:fs";
 
 import { handleSubagentStart, handleSubagentStop } from "./subagent-events.mjs";
 import { handleStop, handleUserPromptSubmit, recordWorkerEnd } from "./task-events.mjs";
+import {
+  handlePostToolUse,
+  handlePreToolUse,
+  recordWorkerPhase,
+} from "./tool-events.mjs";
 
 const OUTPUT_EVENTS = new Set(["Stop", "SubagentStart", "SubagentStop"]);
 
@@ -18,6 +23,8 @@ export async function routeEvent(input, handlers = {}) {
     handleStop,
     handleSubagentStart,
     handleSubagentStop,
+    handlePreToolUse,
+    handlePostToolUse,
     ...handlers,
   };
 
@@ -33,6 +40,12 @@ export async function routeEvent(input, handlers = {}) {
     }
     case "SubagentStop":
       return implementations.handleSubagentStop(input);
+    case "PreToolUse":
+      await implementations.handlePreToolUse(input);
+      return {};
+    case "PostToolUse":
+      await implementations.handlePostToolUse(input);
+      return {};
     default:
       return {};
   }
@@ -44,6 +57,7 @@ export async function runCli({
   stdout = process.stdout,
   readFile = readFileSync,
   workerEnd = recordWorkerEnd,
+  workerPhase = recordWorkerPhase,
   handlers,
 } = {}) {
   let eventName = null;
@@ -60,6 +74,17 @@ export async function runCli({
         // Missing output is represented by the fallback summary.
       }
       await workerEnd({ runId, exitCode, summary, status });
+      return;
+    }
+    if (argv[2] === "--worker-phase") {
+      const runId = argv[3];
+      const phase = argv[4];
+      const projectRoot = argv[5];
+      const result = await workerPhase(
+        { runId, phase },
+        projectRoot ? { projectRoot } : undefined,
+      );
+      stdout.write(JSON.stringify(result));
       return;
     }
 

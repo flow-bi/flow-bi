@@ -270,6 +270,39 @@ describe('App main screen', () => {
     )
   })
 
+  it('navigates to the organization chart from desktop and mobile navigation with a consistent current location', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((path: string) => {
+        if (path === '/api/teams/tree') {
+          return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }))
+        }
+        if (path === '/api/me/header') {
+          return Promise.resolve(
+            new Response(JSON.stringify({ name: '조직 사용자' }), { status: 200 }),
+          )
+        }
+        return Promise.resolve(
+          new Response(JSON.stringify({ authenticated: true, mustChangePassword: false }), {
+            status: 200,
+          }),
+        )
+      }),
+    )
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(await screen.findByRole('link', { name: '조직도' }))
+    expect(screen.getByRole('link', { name: '조직도' })).toHaveAttribute('aria-current', 'page')
+    expect(await screen.findByRole('heading', { name: '조직도' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '사이드바 열기' }))
+    const mobileOrganizationLink = within(
+      screen.getByRole('dialog', { name: '주요 탐색' }),
+    ).getByRole('link', { name: '조직도' })
+    expect(mobileOrganizationLink).toHaveAttribute('aria-current', 'page')
+  })
+
   it('opens the existing schedule creation modal from the calendar header and restores trigger focus', async () => {
     window.history.replaceState({}, '', '/')
     vi.stubGlobal(

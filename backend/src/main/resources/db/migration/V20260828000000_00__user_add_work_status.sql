@@ -1,0 +1,6 @@
+ALTER TABLE users
+    ADD COLUMN work_status VARCHAR(30) NOT NULL DEFAULT 'OFFLINE';
+
+ALTER TABLE users
+    ADD CONSTRAINT ck_users_work_status
+    CHECK (work_status IN ('WORKING', 'IN_MEETING', 'OUT_OF_OFFICE', 'ON_LEAVE', 'OFFLINE'));

@@ -1,6 +1,8 @@
 package com.flowbi.domain.user.controller;
 
-import com.flowbi.domain.user.dto.UserDetailResponse;
+import com.flowbi.domain.user.dto.OrganizationChartUserDetailResponse;
+import com.flowbi.domain.user.dto.OrganizationChartUserListResponse;
+import java.util.List;
 import com.flowbi.domain.user.service.UserService;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
@@ -8,6 +10,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -21,9 +24,16 @@ public class UserController {
   }
 
   @GetMapping("/{userId}")
-  public ResponseEntity<UserDetailResponse> getUser(@PathVariable Long userId) {
+  public ResponseEntity<OrganizationChartUserDetailResponse> getUser(@PathVariable Long userId) {
     return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-        .body(users.getUserDetail(userId));
+        .body(users.getOrganizationChartUserDetail(userId));
+  }
+
+  @GetMapping
+  public ResponseEntity<List<OrganizationChartUserListResponse>> getUsers(
+      @RequestParam Long teamId) {
+    return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+        .body(users.getOrganizationChartUsers(teamId));
   }
 
   @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)

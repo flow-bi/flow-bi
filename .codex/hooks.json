@@ -22,6 +22,30 @@
         ]
       }
     ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/.codex/hooks/log-prompt-detail.mjs\"",
+            "commandWindows": "node (Join-Path (git rev-parse --show-toplevel) '.codex/hooks/log-prompt-detail.mjs')",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/.codex/hooks/log-prompt-detail.mjs\"",
+            "commandWindows": "node (Join-Path (git rev-parse --show-toplevel) '.codex/hooks/log-prompt-detail.mjs')",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [

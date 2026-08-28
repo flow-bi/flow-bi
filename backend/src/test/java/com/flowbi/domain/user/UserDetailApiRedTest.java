@@ -14,7 +14,8 @@ import com.flowbi.domain.auth.security.SecurityConfiguration;
 import com.flowbi.domain.auth.session.SessionGenerationService;
 import com.flowbi.domain.auth.session.SessionGenerationValidationFilter;
 import com.flowbi.domain.user.controller.UserController;
-import com.flowbi.domain.user.dto.UserDetailResponse;
+import com.flowbi.domain.user.dto.OrganizationChartUserDetailResponse;
+import com.flowbi.domain.user.entity.WorkStatus;
 import com.flowbi.domain.user.service.UserService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,15 +41,14 @@ class UserDetailApiRedTest {
 
   @Test
   void returnsTheMinimumUserDetailForAnAuthenticatedUser() throws Exception {
-    org.mockito.Mockito.when(users.getUserDetail(7L)).thenReturn(detail());
+    org.mockito.Mockito.when(users.getOrganizationChartUserDetail(7L)).thenReturn(detail());
     mockMvc.perform(request(new LoginPrincipal("42", false))).andExpect(status().isOk())
         .andExpect(header().string("Cache-Control","no-store"))
-        .andExpect(jsonPath("$.userId").value(7)).andExpect(jsonPath("$.name").value("Kim Flow"))
-        .andExpect(jsonPath("$.status").value("ACTIVE"))
-        .andExpect(jsonPath("$.team.teamId").value(3))
-        .andExpect(jsonPath("$.team.name").value("Platform"))
-        .andExpect(jsonPath("$.position.positionId").value(2))
-        .andExpect(jsonPath("$.position.name").value("Engineer"))
+        .andExpect(jsonPath("$.name").value("Kim Flow"))
+        .andExpect(jsonPath("$.position").value("Engineer"))
+        .andExpect(jsonPath("$.team").value("Platform"))
+        .andExpect(jsonPath("$.accountStatus").value("ACTIVE"))
+        .andExpect(jsonPath("$.workStatus").value("OFFLINE"))
         .andExpect(jsonPath("$.employeeNumber").doesNotExist())
         .andExpect(jsonPath("$.password").doesNotExist())
         .andExpect(jsonPath("$.passwordHash").doesNotExist())
@@ -65,7 +65,7 @@ class UserDetailApiRedTest {
 
   @Test
   void returnsNotFoundWhenTheUserDoesNotExistOrIsNotExposed() throws Exception {
-    org.mockito.Mockito.when(users.getUserDetail(9L))
+    org.mockito.Mockito.when(users.getOrganizationChartUserDetail(9L))
         .thenThrow(new org.springframework.web.server.ResponseStatusException(
             org.springframework.http.HttpStatus.NOT_FOUND));
 
@@ -76,10 +76,9 @@ class UserDetailApiRedTest {
         .andExpect(status().isNotFound()).andExpect(header().string("Cache-Control","no-store"));
   }
 
-  private UserDetailResponse detail() {
-    return new UserDetailResponse(7L, "Kim Flow", "ACTIVE",
-        new UserDetailResponse.TeamDetail(3L, "Platform"),
-        new UserDetailResponse.PositionDetail(2L, "Engineer"));
+  private OrganizationChartUserDetailResponse detail() {
+    return new OrganizationChartUserDetailResponse(null, "Kim Flow", "Engineer", "Platform", "1234",
+        "kim@example.test", "ACTIVE", WorkStatus.OFFLINE);
   }
 
   private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder request(
