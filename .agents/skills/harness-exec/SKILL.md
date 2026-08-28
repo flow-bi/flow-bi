@@ -73,6 +73,7 @@ Harness는 session 또는 진행 중 증거를 가진 미해결 `NOT_RUN`만 기
 - `FLOW_BI_NOTION_PARENT`에는 개발자별 Notion 상위 Page 식별자를 설정한다.
 - Notion MCP OAuth는 각 개발자의 로컬 Codex 환경에 설정되어 있어야 한다.
 - 성공·실패 실행 모두 부모 Harness가 완성된 Report 전체를 실행당 하나의 새 Notion Page로 한 번 게시한다. Worker는 Notion에 게시하지 않는다.
+- Task별 Report에는 Node가 확정한 Worker timing이 있으면 area, run ID, 전체·미귀속 시간, 명시·추론 분류와 phase별 duration/tool 호출·tool 실행 시간을 사람 읽기 단위와 원본 ms로 함께 표시한다. blocked Task와 legacy 실행처럼 timing이 없으면 `미기록`이며 0ms나 Parent 시간으로 대체하지 않는다. timing 관측 오류는 Worker 업무 결과와 별도로 표시한다.
 - 부모 전용 `FLOW_BI_NOTION_PARENT` 값은 Worker 자식 프로세스 환경에서 제거한다.
 - 환경변수 누락, OAuth 또는 Notion MCP 게시 실패는 숨기지 않고 실행 실패로 보고하며
   Active Plan을 완료 위치로 이동하지 않는다.
