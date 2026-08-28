@@ -7,6 +7,7 @@ export {
   ExecutorValidationError,
   isSyntheticPrompt,
   resolveExecutor,
+  WORKER_AREAS,
 } from "./prompt-detail/records.mjs";
 export {
   handleStop,

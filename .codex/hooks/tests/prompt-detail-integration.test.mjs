@@ -75,7 +75,7 @@ test("projects task executor, terminal status, direct usage, and cleanup into a 
 
     assert.deepEqual(readJson(paths.pendingFile, []), []);
     assert.deepEqual(tree.unresolved, []);
-    assert.deepEqual(root.executor, { kind: "primary", task_number: null, agent_type: null });
+    assert.deepEqual(root.executor, { kind: "primary", task_number: null, area: null, agent_type: null });
     assert.equal(root.run_id, null);
     assert.equal(root.result.status, "completed");
     assert.deepEqual(root.usage, { input_tokens: 6, output_tokens: 4, total_tokens: 10, cached_input_tokens: 0, cache_creation_input_tokens: 0, reasoning_output_tokens: 0 });

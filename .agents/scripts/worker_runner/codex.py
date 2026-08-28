@@ -17,6 +17,26 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 # 허용되는 Worker 목록
 WORKERS = ("fe-worker", "be-worker")
+WORKER_AREAS = frozenset(("frontend", "backend", "harness", "shared"))
+
+
+def classify_worker_area(allowed_paths: tuple[str, ...]) -> str:
+    """Task 수정 가능 경로를 하나의 안정적인 Worker 영역으로 분류한다."""
+
+    specialized_areas: set[str] = set()
+    for raw_path in allowed_paths:
+        normalized = raw_path.replace("\\", "/").lstrip("./")
+        root = normalized.split("/", 1)[0]
+        if root == "frontend":
+            specialized_areas.add("frontend")
+        elif root == "backend":
+            specialized_areas.add("backend")
+        elif root in {"agents", "codex"} and raw_path.startswith("."):
+            specialized_areas.add("harness")
+
+    if len(specialized_areas) == 1:
+        return next(iter(specialized_areas))
+    return "shared"
 
 
 # PATH에서 Codex 실행 파일 찾기
@@ -208,8 +228,11 @@ def build_subprocess_environment(
     task_number: object,
     base_environment: dict[str, str] | None = None,
     project_root: Path = PROJECT_ROOT,
+    worker_area: str = "shared",
 ) -> dict[str, str]:
     task_number_text = validate_task_number(task_number)
+    if worker_area not in WORKER_AREAS:
+        raise ValueError(f"Unsupported worker area: {worker_area!r}")
     environment = (
         base_environment
         if base_environment is not None
@@ -269,6 +292,7 @@ def build_subprocess_environment(
 
     environment["FLOW_BI_RUN_ID"] = run_id
     environment["FLOW_BI_TASK_NUMBER"] = task_number_text
+    environment["FLOW_BI_WORKER_AREA"] = worker_area
     environment["FLOW_BI_PROJECT_ROOT"] = str(project_root)
     environment["FLOW_BI_PYTHON_EXECUTABLE"] = sys.executable
     environment.pop("FLOW_BI_NOTION_PARENT", None)

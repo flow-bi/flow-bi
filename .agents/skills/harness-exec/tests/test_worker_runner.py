@@ -18,6 +18,7 @@ if str(SCRIPTS) not in sys.path:
 
 from worker_runner.codex import (
     build_subprocess_environment,
+    classify_worker_area,
     collect_worker_readable_paths,
 )
 from worker_runner.runner import execute_worker
@@ -255,6 +256,7 @@ class WorkerReadablePathTests(unittest.TestCase):
             environment = build_subprocess_environment(
                 "test-run",
                 task_number=12,
+                worker_area="backend",
                 base_environment={"PATH": os.environ.get("PATH", "")},
                 project_root=project_root,
             )
@@ -269,7 +271,22 @@ class WorkerReadablePathTests(unittest.TestCase):
             sys.executable,
         )
         self.assertEqual(environment["FLOW_BI_TASK_NUMBER"], "12")
+        self.assertEqual(environment["FLOW_BI_WORKER_AREA"], "backend")
         self.assertEqual(environment["FLOW_BI_PROJECT_ROOT"], str(project_root))
+
+    def test_worker_area_is_classified_from_allowed_paths(self) -> None:
+        cases = (
+            (("frontend/src", "frontend/FRONTEND.md"), "frontend"),
+            (("backend/src", "backend/API.md"), "backend"),
+            ((".agents/scripts", ".codex/hooks"), "harness"),
+            (("docs/plans", "CONVENTIONS.md"), "shared"),
+            (("frontend/src", "docs/product-specs"), "frontend"),
+            (("frontend/src", "backend/src"), "shared"),
+        )
+
+        for allowed_paths, expected in cases:
+            with self.subTest(allowed_paths=allowed_paths):
+                self.assertEqual(classify_worker_area(allowed_paths), expected)
 
     def test_worker_environment_discards_removed_browser_verifier_values(self) -> None:
         browser_url = "FLOW_BI_" + "BROWSER_VERIFIER_URL"
@@ -277,6 +294,7 @@ class WorkerReadablePathTests(unittest.TestCase):
         environment = build_subprocess_environment(
             "worker-run-id",
             task_number=12,
+            worker_area="harness",
             base_environment={
                 "PATH": os.environ.get("PATH", ""),
                 "CODEX_THREAD_ID": "parent-session-id",
@@ -290,6 +308,7 @@ class WorkerReadablePathTests(unittest.TestCase):
 
         self.assertEqual(environment["FLOW_BI_RUN_ID"], "worker-run-id")
         self.assertEqual(environment["FLOW_BI_TASK_NUMBER"], "12")
+        self.assertEqual(environment["FLOW_BI_WORKER_AREA"], "harness")
         self.assertEqual(environment["FLOW_BI_PROJECT_ROOT"], str(self.root))
         self.assertEqual(
             environment["FLOW_BI_PARENT_SESSION_ID"],
@@ -368,6 +387,10 @@ class WorkerReadablePathTests(unittest.TestCase):
         self.assertEqual(
             build_environment.call_args.kwargs["task_number"],
             1,
+        )
+        self.assertEqual(
+            build_environment.call_args.kwargs["worker_area"],
+            "frontend",
         )
 
 

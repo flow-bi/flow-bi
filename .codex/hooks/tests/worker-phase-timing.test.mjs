@@ -33,7 +33,7 @@ function workerOptions(projectRoot, second) {
   return {
     projectRoot,
     now: at(second),
-    environment: { FLOW_BI_RUN_ID: "run-3", FLOW_BI_TASK_NUMBER: "3" },
+    environment: { FLOW_BI_RUN_ID: "run-3", FLOW_BI_TASK_NUMBER: "3", FLOW_BI_WORKER_AREA: "backend" },
     usageReader: () => ({ usage: null, usage_status: "USAGE_MISSING" }),
   };
 }
@@ -132,6 +132,7 @@ test("records explicit worker phases and per-phase tool execution in raw logs an
     const records = readJson(testFixture.paths.logFile, []);
     const tree = readJson(testFixture.paths.treeFile, {});
     const worker = tree.roots[0];
+    assert.equal(worker.executor.area, "backend");
     assert.deepEqual(worker.timing, {
       total_duration_ms: 60_000,
       phases: [
@@ -146,6 +147,7 @@ test("records explicit worker phases and per-phase tool execution in raw logs an
     assert.equal(records.filter((record) => record.record_type === "worker_phase_start").length, 4);
     assert.equal(records.filter((record) => record.record_type === "worker_phase_end").length, 4);
     assert.equal(records.filter((record) => record.record_type === "worker_tool_end").length, 3);
+    assert.equal(records.every((record) => record.executor.area === "backend"), true);
   } finally {
     testFixture.dispose();
   }

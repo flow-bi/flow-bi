@@ -1,5 +1,8 @@
 import { SUMMARY_REQUEST } from "./config.mjs";
 
+export const WORKER_AREAS = Object.freeze(["frontend", "backend", "harness", "shared"]);
+const WORKER_AREA_SET = new Set(WORKER_AREAS);
+
 // 하네스가 명시적으로 전달한 worker 환경변수를 먼저 확인하고 없으면 primary
 export class ExecutorValidationError extends Error {
   constructor(message) {
@@ -13,7 +16,7 @@ export function resolveExecutor(environment = process.env) {
   const taskNumber = environment.FLOW_BI_TASK_NUMBER;
   const runId = environment.FLOW_BI_RUN_ID;
   if (taskNumber === undefined && !runId) {
-    return { kind: "primary", task_number: null };
+    return { kind: "primary", task_number: null, area: null };
   }
   if (typeof taskNumber !== "string" || !/^[1-9]\d*$/.test(taskNumber)) {
     throw new ExecutorValidationError(
@@ -26,7 +29,13 @@ export function resolveExecutor(environment = process.env) {
       "FLOW_BI_TASK_NUMBER must be a safe positive integer",
     );
   }
-  return { kind: "task", task_number: parsedTaskNumber };
+  const area = environment.FLOW_BI_WORKER_AREA ?? null;
+  if (area !== null && !WORKER_AREA_SET.has(area)) {
+    throw new ExecutorValidationError(
+      `FLOW_BI_WORKER_AREA must be one of: ${WORKER_AREAS.join(", ")}`,
+    );
+  }
+  return { kind: "task", task_number: parsedTaskNumber, area };
 }
 
 // 훅이나 시스템이 생성하면 pass
@@ -81,6 +90,7 @@ export function commonRecord(state, occurredAt) {
     executor: {
       kind: state.executor.kind,
       task_number: state.executor.task_number,
+      area: state.executor.area ?? null,
       agent_type: state.agent_type ?? null,
     },
   };

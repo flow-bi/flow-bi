@@ -1,4 +1,7 @@
 import { TREE_VERSION } from "./config.mjs";
+import { WORKER_AREAS } from "./records.mjs";
+
+const WORKER_AREA_SET = new Set(WORKER_AREAS);
 
 const START_TYPES = new Map([
   ["task_start", "task"],
@@ -43,6 +46,9 @@ function executorFor(record) {
       record.executor.task_number > 0
         ? record.executor.task_number
         : null,
+    area: WORKER_AREA_SET.has(record.executor?.area)
+      ? record.executor.area
+      : null,
     agent_type: record.executor?.agent_type ?? null,
   };
 }

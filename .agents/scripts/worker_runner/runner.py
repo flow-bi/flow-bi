@@ -15,6 +15,7 @@ from .codex import (
     PROJECT_ROOT,
     build_codex_command,
     build_subprocess_environment,
+    classify_worker_area,
     collect_worker_readable_paths,
     validate_task_number,
 )
@@ -153,6 +154,7 @@ def execute_worker(
     environment = build_subprocess_environment(
         run_id,
         task_number=task_number,
+        worker_area=classify_worker_area(allowed_paths),
         base_environment=base_environment,
         project_root=project_root,
     )

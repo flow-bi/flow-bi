@@ -23,7 +23,7 @@ export async function handleSubagentStart(
       parent_session_id: input.session_id,
       depth: parent ? parent.depth + 1 : 0,
       hierarchy_resolved: Boolean(parent),
-      executor: parent?.executor ?? { kind: "primary", task_number: null },
+      executor: parent?.executor ?? { kind: "primary", task_number: null, area: null },
       tree_version: parent ? parent.tree_version : TREE_VERSION,
       agent_type: input.agent_type,
       agent_id: input.agent_id,

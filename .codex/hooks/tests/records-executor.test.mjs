@@ -14,15 +14,28 @@ test("normalizes primary and Task environments into executor records", () => {
   assert.deepEqual(resolveExecutor({}), {
     kind: "primary",
     task_number: null,
+    area: null,
   });
-  assert.deepEqual(resolveExecutor({ FLOW_BI_TASK_NUMBER: "1" }), {
+  assert.deepEqual(resolveExecutor({ FLOW_BI_TASK_NUMBER: "1", FLOW_BI_WORKER_AREA: "frontend" }), {
     kind: "task",
     task_number: 1,
+    area: "frontend",
   });
-  assert.deepEqual(resolveExecutor({ FLOW_BI_TASK_NUMBER: "2" }), {
+  assert.deepEqual(resolveExecutor({ FLOW_BI_TASK_NUMBER: "2", FLOW_BI_WORKER_AREA: "backend" }), {
     kind: "task",
     task_number: 2,
+    area: "backend",
   });
+});
+
+test("accepts the worker area allowlist and rejects unknown categories", () => {
+  for (const area of ["frontend", "backend", "harness", "shared"]) {
+    assert.equal(resolveExecutor({ FLOW_BI_TASK_NUMBER: "1", FLOW_BI_WORKER_AREA: area }).area, area);
+  }
+  assert.throws(
+    () => resolveExecutor({ FLOW_BI_TASK_NUMBER: "1", FLOW_BI_WORKER_AREA: "mobile" }),
+    (error) => error?.code === "INVALID_TASK_EXECUTOR",
+  );
 });
 
 test("rejects missing or invalid task numbers for worker runs without primary fallback", () => {
@@ -47,7 +60,7 @@ test("keeps same task number runs separate and inherits the task executor for ag
       {
         projectRoot,
         now,
-        environment: { FLOW_BI_RUN_ID: "run-a", FLOW_BI_TASK_NUMBER: "1" },
+        environment: { FLOW_BI_RUN_ID: "run-a", FLOW_BI_TASK_NUMBER: "1", FLOW_BI_WORKER_AREA: "backend" },
       },
     );
     await handleUserPromptSubmit(
@@ -55,7 +68,7 @@ test("keeps same task number runs separate and inherits the task executor for ag
       {
         projectRoot,
         now,
-        environment: { FLOW_BI_RUN_ID: "run-b", FLOW_BI_TASK_NUMBER: "1" },
+        environment: { FLOW_BI_RUN_ID: "run-b", FLOW_BI_TASK_NUMBER: "1", FLOW_BI_WORKER_AREA: "backend" },
       },
     );
     await handleSubagentStart(
@@ -68,9 +81,9 @@ test("keeps same task number runs separate and inherits the task executor for ag
     assert.deepEqual(
       starts.map((record) => [record.run_id, record.executor]),
       [
-        ["run-a", { kind: "task", task_number: 1, agent_type: null }],
-        ["run-b", { kind: "task", task_number: 1, agent_type: null }],
-        ["run-a", { kind: "task", task_number: 1, agent_type: "general" }],
+        ["run-a", { kind: "task", task_number: 1, area: "backend", agent_type: null }],
+        ["run-b", { kind: "task", task_number: 1, area: "backend", agent_type: null }],
+        ["run-a", { kind: "task", task_number: 1, area: "backend", agent_type: "general" }],
       ],
     );
   } finally {
@@ -92,6 +105,7 @@ test("normalizes legacy records without executor fields in the tree", async () =
   assert.deepEqual(tree.roots[0].executor, {
     kind: "primary",
     task_number: null,
+    area: null,
     agent_type: null,
   });
 });
