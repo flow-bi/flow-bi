@@ -259,11 +259,17 @@ def _execute_task(
     timed_out = False
     message = ""
     worker_output: dict[str, object] | None = None
+    timing = None
+    timing_observation_error = ""
 
     try:
         worker_result = call_worker(invocation)
         raw_output = getattr(worker_result, "output", None)
         worker_output = raw_output if isinstance(raw_output, dict) else None
+        timing = getattr(worker_result, "timing", None)
+        timing_observation_error = str(
+            getattr(worker_result, "timing_observation_error", "") or ""
+        )
         return_code = _return_code(worker_result)
         if return_code != 0:
             status = "failed"
@@ -338,6 +344,10 @@ def _execute_task(
         return_code = 124
         timed_out = True
         message = str(error)
+        timing = getattr(error, "timing", None)
+        timing_observation_error = str(
+            getattr(error, "timing_observation_error", "") or ""
+        )
     except subprocess.CalledProcessError as error:
         status = "failed"
         return_code = error.returncode
@@ -388,6 +398,8 @@ def _execute_task(
             if worker_output is not None
             else ""
         ),
+        timing=timing,
+        timing_observation_error=timing_observation_error,
     )
 
 

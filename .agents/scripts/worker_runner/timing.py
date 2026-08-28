@@ -136,6 +136,7 @@ class CollectionService:
         self._open_tools: set[str] = set()
         self._lock = Lock()
         self.diagnostics: list[str] = []
+        self.timing_summary: object | None = None
         self._server = ThreadingHTTPServer(("127.0.0.1", 0), self._handler_type())
         self._thread: Thread | None = None
 
@@ -231,7 +232,9 @@ class CollectionService:
                 return {"status": "duplicate_or_missing_tool_end"}
 
             normalized = self._normalize(event)
-            self._sink(normalized)
+            sink_result = self._sink(normalized)
+            if event_type == "end":
+                self.timing_summary = self._timing_summary_from_sink(sink_result)
             if event_type == "phase":
                 self._current_phase = str(phase)
             elif event_type == "tool_start":
@@ -241,6 +244,18 @@ class CollectionService:
             elif event_type == "end":
                 self._active = False
             return {"status": "recorded"}
+
+    @staticmethod
+    def _timing_summary_from_sink(result: object) -> object | None:
+        """Keep the Node-confirmed terminal summary opaque for gateway validation."""
+
+        if not isinstance(result, dict):
+            return None
+        summary = result.get("timing_summary")
+        if summary is not None:
+            return summary
+        nested = result.get("result")
+        return nested.get("timing_summary") if isinstance(nested, dict) else None
 
     def _normalize(self, event: dict[str, object]) -> dict[str, object]:
         event_type = str(event["event_type"])

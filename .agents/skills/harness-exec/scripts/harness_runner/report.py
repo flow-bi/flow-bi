@@ -51,6 +51,34 @@ def _issue_lines(result: TaskResult) -> list[str]:
     return [f"- {issue}" for issue in issues] or ["- 없음"]
 
 
+def _duration(milliseconds: int) -> str:
+    return f"{milliseconds / 1000:g}초 ({milliseconds}ms)"
+
+
+def _timing_lines(result: TaskResult) -> list[str]:
+    timing = result.timing
+    if timing is None:
+        lines = ["- Worker 시간: 미기록"]
+        if result.timing_observation_error:
+            lines.append(f"- 관측 상태: 오류 — {result.timing_observation_error}")
+        return lines
+    classification = ", ".join(name for name, enabled in (("명시", timing.explicit), ("추론", timing.inferred)) if enabled) or "없음"
+    lines = [
+        f"- Area: {timing.area}",
+        f"- Run ID: {timing.run_id}",
+        f"- Worker 전체 시간: {_duration(timing.total_duration_ms)}",
+        f"- 미귀속 시간: {_duration(timing.unattributed_duration_ms)}",
+        f"- 분류: {classification}",
+    ]
+    for phase in timing.phases:
+        phase_classification = ", ".join(name for name, enabled in (("명시", phase.explicit), ("추론", phase.inferred)) if enabled) or "없음"
+        lines.append(
+            f"- Phase {phase.phase}: {_duration(phase.duration_ms)}, tool {phase.tool_calls}회, "
+            f"{_duration(phase.tool_duration_ms)}, 분류 {phase_classification}"
+        )
+    return lines
+
+
 def _task_section(result: TaskResult) -> str:
     summary = result.work_summary.strip() or (
         "Worker 실행이 완료되지 않아 수행 내용을 확인할 수 없습니다."
@@ -63,6 +91,8 @@ def _task_section(result: TaskResult) -> str:
         summary,
         "#### 검증 결과",
         *_verification_lines(result),
+        "#### Worker 시간",
+        *_timing_lines(result),
         "#### Quality Score",
         f"- {score}",
         "#### 남은 문제",

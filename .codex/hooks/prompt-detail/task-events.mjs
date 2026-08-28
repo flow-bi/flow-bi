@@ -31,6 +31,20 @@ function workerRecord(state, event, recordType, occurredAt, extra = {}) {
     ...extra,
   };
 }
+function provisionalStart(event, occurredAt) {
+  return {
+    kind: "worker_start", run_id: event.run_id, task_number: event.task_number,
+    area: event.area, parent_session_id: event.parent_session_id ?? null,
+    occurred_at: occurredAt,
+  };
+}
+function recordWorkerStart(records, state, event, occurredAt) {
+  state.worker_timing ??= { tools: {}, current_phase: null };
+  if (state.worker_timing.started_at) return false;
+  state.worker_timing.started_at = occurredAt;
+  records.push(workerRecord(state, event, "worker_start", occurredAt));
+  return true;
+}
 function closeOpenWorkerIntervals(records, state, event, occurredAt) {
   const timing = state.worker_timing ?? { tools: {}, current_phase: null };
   for (const tool of Object.values(timing.tools ?? {})) {
@@ -90,6 +104,19 @@ export async function handleUserPromptSubmit(
       prompt: input.prompt, cwd: input.cwd, model: input.model, permission_mode: input.permission_mode,
     });
     pending.push(state);
+    // The parent emits worker_start before codex creates this UserPromptSubmit
+    // session.  Bind that one authenticated, run-scoped start without changing
+    // its parent-observed time; all other worker events still require a session.
+    const provisionalIndex = pending.findIndex((item) => item.kind === "worker_start" && item.run_id === state.run_id);
+    if (provisionalIndex >= 0) {
+      const provisional = pending[provisionalIndex];
+      if (provisional.task_number === state.executor.task_number
+        && provisional.area && provisional.parent_session_id === state.parent_session_id) {
+        state.worker_area = provisional.area;
+        recordWorkerStart(records, state, provisional, provisional.occurred_at);
+      }
+      pending.splice(provisionalIndex, 1);
+    }
     return state;
   }, {
     ...storageOptions,
@@ -157,7 +184,14 @@ export async function recordWorkerEvent(
 
   const result = await withStorage(projectRoot, ({ records, pending }) => {
     const state = pending.find((item) => item.kind === "task" && item.run_id === event.run_id);
-    if (!state || state.executor.task_number !== event.task_number) throw new Error("Worker event run was not found.");
+    if (!state) {
+      if (event.event_type !== "start") throw new Error("Worker event run was not found.");
+      const existing = pending.find((item) => item.kind === "worker_start" && item.run_id === event.run_id);
+      if (existing) return { status: "already_started" };
+      pending.push(provisionalStart(event, eventTime(event, now)));
+      return { status: "provisional" };
+    }
+    if (state.executor.task_number !== event.task_number) throw new Error("Worker event run was not found.");
     if (event.parent_session_id !== undefined && event.parent_session_id !== state.parent_session_id) throw new Error("Worker event session does not match run.");
     if (state.worker_area && state.worker_area !== event.area) throw new Error("Worker event area does not match run.");
     state.worker_area = event.area;
@@ -165,9 +199,7 @@ export async function recordWorkerEvent(
     const occurredAt = eventTime(event, now);
     const timing = state.worker_timing;
     if (event.event_type === "start") {
-      if (timing.started_at) return { status: "already_started" };
-      timing.started_at = occurredAt;
-      records.push(workerRecord(state, event, "worker_start", occurredAt));
+      if (!recordWorkerStart(records, state, event, occurredAt)) return { status: "already_started" };
     } else if (event.event_type === "phase") {
       if (timing.current_phase) records.push(workerRecord(state, timing.current_phase, "worker_phase_end", occurredAt, {
         duration_ms: elapsed(timing.current_phase.started_at, occurredAt), closed_by: "phase_transition",
