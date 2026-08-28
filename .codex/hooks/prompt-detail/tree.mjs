@@ -64,6 +64,38 @@ function nodeFor(record, kind) {
   };
 }
 
+function workerTiming(records, runId) {
+  const related = records.filter((record) => record?.run_id === runId && typeof record.record_type === "string" && record.record_type.startsWith("worker_"));
+  const start = related.find((record) => record.record_type === "worker_start");
+  const end = related.find((record) => record.record_type === "worker_end");
+  if (!start) return null;
+  const duration = Math.max(0, Date.parse(end?.occurred_at ?? start.occurred_at) - Date.parse(start.occurred_at));
+  const phaseStarts = new Map();
+  const phases = new Map();
+  for (const record of related) {
+    if (record.record_type === "worker_phase_start") phaseStarts.set(record.phase_id, record);
+    if (record.record_type === "worker_phase_end") {
+      const started = phaseStarts.get(record.phase_id);
+      const key = `${record.phase}:${record.phase_source}`;
+      const aggregate = phases.get(key) ?? { phase: record.phase, duration_ms: 0, tool_calls: 0, tool_duration_ms: 0, classification: { explicit: false, inferred: false } };
+      aggregate.duration_ms += Math.max(0, Number(record.duration_ms) || (started ? Date.parse(record.occurred_at) - Date.parse(started.occurred_at) : 0));
+      aggregate.classification[record.phase_source] = true;
+      phases.set(key, aggregate);
+    }
+  }
+  for (const record of related) {
+    if (record.record_type !== "worker_tool_end") continue;
+    const key = `${record.phase}:${record.phase_source}`;
+    const aggregate = phases.get(key) ?? { phase: record.phase, duration_ms: 0, tool_calls: 0, tool_duration_ms: 0, classification: { explicit: false, inferred: false } };
+    aggregate.tool_calls += 1;
+    aggregate.tool_duration_ms += Math.max(0, Number(record.duration_ms) || 0);
+    aggregate.classification[record.phase_source] = true;
+    phases.set(key, aggregate);
+  }
+  const values = [...phases.values()];
+  return { area: start.area ?? null, total_duration_ms: duration, phases: values, unattributed_duration_ms: Math.max(0, duration - values.reduce((total, item) => total + item.duration_ms, 0)), classification: { explicit: values.some((item) => item.classification.explicit), inferred: values.some((item) => item.classification.inferred) } };
+}
+
 function compareChildren(left, right) {
   const leftTaskNumber = left.executor.task_number;
   const rightTaskNumber = right.executor.task_number;
@@ -144,6 +176,12 @@ export function buildPromptDetailTree(records) {
       entry.node.run_id = parent.node.run_id;
     }
     parent.node.children.push(entry.node);
+  }
+
+  for (const entry of entries.values()) {
+    if (entry.node.executor.kind !== "task") continue;
+    const timing = workerTiming(records, entry.node.run_id);
+    if (timing) Object.assign(entry.node, timing);
   }
 
   for (const entry of entries.values()) {

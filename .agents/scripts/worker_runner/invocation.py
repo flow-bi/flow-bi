@@ -37,6 +37,14 @@ TASK_WORKER_GUIDANCE = (
     "Skill과 실행 스크립트를 재호출하지 마십시오. 또한  모든 timeout은 90분으로 설정해 확인합니다."
 )
 
+WORKER_PHASE_MARKER_GUIDANCE = (
+    "Worker phase를 명시적으로 전환할 때에는 허용된 부모 localhost 수집 경로만 사용하도록 "
+    "`\"$FLOW_BI_PYTHON_EXECUTABLE\" -m worker_runner.phase_marker <phase>`를 실행하십시오. "
+    "phase는 analysis, test_code, implementation, implementation_and_test, refactor, "
+    "documentation, verification, finalization 중 하나여야 합니다. `.codex-logs`에 직접 쓰거나 "
+    "FLOW_BI_WORKER_EVENT_URL/TOKEN을 출력하지 마십시오."
+)
+
 IN_FLIGHT_VERIFIER_GUIDANCE = (
     "shell 도구가 verifier 명령에 진행 중 상태 또는 실행 session을 반환하면 같은 verifier CLI를 새 "
     "shell 명령으로 시작하지 마십시오. 기존 실행을 wait/poll하여 최종 종료 코드와 출력을 "
@@ -327,6 +335,7 @@ def parse_invocation(raw_invocation: str) -> InvocationResult:
         DISCOVERY_GUIDANCE,
         CONTEXT_EFFICIENCY_GUIDANCE,
         TASK_WORKER_GUIDANCE,
+        WORKER_PHASE_MARKER_GUIDANCE,
         BACKEND_VERIFICATION_GUIDANCE,
         BACKEND_FORMATTING_GUIDANCE,
         FRONTEND_VERIFICATION_GUIDANCE,

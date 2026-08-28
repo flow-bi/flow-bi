@@ -18,6 +18,7 @@ from .codex import (
     collect_worker_readable_paths,
     validate_task_number,
 )
+from .timing import CollectionService, EventSink, NodeEventSink, RunContext, determine_worker_area
 
 
 SubprocessRunner = Callable[..., subprocess.CompletedProcess[str]]
@@ -122,15 +123,26 @@ def execute_worker(
     executable: str | None = None,
     base_environment: dict[str, str] | None = None,
     runner: SubprocessRunner = subprocess.run,
-    logger: WorkerLogger = invoke_worker_logger,
+    logger: WorkerLogger | None = None,
+    event_sink: EventSink | None = None,
     timeout: int = DEFAULT_TIMEOUT_SECONDS,
 ) -> WorkerExecutionResult:
     """"Worker 하나를 실행하고 종료 결과를 반환한다."""
 
     validate_task_number(task_number)
 
-    # Worker 실행을 식별하기 위한 고유 ID
+    # Worker 실행을 식별하기 위한 고유 ID와 인증 토큰은 매 실행 새로 만든다.
     run_id = str(uuid.uuid4())
+    area = determine_worker_area(allowed_paths)
+    context = RunContext.create(
+        task_number=task_number,
+        area=area,
+        parent_session_id=(base_environment or os.environ).get("CODEX_THREAD_ID"),
+    )
+    # Keep the UUID public run identity while the collector owns a separate token.
+    context = RunContext(run_id, context.token, context.task_number, context.area, context.parent_session_id)
+    service = CollectionService(context, event_sink or NodeEventSink(project_root))
+    service.start()
 
     # Worker 출력 임시파일 저장 위치
     pending_directory = project_root / ".codex-logs" / ".pending"
@@ -156,6 +168,11 @@ def execute_worker(
         base_environment=base_environment,
         project_root=project_root,
     )
+    readable_paths = collect_worker_readable_paths(
+        environment,
+        project_root=project_root,
+    )
+    environment = service.worker_environment(environment)
     worker_temp = Path(environment["TMPDIR"])
     
     # codex exec 명령 생성
@@ -164,14 +181,16 @@ def execute_worker(
         forbidden_paths,
         output_path,
         executable,
-        readable_paths=collect_worker_readable_paths(
-            environment,
-            project_root=project_root,
-        ),
+        readable_paths=readable_paths,
         writable_directories=(str(worker_temp),),
     )
 
     try:
+        try:
+            service.submit({"event_type": "start", "run_id": run_id, "token": context.token})
+        except Exception:
+            # Observability failures remain diagnostic and never affect Worker results.
+            service.diagnostics.append("start event failed")
         with log_path.open("w", encoding="utf-8") as log_file:
             try:
                 # Worker 진행 출력은 부모 콘솔이 아닌 Worker별 임시 로그로 격리한다.
@@ -194,7 +213,12 @@ def execute_worker(
                 log_tail = _read_worker_log_tail(log_path)
                 if log_tail:
                     error.stderr = _with_worker_log_tail("", log_tail)
-                logger(run_id, 124, output_path, project_root, "timeout")
+                try:
+                    service.submit({"event_type": "end", "run_id": run_id, "token": context.token, "status": "timeout", "exit_code": 124, "summary": "Worker timed out."})
+                except Exception:
+                    service.diagnostics.append("timeout event failed")
+                if logger is not None:
+                    logger(run_id, 124, output_path, project_root, "timeout")
                 raise
 
             # 기타 실행 오류
@@ -203,18 +227,24 @@ def execute_worker(
                 log_tail = _read_worker_log_tail(log_path)
                 if log_tail and hasattr(error, "add_note"):
                     error.add_note(_with_worker_log_tail("", log_tail))
-                logger(run_id, 1, output_path, project_root, "failed")
+                try:
+                    service.submit({"event_type": "end", "run_id": run_id, "token": context.token, "status": "failed", "exit_code": 1, "summary": "Worker subprocess failed."})
+                except Exception:
+                    service.diagnostics.append("failure event failed")
+                if logger is not None:
+                    logger(run_id, 1, output_path, project_root, "failed")
                 raise
 
             # 종료 결과 기록
             output, output_error = _read_worker_output(output_path)
-            logger(
-                run_id,
-                result.returncode,
-                output_path,
-                project_root,
-                _terminal_status(result.returncode, output, output_error),
-            )
+            status = _terminal_status(result.returncode, output, output_error)
+            try:
+                summary = output.get("work_summary", "") if isinstance(output, dict) else ""
+                service.submit({"event_type": "end", "run_id": run_id, "token": context.token, "status": status, "exit_code": result.returncode, "summary": str(summary)[:4096]})
+            except Exception:
+                service.diagnostics.append("terminal event failed")
+            if logger is not None:
+                logger(run_id, result.returncode, output_path, project_root, status)
             if result.returncode != 0 or output_error:
                 log_file.flush()
                 output_error = _with_worker_log_tail(
@@ -227,6 +257,7 @@ def execute_worker(
                 output_error=output_error,
             )
     finally:
+        service.close()
         # 최종 출력, 진행 로그와 Worker별 임시 공간은 성공·실패·timeout
         # 모두 부모 프로세스에서 정리한다.
         for temporary_path in (output_path, log_path):
