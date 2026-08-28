@@ -184,7 +184,7 @@ function EmployeeDetail({ profile }: { profile: OrganizationEmployeeProfile }) {
         </div>
         <div>
           <dt>내선번호</dt>
-          <dd>{profile.extensionNumber ?? '내선번호가 등록되지 않았습니다.'}</dd>
+          <dd>{profile.extensionNumber || '내선번호가 등록되지 않았습니다.'}</dd>
         </div>
         <div>
           <dt>회사 이메일</dt>
