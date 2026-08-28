@@ -102,7 +102,9 @@
 | DB       | Migration 검증, Mapping·Constraint Test |
 | 문서     | Link·구조·필수 항목·상호 참조 검사      |
 
-구체적인 명령은 각 Active Plan과 `harness/config/verification.json`에서 확정한다.
+구체적인 명령은 각 Active Plan, 영역별 `AGENTS.md`와 프로젝트 실행 설정
+(`frontend/package.json`, `backend/build.gradle`)에서 확정한다. Harness 실행 시에는
+부모 Frontend·Backend Verifier의 명령 allowlist를 함께 적용한다.
 
 ### G6. 계약 동기화
 

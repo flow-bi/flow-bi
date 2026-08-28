@@ -64,6 +64,14 @@ Task 수는 고정하지 않는다.
 - [ ] {구현 항목}
 - [ ] {구현 항목}
 
+#### TDD 정책
+
+- {REQUIRED | REGRESSION_ONLY | NOT_APPLICABLE 중 하나}
+
+{신규 기능·버그 수정은 REQUIRED, 통합 회귀·최종 검증은 REGRESSION_ONLY,
+문서·단순 설정은 NOT_APPLICABLE을 사용한다. NOT_APPLICABLE이면 적용 제외 사유와
+대체 검증 근거를 구현 항목과 검증 항목에 명시한다.}
+
 #### 검증 항목
 
 - [ ] {정적 검증}
