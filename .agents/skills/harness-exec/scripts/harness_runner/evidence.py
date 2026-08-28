@@ -35,6 +35,7 @@ def revision_fingerprint(root: Path, plan_id: str, task: Task, common_prompt: st
         "allowed_paths": task.allowed_paths,
         "forbidden_paths": task.forbidden_paths,
         "minimum_quality_score": task.minimum_quality_score,
+        "tdd_policy": task.tdd_policy,
     })).hexdigest()
 
 
@@ -42,16 +43,33 @@ def _valid_evidence(value: object) -> bool:
     return isinstance(value, dict) and value.get("result") == "PASS" and isinstance(value.get("evidence"), str) and bool(value["evidence"].strip())
 
 
+def _non_empty(value: object) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _valid_tdd_evidence(value: object, policy: object) -> bool:
+    if not isinstance(value, dict) or not _non_empty(value.get("evidence")) or not _non_empty(value.get("current_verification_evidence")):
+        return False
+    if policy == "NOT_APPLICABLE":
+        return value.get("result") == "N/A" and _non_empty(value.get("reason"))
+    if value.get("result") != "PASS":
+        return False
+    if policy == "REUSE_ALLOWED":
+        reused = value.get("reused_evidence")
+        return isinstance(reused, dict) and _non_empty(reused.get("record_id")) and _non_empty(reused.get("fingerprint"))
+    return policy in {"REQUIRED", "REGRESSION_ONLY"}
+
+
 def _valid_record(value: object, fingerprint: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise EvidenceRecordError("실행 기록 형식이 올바르지 않습니다.")
-    required = {"version", "plan_id", "task_number", "fingerprint", "mandatory_gates", "tdd_evidence", "verification", "quality_score"}
+    required = {"version", "plan_id", "task_number", "fingerprint", "tdd_policy", "mandatory_gates", "tdd_evidence", "verification", "quality_score"}
     if set(value) != required or value.get("version") != RECORD_VERSION or value.get("fingerprint") != fingerprint:
         raise EvidenceRecordError("실행 기록이 불완전하거나 현재 리비전과 일치하지 않습니다.")
     gates = value["mandatory_gates"]
-    if not isinstance(gates, dict) or not all(_valid_evidence(gates.get(name)) for name in ("permission_security", "scope", "requirements", "tdd", "automated_verification", "contract_sync", "critical_findings")):
+    if not isinstance(gates, dict) or not all(_valid_evidence(gates.get(name)) for name in ("permission_security", "scope", "requirements", "automated_verification", "contract_sync", "critical_findings")) or not _valid_tdd_evidence(gates.get("tdd"), value["tdd_policy"]):
         raise EvidenceRecordError("실행 기록의 Mandatory Gate 증거가 불완전합니다.")
-    if not _valid_evidence(value["tdd_evidence"]):
+    if not _valid_tdd_evidence(value["tdd_evidence"], value["tdd_policy"]):
         raise EvidenceRecordError("실행 기록의 TDD 증거가 불완전합니다.")
     verification = value["verification"]
     if not isinstance(verification, list) or not verification or not all(isinstance(item, dict) and item.get("result") == "PASS" and isinstance(item.get("evidence"), str) and item["evidence"].strip() for item in verification):
@@ -87,6 +105,7 @@ class ExecutionRecordStore:
             "plan_id": plan_id,
             "task_number": task.number,
             "fingerprint": fingerprint,
+            "tdd_policy": output["mandatory_gates"]["tdd"].get("effective_policy", task.tdd_policy),
             "mandatory_gates": output["mandatory_gates"],
             "tdd_evidence": output["mandatory_gates"]["tdd"],
             "verification": output["verification"],

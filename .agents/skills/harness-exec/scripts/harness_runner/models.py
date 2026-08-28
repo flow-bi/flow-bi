@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+DECLARED_TDD_POLICIES = frozenset(("REQUIRED", "REGRESSION_ONLY", "NOT_APPLICABLE"))
+REUSE_ALLOWED = "REUSE_ALLOWED"
 
 class PlanValidationError(ValueError):
     """Raised when an invocation or active plan is invalid."""
@@ -18,6 +20,7 @@ class Task:
     implementation_items: tuple[str, ...] = ()
     verification_items: tuple[str, ...] = ()
     minimum_quality_score: int | None = None
+    tdd_policy: str = "REQUIRED"
 
 
 @dataclass(frozen=True)
@@ -40,6 +43,7 @@ class TaskInvocation:
     task: Task
     execution_context: "TaskExecutionContext | None" = None
     decision_correction: dict[str, object] | None = None
+    verification_result_collection: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)
@@ -48,6 +52,8 @@ class TaskExecutionContext:
     fingerprint: str
     mode: str
     prior_tdd_evidence: dict[str, object] | None = None
+    prior_evidence_id: str | None = None
+    effective_tdd_policy: str = "REQUIRED"
 
 
 @dataclass(frozen=True)

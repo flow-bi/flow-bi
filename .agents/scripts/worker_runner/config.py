@@ -70,6 +70,7 @@ def load_config(
     forbidden_paths: Iterable[str],
     config_path: Path | None = None,
     readable_paths: Iterable[str] = (),
+    writable_directories: Iterable[str] = (),
 ) -> dict[str, object]:
     """공통 설정을 읽고 실행별 경로 권한을 병합한다."""
 
@@ -124,6 +125,10 @@ def load_config(
     for readable_path in readable_paths:
         filesystem[readable_path] = "read"
 
+    for writable_directory in writable_directories:
+        filesystem[writable_directory] = "write"
+        filesystem[f"{writable_directory.rstrip('/\\')}/**"] = "write"
+
     return config
 
 
@@ -133,12 +138,14 @@ def read_config_overrides(
     forbidden_paths: Iterable[str],
     config_path: Path | None = None,
     readable_paths: Iterable[str] = (),
+    writable_directories: Iterable[str] = (),
 ) -> list[str]:
     config = load_config(
         allowed_paths,
         forbidden_paths,
         config_path,
         readable_paths,
+        writable_directories,
     )
 
     return [

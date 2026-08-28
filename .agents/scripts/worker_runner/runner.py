@@ -156,6 +156,7 @@ def execute_worker(
         base_environment=base_environment,
         project_root=project_root,
     )
+    worker_temp = Path(environment["TMPDIR"])
     
     # codex exec 명령 생성
     command = build_codex_command(
@@ -167,6 +168,7 @@ def execute_worker(
             environment,
             project_root=project_root,
         ),
+        writable_directories=(str(worker_temp),),
     )
 
     try:
@@ -225,9 +227,19 @@ def execute_worker(
                 output_error=output_error,
             )
     finally:
-        # 최종 출력과 진행 로그는 성공·실패·timeout 모두 정리한다.
+        # 최종 출력, 진행 로그와 Worker별 임시 공간은 성공·실패·timeout
+        # 모두 부모 프로세스에서 정리한다.
         for temporary_path in (output_path, log_path):
             try:
                 temporary_path.unlink()
             except FileNotFoundError:
                 pass
+        try:
+            shutil.rmtree(worker_temp)
+        except FileNotFoundError:
+            pass
+        try:
+            worker_temp.parent.rmdir()
+        except (FileNotFoundError, OSError):
+            # 병렬 Worker가 같은 상위 디렉터리를 사용 중일 수 있다.
+            pass
