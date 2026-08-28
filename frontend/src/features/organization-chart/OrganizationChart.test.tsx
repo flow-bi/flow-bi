@@ -180,4 +180,50 @@ describe('OrganizationChart', () => {
     await user.click(screen.getByRole('button', { name: '팀 계층으로 돌아가기' }))
     expect(screen.getByRole('tree', { name: '팀 계층' })).toHaveFocus()
   })
+
+  it('uses an explicit extension-number fallback when the profile returns an empty value', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((path: string) => {
+        if (path === '/api/teams/tree') {
+          return Promise.resolve(
+            response([{ teamId: 1, teamName: '운영팀', depth: 0, children: [] }]),
+          )
+        }
+        if (path === '/api/users?teamId=1') {
+          return Promise.resolve(
+            response([
+              {
+                userId: 7,
+                name: '김플로우',
+                position: '엔지니어',
+                accountStatus: 'ACTIVE',
+                workStatus: 'OFFLINE',
+                profileImageUrl: null,
+              },
+            ]),
+          )
+        }
+        return Promise.resolve(
+          response({
+            profileImageUrl: null,
+            name: '김플로우',
+            position: '엔지니어',
+            team: '운영팀',
+            extensionNumber: '',
+            email: 'flow@example.com',
+            accountStatus: 'ACTIVE',
+            workStatus: 'OFFLINE',
+          }),
+        )
+      }),
+    )
+    const user = userEvent.setup()
+    renderChart()
+
+    await user.click(await screen.findByRole('treeitem', { name: /운영팀/ }))
+    await user.click(await screen.findByRole('button', { name: '김플로우 직원 정보 보기' }))
+
+    expect(await screen.findByText('내선번호가 등록되지 않았습니다.')).toBeInTheDocument()
+  })
 })

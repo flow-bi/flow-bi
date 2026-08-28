@@ -14,6 +14,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.flowbi.domain.auth.dto.AuthenticatedUser;
 import com.flowbi.domain.auth.dto.AuthenticatedUser.Role;
+import com.flowbi.domain.auth.security.LoginPrincipal;
 import com.flowbi.domain.team.dto.TeamHierarchyResponse;
 import com.flowbi.domain.team.dto.TeamResponse;
 import com.flowbi.domain.team.service.TeamAdministrationService;
@@ -24,6 +25,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class TeamControllerTest {
@@ -58,8 +60,8 @@ class TeamControllerTest {
             List.of(new TeamHierarchyResponse(2L, "Development", 1, List.of()))),
         new TeamHierarchyResponse(3L, "Sales", 0, List.of())));
 
-    mockMvc.perform(get("/api/teams/tree").requestAttr("authenticatedUser",user()))
-        .andExpect(status().isOk()).andExpect(jsonPath("$[0].teamId").value(1))
+    mockMvc.perform(get("/api/teams/tree").principal(login())).andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].teamId").value(1))
         .andExpect(jsonPath("$[0].children[0].teamId").value(2))
         .andExpect(jsonPath("$[1].teamId").value(3))
         .andExpect(jsonPath("$[0].ancestorTeamId").doesNotExist())
@@ -80,7 +82,7 @@ class TeamControllerTest {
     when(hierarchy.findOrganizationTree())
         .thenThrow(new com.flowbi.domain.team.service.TeamHierarchyInconsistentException());
 
-    mockMvc.perform(get("/api/teams/tree").requestAttr("authenticatedUser",user()))
+    mockMvc.perform(get("/api/teams/tree").principal(login()))
         .andExpect(status().isInternalServerError())
         .andExpect(jsonPath("$.code").value("TEAM_HIERARCHY_INCONSISTENT"))
         .andExpect(jsonPath("$.message").value("The team hierarchy is unavailable."));
@@ -146,6 +148,11 @@ class TeamControllerTest {
 
   private AuthenticatedUser user() {
     return new AuthenticatedUser(10L, Role.USER);
+  }
+
+  private UsernamePasswordAuthenticationToken login() {
+    return new UsernamePasswordAuthenticationToken(new LoginPrincipal("10", false), null,
+        List.of());
   }
 
   private AuthenticatedUser admin() {

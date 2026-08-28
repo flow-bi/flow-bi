@@ -2,6 +2,7 @@ package com.flowbi.domain.team.controller;
 
 import com.flowbi.domain.auth.dto.AuthenticatedUser;
 import com.flowbi.domain.auth.dto.AuthenticatedUser.Role;
+import com.flowbi.domain.auth.security.LoginPrincipal;
 import com.flowbi.domain.team.dto.TeamCreateRequest;
 import com.flowbi.domain.team.dto.TeamHierarchyResponse;
 import com.flowbi.domain.team.dto.TeamNameUpdateRequest;
@@ -21,6 +22,7 @@ import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -71,9 +73,8 @@ public class TeamController {
       @ApiResponse(responseCode = "401", description = "Authentication required"),
       @ApiResponse(responseCode = "500", description = "Team hierarchy unavailable")})
   @GetMapping("/tree")
-  public List<TeamHierarchyResponse> findOrganizationTree(
-      @RequestAttribute(value = "authenticatedUser", required = false) @Parameter(hidden = true) AuthenticatedUser actor) {
-    requireAuthenticated(actor);
+  public List<TeamHierarchyResponse> findOrganizationTree(Authentication authentication) {
+    requireLoginPrincipal(authentication);
     return hierarchy.findOrganizationTree();
   }
 
@@ -165,6 +166,20 @@ public class TeamController {
 
   private void requireAuthenticated(AuthenticatedUser actor) {
     if (actor == null) {
+      throw new TeamAuthenticationRequiredException();
+    }
+  }
+
+  private void requireLoginPrincipal(Authentication authentication) {
+    if (authentication == null || !authentication.isAuthenticated()
+        || !(authentication.getPrincipal() instanceof LoginPrincipal principal)) {
+      throw new TeamAuthenticationRequiredException();
+    }
+    try {
+      if (Long.parseLong(principal.userId()) < 1) {
+        throw new TeamAuthenticationRequiredException();
+      }
+    } catch (NumberFormatException exception) {
       throw new TeamAuthenticationRequiredException();
     }
   }
