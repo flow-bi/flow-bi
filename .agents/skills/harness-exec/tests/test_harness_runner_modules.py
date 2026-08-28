@@ -13,8 +13,11 @@ if str(SCRIPTS) not in sys.path:
 
 from harness_runner.evidence import ExecutionRecordStore, revision_fingerprint
 from harness_runner.execution import execute_workers
-from harness_runner.models import HarnessRequest, ParsedPlan, Task
+from harness_runner.models import ExecutionReport, HarnessRequest, ParsedPlan, Task, TaskInvocation, TaskResult
 from harness_runner.parse import parse_invocation
+from harness_runner.report import build_execution_report
+from harness_runner import worker_gateway
+from harness_runner.worker_gateway import parse_timing_summary
 from harness_runner.state import PlanStateStore, StateRecordError
 
 
@@ -258,6 +261,156 @@ class RevisionEvidenceTests(unittest.TestCase):
         self.assertEqual(active_plan.read_text(encoding="utf-8"), "unchanged")
         self.assertTrue(self.store.path_for(self.request.plan_id, 1).exists())
         self.assertFalse(list(self.store.root.glob("*.tmp")))
+
+    def test_worker_timing_is_preserved_for_success_failure_and_timeout_reports(self) -> None:
+        def timed_result(invocation: object) -> object:
+            response = worker_result()
+            response.timing = parse_timing_summary({
+                "run_id": f"run-{invocation.task.number}",
+                "task_number": invocation.task.number,
+                "area": "be-worker",
+                "total_duration_ms": 2500,
+                "unattributed_duration_ms": 400,
+                "classification": {"explicit": True, "inferred": True},
+                "phases": [{
+                    "phase": "implementation", "duration_ms": 2100,
+                    "tool_calls": 2, "tool_duration_ms": 900,
+                    "classification": {"explicit": True, "inferred": False},
+                }],
+            }, invocation.task.number)
+            if invocation.task.number == 2:
+                response.returncode = 1
+            return response
+
+        report = execute_workers(
+            ParsedPlan("requirements", (task(1), task(2))), self.request, timed_result,
+            project_root=self.root, record_store=self.store,
+        )
+        rendered = build_execution_report("rerun-plan-01", report)
+
+        self.assertEqual(report.results[0].timing.run_id, "run-1")
+        self.assertEqual(report.results[1].timing.run_id, "run-2")
+        self.assertIn("Worker 전체 시간: 2.5초 (2500ms)", rendered.body)
+        self.assertIn("Phase implementation: 2.1초 (2100ms), tool 2회, 0.9초 (900ms)", rendered.body)
+
+    def test_blocked_and_legacy_tasks_render_timing_as_unrecorded(self) -> None:
+        report = execute_workers(
+            self.plan, self.request,
+            lambda invocation: type("Failed", (), {"returncode": 1, "output": None, "output_error": "failed"})(),
+            project_root=self.root, record_store=self.store,
+        )
+        rendered = build_execution_report("rerun-plan-01", report)
+
+        self.assertEqual(report.results[0].timing, None)
+        self.assertEqual(report.results[1].status, "blocked")
+        self.assertEqual(rendered.body.count("Worker 시간: 미기록"), 2)
+
+    def test_timing_summary_rejects_another_task_run_without_changing_worker_outcome(self) -> None:
+        with self.assertRaisesRegex(ValueError, "현재 Task"):
+            parse_timing_summary({
+                "run_id": "other-run", "task_number": 2, "area": "be-worker",
+                "total_duration_ms": 1, "unattributed_duration_ms": 0,
+                "classification": {"explicit": False, "inferred": True}, "phases": [],
+            }, 1)
+
+    def test_gateway_keeps_invalid_timing_separate_from_worker_result(self) -> None:
+        invocation = TaskInvocation("common", "", task(1))
+        raw = type("Raw", (), {
+            "returncode": 1, "output": {"work_summary": "failed"}, "output_error": "exit",
+            "timing_summary": {"run_id": "run-1", "task_number": 2},
+        })()
+        with (
+            mock.patch.object(worker_gateway, "repository_root", return_value=self.root),
+            mock.patch.object(worker_gateway, "parse_invocation", return_value=("prompt", (), ())),
+            mock.patch.object(worker_gateway, "execute_worker", return_value=raw),
+        ):
+            result = worker_gateway.invoke_task(invocation)
+
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.output, {"work_summary": "failed"})
+        self.assertIsNone(result.timing)
+        self.assertIn("관측 실패", result.timing_observation_error)
+
+    def test_gateway_rejects_timing_from_a_different_worker_run(self) -> None:
+        invocation = TaskInvocation("common", "", task(1))
+        raw = type("Raw", (), {
+            "returncode": 0, "output": {"work_summary": "completed"}, "output_error": "",
+            "run_id": "current-run",
+            "timing_summary": {
+                "run_id": "previous-run", "task_number": 1, "area": "be-worker",
+                "total_duration_ms": 1, "unattributed_duration_ms": 0,
+                "classification": {"explicit": False, "inferred": True}, "phases": [],
+            },
+        })()
+        with (
+            mock.patch.object(worker_gateway, "repository_root", return_value=self.root),
+            mock.patch.object(worker_gateway, "parse_invocation", return_value=("prompt", (), ())),
+            mock.patch.object(worker_gateway, "execute_worker", return_value=raw),
+        ):
+            result = worker_gateway.invoke_task(invocation)
+
+        self.assertIsNone(result.timing)
+        self.assertIn("run_id", result.timing_observation_error)
+
+    def test_gateway_attaches_timeout_timing_without_masking_timeout(self) -> None:
+        invocation = TaskInvocation("common", "", task(1))
+        timeout = __import__("subprocess").TimeoutExpired("codex", 90)
+        timeout.timing_summary = {
+            "run_id": "run-timeout", "task_number": 1, "area": "be-worker",
+            "total_duration_ms": 90000, "unattributed_duration_ms": 1000,
+            "classification": {"explicit": False, "inferred": True}, "phases": [],
+        }
+        with (
+            mock.patch.object(worker_gateway, "repository_root", return_value=self.root),
+            mock.patch.object(worker_gateway, "parse_invocation", return_value=("prompt", (), ())),
+            mock.patch.object(worker_gateway, "execute_worker", side_effect=timeout),
+            self.assertRaises(__import__("subprocess").TimeoutExpired) as raised,
+        ):
+            worker_gateway.invoke_task(invocation)
+
+        self.assertEqual(raised.exception.timing.run_id, "run-timeout")
+        self.assertEqual(raised.exception.timing.total_duration_ms, 90000)
+
+    def test_execution_preserves_timeout_timing_in_the_report(self) -> None:
+        timing = parse_timing_summary({
+            "run_id": "run-timeout", "task_number": 1, "area": "be-worker",
+            "total_duration_ms": 90000, "unattributed_duration_ms": 1000,
+            "classification": {"explicit": False, "inferred": True}, "phases": [],
+        }, 1)
+        timeout = __import__("subprocess").TimeoutExpired("codex", 90)
+        timeout.timing = timing
+
+        report = execute_workers(
+            ParsedPlan("requirements", (task(1),)), self.request,
+            lambda _invocation: (_ for _ in ()).throw(timeout),
+            project_root=self.root, record_store=self.store,
+        )
+        rendered = build_execution_report("rerun-plan-01", report)
+
+        self.assertTrue(report.results[0].timed_out)
+        self.assertEqual(report.results[0].timing, timing)
+        self.assertIn("Run ID: run-timeout", rendered.body)
+
+    def test_report_distinguishes_success_failure_timeout_blocked_and_legacy_timing(self) -> None:
+        timing = parse_timing_summary({
+            "run_id": "run-current", "task_number": 1, "area": "fe-worker",
+            "total_duration_ms": 1000, "unattributed_duration_ms": 0,
+            "classification": {"explicit": True, "inferred": True},
+            "phases": [{"phase": "analysis", "duration_ms": 1000, "tool_calls": 0,
+                        "tool_duration_ms": 0, "classification": {"explicit": False, "inferred": True}}],
+        }, 1)
+        rendered = build_execution_report("timing-plan", ExecutionReport((
+            TaskResult(2, "failure", "failed", timing=timing),
+            TaskResult(5, "legacy", "succeeded"),
+            TaskResult(3, "timeout", "failed", timed_out=True),
+            TaskResult(4, "blocked", "blocked"),
+            TaskResult(1, "success", "succeeded", timing=timing),
+        )))
+
+        self.assertLess(rendered.body.index("### Task 1."), rendered.body.index("### Task 2."))
+        self.assertEqual(rendered.body.count("Worker 시간: 미기록"), 3)
+        self.assertIn("Task 3. timeout\n- 상태: FAILED", rendered.body)
+        self.assertIn("Task 4. blocked\n- 상태: BLOCKED", rendered.body)
 
     def test_record_write_failure_is_an_explicit_task_failure(self) -> None:
         with mock.patch.object(self.store, "save", side_effect=OSError("disk full")):

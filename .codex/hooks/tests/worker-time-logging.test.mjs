@@ -105,3 +105,33 @@ test("rejects invalid worker input without producing a partial record", async ()
     assert.equal(readJson(storagePaths(projectRoot).logFile, []).some((record) => record.record_type.startsWith("worker_")), false);
   } finally { rmSync(projectRoot, { recursive: true, force: true }); }
 });
+
+test("binds a worker start that arrives before the worker UserPromptSubmit session", async () => {
+  const projectRoot = mkdtempSync(join(tmpdir(), "worker-time-provisional-"));
+  try {
+    const now = clock(
+      "2026-08-28T00:00:00.000Z", "2026-08-28T00:00:01.000Z",
+      "2026-08-28T00:00:02.000Z", "2026-08-28T00:00:04.000Z",
+    );
+    const runId = "actual-run-order";
+    const eventOptions = options(projectRoot, now, runId, 9);
+    await recordWorkerEvent({
+      event_type: "start", run_id: runId, task_number: 9, area: "fe-worker", parent_session_id: "parent",
+    }, eventOptions);
+    await handleUserPromptSubmit(
+      { prompt: "worker", session_id: "worker-session", turn_id: "worker-turn" },
+      eventOptions,
+    );
+    await recordWorkerEvent({
+      event_type: "end", run_id: runId, task_number: 9, area: "fe-worker", parent_session_id: "parent",
+      status: "completed", exit_code: 0, summary: "done",
+    }, eventOptions);
+
+    const records = readJson(storagePaths(projectRoot).logFile, []);
+    const starts = records.filter((record) => record.record_type === "worker_start");
+    assert.equal(starts.length, 1);
+    assert.equal(starts[0].area, "fe-worker");
+    assert.equal(starts[0].context.session_id, "worker-session");
+    assert.equal(records.findIndex((record) => record.record_type === "worker_start") < records.findIndex((record) => record.record_type === "worker_end"), true);
+  } finally { rmSync(projectRoot, { recursive: true, force: true }); }
+});

@@ -17,10 +17,11 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 from worker_runner.codex import (
+    build_codex_command,
     build_subprocess_environment,
     collect_worker_readable_paths,
 )
-from worker_runner.runner import execute_worker
+from worker_runner.runner import _jsonl_tool_events, execute_worker
 import worker_runner.runner as worker_runner_module
 from worker_runner.invocation import (
     BACKEND_VERIFICATION_GUIDANCE,
@@ -415,7 +416,7 @@ class WorkerExecutionTests(unittest.TestCase):
         def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
             stdout = kwargs["stdout"]
             stderr = kwargs["stderr"]
-            self.assertIs(stdout, stderr)
+            self.assertIsNot(stdout, stderr)
             self.assertNotIn(stdout, (None, subprocess.PIPE))
             stdout.write("progress that must stay internal\n")
             stdout.flush()
@@ -444,6 +445,84 @@ class WorkerExecutionTests(unittest.TestCase):
         self.assertTrue(captured_streams[0].closed)
         self.assertFalse(captured_worker_temp[0].exists())
         self.assertEqual(self.pending_files(), ())
+
+    def test_execute_worker_preserves_node_terminal_timing_summary(self) -> None:
+        def run(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            self.output_path(command).write_text('{"final_status":"PASS"}', encoding="utf-8")
+            return subprocess.CompletedProcess(command, 0)
+
+        def sink(event: dict[str, object]) -> dict[str, object]:
+            if event["event_type"] != "end":
+                return {"status": "recorded"}
+            return {
+                "status": "recorded",
+                "timing_summary": {
+                    "run_id": event["run_id"],
+                    "task_number": event["task_number"],
+                    "area": event["area"],
+                    "total_duration_ms": 1000,
+                    "unattributed_duration_ms": 200,
+                    "classification": {"explicit": True, "inferred": False},
+                    "phases": [],
+                },
+            }
+
+        with self.patch_command_builder():
+            result = execute_worker(
+                "task", (".agents",), (), task_number=1, project_root=self.root,
+                runner=run, logger=lambda *_args: None, event_sink=sink,
+            )
+
+        self.assertEqual(result.timing_summary["task_number"], 1)
+        self.assertEqual(result.timing_summary["total_duration_ms"], 1000)
+
+    def test_execute_worker_reads_its_run_only_from_the_node_timing_tree(self) -> None:
+        def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            run_id = kwargs["env"]["FLOW_BI_RUN_ID"]
+            tree_path = self.root / ".codex-logs" / "user-prompt-detail-tree.json"
+            tree_path.parent.mkdir(parents=True, exist_ok=True)
+            tree_path.write_text(json.dumps({"roots": [], "unresolved": [{
+                "run_id": run_id, "executor": {"kind": "task", "task_number": 1},
+                "area": "be-worker", "total_duration_ms": 1200,
+                "unattributed_duration_ms": 300,
+                "classification": {"explicit": True, "inferred": True},
+                "phases": [], "children": [],
+            }, {"run_id": "previous-run", "executor": {"kind": "task", "task_number": 1},
+                "area": "be-worker", "total_duration_ms": 9999,
+                "unattributed_duration_ms": 0,
+                "classification": {"explicit": False, "inferred": True}, "phases": [], "children": []}]}), encoding="utf-8")
+            self.output_path(command).write_text('{"final_status":"PASS"}', encoding="utf-8")
+            return subprocess.CompletedProcess(command, 0)
+
+        with self.patch_command_builder():
+            result = execute_worker(
+                "task", (".agents",), (), task_number=1, project_root=self.root,
+                runner=run, logger=lambda *_args: None, event_sink=lambda _event: {"status": "recorded"},
+            )
+
+        self.assertEqual(result.timing_summary["run_id"], result.run_id)
+        self.assertEqual(result.timing_summary["total_duration_ms"], 1200)
+
+    def test_jsonl_tool_parser_keeps_only_stable_safe_metadata(self) -> None:
+        progress = self.root / "worker.jsonl"
+        progress.write_text(
+            '{"type":"item.started","item":{"id":"item-1","type":"command_execution","command":"secret command"}}\n'
+            'not-json\n'
+            '{"type":"item.completed","item":{"id":"item-1","type":"command_execution","output":"secret output"}}\n'
+            '{"type":"item.completed","item":{"id":"missing","type":"command_execution"}}\n',
+            encoding="utf-8",
+        )
+
+        events = _jsonl_tool_events(progress)
+
+        self.assertEqual([event["event_type"] for event in events], ["tool_start", "tool_end"])
+        self.assertTrue(all(event["tool_id"] == "item-1" for event in events))
+        self.assertTrue(all("secret" not in str(event) for event in events))
+
+    def test_codex_command_uses_jsonl_progress_protocol(self) -> None:
+        command = build_codex_command((), (), self.root / "output.json", executable="codex")
+
+        self.assertEqual(command[:3], ["codex", "exec", "--json"])
 
     def test_execute_worker_returns_only_a_bounded_failure_log_tail(self) -> None:
         tail_limit = worker_runner_module.WORKER_LOG_TAIL_BYTES
@@ -746,6 +825,37 @@ class WorkerNodeLoggingIntegrationTests(unittest.TestCase):
         self.assertEqual(tree["roots"], [])
         self.assertEqual(len(tree["unresolved"]), 3)
         self.assertTrue(all(node["area"] in {"fe-worker", "be-worker"} for node in tree["unresolved"]))
+
+    def test_collector_binds_parent_start_before_real_worker_session_creation(self) -> None:
+        source_root = Path(__file__).resolve().parents[4]
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name)
+        shutil.copytree(source_root / ".codex" / "hooks", root / ".codex" / "hooks")
+        context = RunContext.create(task_number=9, area="fe-worker", parent_session_id="parent")
+        service = CollectionService(context, NodeEventSink(root))
+        service.start()
+        try:
+            service.submit({"event_type": "start", "run_id": context.run_id, "token": context.token})
+            environment = os.environ | {
+                "FLOW_BI_RUN_ID": context.run_id,
+                "FLOW_BI_TASK_NUMBER": "9",
+                "FLOW_BI_PARENT_SESSION_ID": "parent",
+            }
+            subprocess.run(
+                ["node", str(root / ".codex" / "hooks" / "log-prompt-detail.mjs")],
+                input=json.dumps({"hook_event_name": "UserPromptSubmit", "prompt": "worker", "session_id": "worker-session", "turn_id": "worker-turn"}),
+                text=True, encoding="utf-8", cwd=root, env=environment, check=True, capture_output=True, timeout=5,
+            )
+            service.submit({"event_type": "end", "run_id": context.run_id, "token": context.token, "status": "completed", "exit_code": 0})
+        finally:
+            service.close()
+
+        records = json.loads((root / ".codex-logs" / "user-prompt-detail-submit.json").read_text(encoding="utf-8"))
+        starts = [record for record in records if record["record_type"] == "worker_start"]
+        self.assertEqual(len(starts), 1)
+        self.assertEqual(starts[0]["context"]["session_id"], "worker-session")
+        self.assertEqual(starts[0]["area"], "fe-worker")
 
 
 class WorkerInvocationTests(unittest.TestCase):
