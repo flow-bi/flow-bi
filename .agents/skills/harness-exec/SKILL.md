@@ -73,7 +73,10 @@ Harness는 session 또는 진행 중 증거를 가진 미해결 `NOT_RUN`만 기
 - `FLOW_BI_NOTION_PARENT`에는 개발자별 Notion 상위 Page 식별자를 설정한다.
 - Notion MCP OAuth는 각 개발자의 로컬 Codex 환경에 설정되어 있어야 한다.
 - 성공·실패 실행 모두 부모 Harness가 완성된 Report 전체를 실행당 하나의 새 Notion Page로 한 번 게시한다. Worker는 Notion에 게시하지 않는다.
-- Task별 Report에는 Node가 확정한 Worker timing이 있으면 area, run ID, 전체·미귀속 시간, 명시·추론 분류와 phase별 duration/tool 호출·tool 실행 시간을 사람 읽기 단위와 원본 ms로 함께 표시한다. blocked Task와 legacy 실행처럼 timing이 없으면 `미기록`이며 0ms나 Parent 시간으로 대체하지 않는다. timing 관측 오류는 Worker 업무 결과와 별도로 표시한다.
+- Notion 시간 분석은 `실행 시간 요약`, `Task별 소요 시간`, `전체 phase 분석`, `해석 메모` 순서의 Markdown 표로 렌더링한다. 요약 표에는 timing 기록·미기록 Task 수, 전체 Worker 시간과 미귀속 시간·비율을, Task 표에는 번호·제목·상태·Worker 시간·전체 대비·미귀속 시간·Task 대비·timing 분류를 Task 번호순으로 표시한다.
+- Task별 `Worker 시간`은 timing이 있으면 Area·Run ID·전체·미귀속 시간과 비율·분류 표, 이어서 canonical phase별 duration·Task 대비·tool 호출·tool 실행 시간·분류 표를 표시한다. 전체 phase 표도 canonical 순서로 같은 관측값을 집계한다. 시간은 사람이 읽는 단위와 원본 ms를 함께 표시한다.
+- 전체 분석은 timing이 있는 Task만 합산하며, failed·timeout Task의 유효 timing도 집계한다. blocked·legacy를 포함해 timing이 없으면 표에서 `미기록`으로 표시하고 0ms나 Parent 시간으로 대체하지 않는다. 관측되지 않은 phase도 `미기록`으로 표시하며, timing 관측 오류는 Worker 업무 결과와 별도로 표시한다. 전체 또는 Task 시간이 0ms이면 비율은 `분석 불가`로 표시한다.
+- `phase.duration_ms`는 경과 시간 구간이고 `tool_duration_ms`는 phase 경계를 걸쳐 중복될 수 있는 별도 관측값이다. 두 값을 서로 더하거나 tool 시간을 Worker 전체 시간에 가산하지 않는다는 규칙을 해석 메모에 표시한다.
 - 부모 전용 `FLOW_BI_NOTION_PARENT` 값은 Worker 자식 프로세스 환경에서 제거한다.
 - 환경변수 누락, OAuth 또는 Notion MCP 게시 실패는 숨기지 않고 실행 실패로 보고하며
   Active Plan을 완료 위치로 이동하지 않는다.
