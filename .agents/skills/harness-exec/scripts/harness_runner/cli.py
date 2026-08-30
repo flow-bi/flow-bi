@@ -6,15 +6,13 @@ from collections.abc import Sequence
 
 from .models import PlanValidationError, TaskResult
 
-from .planning.invocation import parse_cli_invocation
+from .invocation import parse_cli_invocation
+
 from .planning.paths import PROJECT_ROOT
 from .planning.plan import complete_plan, load_active_plan
 
-from .preparation.prompt import WorkerPromptTemplate
-from .preparation.runtime import (
-    prepare_common_worker_runtime,
-    prepare_worker_tasks,
-)
+from .preparation.codex import resolve_codex_executable
+from .preparation.runtime import prepare_worker_tasks
 
 from .execution.coordinator import execute_workers
 
@@ -69,15 +67,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         _print_console(f"plan 준비 실패: {error}", file=sys.stderr)
         return 1
 
-    # Worker 전체에서 공유할 실행 환경과 Prompt 원본을 준비
-    common_runtime = prepare_common_worker_runtime()
-    prompt_template = WorkerPromptTemplate.load()
-
-    prepared_workers = prepare_worker_tasks(
-        plan.tasks,
-        common_runtime=common_runtime,
-        prompt_template=prompt_template,
-    )
+    prepared_workers = prepare_worker_tasks(plan.tasks)
 
     report = execute_workers(
         plan,
@@ -89,7 +79,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     rendered_report = build_execution_report(request.plan_id, report)
     _print_console(rendered_report.body)
 
-    worker_executable = common_runtime.executable
+    worker_executable = resolve_codex_executable()
     try:
         published_page = publish_report(
             rendered_report.title,

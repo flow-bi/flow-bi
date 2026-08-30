@@ -24,7 +24,7 @@ from worker_runner.worker_process import (
 
 from ..models import Task, TaskInvocation
 from ..planning.paths import PROJECT_ROOT
-from .config import build_config_overrides, load_worker_config_template
+from .config import build_config_overrides
 from .environment import (
     build_task_verifier_environment,
     build_worker_task_environment,
@@ -51,7 +51,6 @@ class WorkerRuntime:
     project_root: Path
     executable: str
     base_environment: dict[str, str] = field(repr=False)
-    config_template: dict[str, object] = field(repr=False)
     toolchain_readable_paths: tuple[str, ...]
     timeout: int = DEFAULT_TIMEOUT_SECONDS
     process_runner: SubprocessRunner = field(
@@ -74,7 +73,6 @@ class WorkerRuntime:
                 writable_paths,
                 read_only_paths,
                 self.toolchain_readable_paths,
-                template=self.config_template,
             )
         )
         return WorkerTaskRuntime(
@@ -146,15 +144,15 @@ class PreparedWorkers(Mapping[int, PreparedWorkerTask]):
         self._resources.close()
 
 
-def prepare_worker_tasks(
-    tasks: Sequence[Task],
-    *,
-    common_runtime: WorkerRuntime,
-    prompt_template: WorkerPromptTemplate,
-) -> PreparedWorkers:
+def prepare_worker_tasks(tasks: Sequence[Task]) -> PreparedWorkers:
+
+    common_runtime = _prepare_common_worker_runtime()
+    prompt_template = WorkerPromptTemplate.load()
+
     resources = ExitStack()
 
     root = common_runtime.project_root
+
     try:
         backend_verifier = resources.enter_context(
             BackendVerifier(root)
@@ -187,28 +185,20 @@ def prepare_worker_tasks(
 
 
 # 프로젝트 전체 공통 실행 환경 준비
-def prepare_common_worker_runtime(
+def _prepare_common_worker_runtime(
     project_root: Path = PROJECT_ROOT,
     *,
-    base_environment: dict[str, str] | None = None,
     timeout: int = DEFAULT_TIMEOUT_SECONDS,
     process_runner: SubprocessRunner = subprocess.run,
-    logger: WorkerLogger | None = None,
-    executable: str | None = None,
 ) -> WorkerRuntime:
     root = project_root.resolve()
-    environment = prepare_common_worker_environment(
-        base_environment=base_environment,
-        project_root=root,
-        executable=executable,
-    )
+    environment = prepare_common_worker_environment(project_root=root)
+
     return WorkerRuntime(
         project_root=root,
         executable=environment.executable,
         base_environment=environment.process_environment,
-        config_template=load_worker_config_template(),
         toolchain_readable_paths=environment.toolchain_readable_paths,
         timeout=timeout,
-        process_runner=process_runner,
-        logger=logger,
+        process_runner=process_runner
     )

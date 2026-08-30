@@ -114,13 +114,10 @@ def _apply_parent_session_context(environment: dict[str, str]) -> None:
 
 def _build_shared_worker_environment(
     *,
-    base_environment: dict[str, str] | None,
     project_root: Path,
     codex_home: Path,
 ) -> dict[str, str]:
-    environment = (
-        base_environment if base_environment is not None else os.environ
-    ).copy()
+    environment = os.environ.copy()
     paths = build_worker_paths(project_root)
 
     _create_worker_directories(paths)
@@ -141,23 +138,20 @@ def _build_shared_worker_environment(
     _apply_parent_session_context(environment)
     return environment
 
-# 프로젝트 공통 환경 준비
+# 프로젝트 공통 환경 준비!
 def prepare_common_worker_environment(
     *,
-    base_environment: dict[str, str] | None = None,
     project_root: Path = PROJECT_ROOT,
-    executable: str | None = None,
 ) -> PreparedWorkerEnvironment:
     """Prepare every machine-level input shared by Worker Tasks."""
     root = project_root.resolve()
     codex_home = resolve_codex_home()
     process_environment = _build_shared_worker_environment(
-        base_environment=base_environment,
         project_root=root,
         codex_home=codex_home,
     )
     return PreparedWorkerEnvironment(
-        executable=executable or resolve_codex_executable(),
+        executable= resolve_codex_executable(),
         process_environment=process_environment,
         toolchain_readable_paths=collect_worker_readable_paths(
             process_environment,

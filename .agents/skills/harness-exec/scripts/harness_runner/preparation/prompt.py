@@ -11,6 +11,8 @@ from ..models import Task, TaskExecutionContext, TaskInvocation
 
 HARNESS_PROMPT_FILE = Path(__file__).with_name("prompt.md")
 WORKER_GUIDANCE_FILE = Path(__file__).resolve().parents[5] / "scripts" / "worker_runner" / "worker-guidance.md"
+
+
 _HARNESS_SECTIONS = ("discovery-guidance", "context-efficiency-guidance", "execution-context", "execution-rerun", "execution-new-or-changed", "execution-existing-without-evidence", "decision-correction", "result-contract")
 _WORKER_SECTIONS = ("worker-execution-guidance", "backend-verification-guidance", "backend-formatting-guidance", "frontend-verification-guidance")
 
@@ -78,7 +80,10 @@ class WorkerPromptTemplate:
 
     @classmethod
     def load(cls, harness_prompt_file: Path = HARNESS_PROMPT_FILE, worker_guidance_file: Path = WORKER_GUIDANCE_FILE) -> "WorkerPromptTemplate":
-        return cls(_load_sections(harness_prompt_file, _HARNESS_SECTIONS), _load_sections(worker_guidance_file, _WORKER_SECTIONS))
+        return cls(
+            _load_sections(harness_prompt_file, _HARNESS_SECTIONS),
+              _load_sections(worker_guidance_file, _WORKER_SECTIONS
+                             ))
 
     def prepare_task(self, task: Task | TaskInvocation) -> PreparedWorkerPrompt:
         if isinstance(task, TaskInvocation):

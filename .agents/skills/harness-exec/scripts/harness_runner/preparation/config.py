@@ -16,7 +16,7 @@ class WorkerConfigError(RuntimeError):
 
 
 # TOML Key를 안전한 문자열로 변환
-def format_toml_key(key: str) -> str:
+def _format_toml_key(key: str) -> str:
     if re.fullmatch(r"[A-Za-z0-9_-]+", key):
         return key
 
@@ -24,7 +24,7 @@ def format_toml_key(key: str) -> str:
 
 # Python 객체를 TOML 문자열로 변환
 # Codex CLI의 -c 옵션에 전달할 문자열을 만든다.
-def format_toml_value(value: object) -> str:
+def _format_toml_value(value: object) -> str:
     ## 문자열 처리
     if isinstance(value, str):
         return json.dumps(value)
@@ -40,7 +40,7 @@ def format_toml_value(value: object) -> str:
     ## 리스트 처리
     if isinstance(value, list):
         values = ", ".join(
-            format_toml_value(item)
+            _format_toml_value(item)
             for item in value
         )
         return f"[{values}]"
@@ -48,7 +48,7 @@ def format_toml_value(value: object) -> str:
     ## 딕셔너리 처리
     if isinstance(value, dict):
         entries = (
-            f"{format_toml_key(key)} = {format_toml_value(item)}"
+            f"{_format_toml_key(key)} = {_format_toml_value(item)}"
             for key, item in value.items()
         )
         return "{ " + ", ".join(entries) + " }"
@@ -58,13 +58,7 @@ def format_toml_value(value: object) -> str:
         f"{type(value).__name__}"
     )
 
-# config 설정을 읽고 실행 별 경로 권한 병합
-def load_worker_config_template() -> dict[str, object]:
-    """Load and validate the cohort-shared Worker config once."""
-    return build_worker_config((), ())
-
-
-def build_worker_config(
+def _build_worker_config(
     writable_paths: Iterable[str],
     read_only_paths: Iterable[str],
     toolchain_readable_paths: Iterable[str] = (),
@@ -134,18 +128,15 @@ def build_worker_config(
 def build_config_overrides(
     writable_paths: Iterable[str],
     read_only_paths: Iterable[str],
-    toolchain_readable_paths: Iterable[str] = (),
-    *,
-    template: dict[str, object] | None = None,
+    toolchain_readable_paths: Iterable[str] = ()
 ) -> list[str]:
-    config = build_worker_config(
+    config = _build_worker_config(
         writable_paths=writable_paths,
         read_only_paths=read_only_paths,
         toolchain_readable_paths=toolchain_readable_paths,
-        template=template,
     )
 
     return [
-        f"{format_toml_key(key)}={format_toml_value(value)}"
+        f"{_format_toml_key(key)}={_format_toml_value(value)}"
         for key, value in config.items()
     ]

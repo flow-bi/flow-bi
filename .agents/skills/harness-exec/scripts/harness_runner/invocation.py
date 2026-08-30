@@ -4,7 +4,7 @@ import re
 from collections.abc import Sequence
 
 
-from ..models import HarnessRequest, PlanValidationError
+from .models import HarnessRequest, PlanValidationError
 
 
 INVOCATION_PATTERN = re.compile(
@@ -20,9 +20,9 @@ def parse_cli_invocation(arguments: Sequence[str]) -> HarnessRequest:
             "전체 요청을 하나의 인자로 전달해야 합니다."
         )
 
-    return parse_invocation(arguments[0])
+    return _parse_invocation(arguments[0])
 
-def parse_invocation(raw_request: str) -> HarnessRequest:
+def _parse_invocation(raw_request: str) -> HarnessRequest:
     match = INVOCATION_PATTERN.fullmatch(raw_request)
     if match is None:
         raise PlanValidationError(
