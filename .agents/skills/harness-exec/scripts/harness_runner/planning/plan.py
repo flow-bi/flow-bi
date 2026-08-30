@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..models import ParsedPlan
+from ..models.plan import ParsedPlan
 from .paths import active_plan_path, complete_plan_path
 from .parser import parse_plan_text
 

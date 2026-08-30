@@ -3,13 +3,13 @@ import sys
 
 from collections.abc import Sequence
 
+from .paths import PROJECT_ROOT
 
-from .models import PlanValidationError, TaskResult
+from .planning.errors import PlanValidationError
+from .planning import complete_plan, load_requested_plan
 
-from .invocation import parse_cli_invocation
+from .models.result import TaskResult
 
-from .planning.paths import PROJECT_ROOT
-from .planning.plan import complete_plan, load_active_plan
 
 from .preparation.codex import resolve_codex_executable
 from .preparation.runtime import prepare_worker_tasks
@@ -52,12 +52,9 @@ def _print_failure(failure: TaskResult) -> None:
 # 하네스 전체 흐름 담당
 def main(argv: Sequence[str] | None = None) -> int:
 
-    # plan 준비 시작
-    arguments = list(sys.argv[1:] if argv is None else argv)
-
+    # plan 준비
     try:
-        request = parse_cli_invocation(arguments)
-        plan_path, plan = load_active_plan(request.plan_id)
+        request, plan_path, plan = load_requested_plan(argv)
 
     except PlanValidationError as error:
         _print_console(f"검증 오류: {error}", file=sys.stderr)

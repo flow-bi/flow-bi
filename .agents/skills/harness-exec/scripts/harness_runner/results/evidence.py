@@ -7,7 +7,7 @@ from pathlib import Path
 import tempfile
 from typing import Any
 
-from ..models import Task
+from ..models.plan import Task
 
 
 RECORD_VERSION = 1

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from ..models import ParsedPlan, Task
+from ..models.plan import ParsedPlan, Task
 
 
 TASK_SECTION_PATTERN = re.compile(r"^## 2\. 실행 Task[ \t]*$", re.MULTILINE)
@@ -118,5 +118,6 @@ def parse_plan_text(text: str) -> ParsedPlan:
             )
         )
     return ParsedPlan(
-        common_prompt=_common_prompt(text, region_start), tasks=tuple(tasks)
+        common_prompt=_common_prompt(text, region_start),
+        tasks=tuple(tasks),
     )

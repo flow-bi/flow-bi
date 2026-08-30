@@ -6,7 +6,8 @@ import re
 from pathlib import Path
 from typing import Mapping
 
-from ..models import Task, TaskExecutionContext, TaskInvocation
+from ..models.invocation import TaskExecutionContext, TaskInvocation
+from ..models.plan import Task
 
 
 HARNESS_PROMPT_FILE = Path(__file__).with_name("prompt.md")

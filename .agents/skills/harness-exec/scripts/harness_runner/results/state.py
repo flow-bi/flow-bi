@@ -7,7 +7,7 @@ import tempfile
 import threading
 from typing import Any
 
-from ..models import Task
+from ..models.plan import Task
 
 
 PLAN_ID_PATTERN = re.compile(r"^(?P<feature>[a-z0-9]+(?:-[a-z0-9]+)*)-(?P<number>\d{2})$")

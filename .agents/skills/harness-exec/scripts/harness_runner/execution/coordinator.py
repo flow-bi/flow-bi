@@ -6,7 +6,9 @@ from dataclasses import replace
 import heapq
 from pathlib import Path
 
-from ..models import ExecutionReport, HarnessRequest, ParsedPlan, Task, TaskExecutionContext, TaskInvocation, TaskResult
+from ..models.invocation import HarnessRequest, TaskExecutionContext, TaskInvocation
+from ..models.plan import ParsedPlan, Task
+from ..models.result import ExecutionReport, TaskResult
 from ..preparation.runtime import PreparedWorkerTask, PreparedWorkers
 from ..results.evidence import EvidenceRecordError, ExecutionRecordStore, revision_fingerprint
 from ..results.state import PlanStateStore, StateRecordError

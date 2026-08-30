@@ -5,7 +5,7 @@ from pathlib import Path
 import os
 import sys
 
-from ..models import Task
+from ..models.plan import Task
 from ..planning.paths import PROJECT_ROOT
 from .codex import resolve_codex_executable, resolve_codex_home
 from .paths import WorkerPaths, build_worker_paths

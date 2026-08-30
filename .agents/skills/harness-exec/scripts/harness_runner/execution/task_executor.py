@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import subprocess
 
-from ..models import Task, TaskInvocation, TaskResult
+from ..models.invocation import TaskInvocation
+from ..models.plan import Task
+from ..models.result import TaskResult
 from ..preparation.runtime import PreparedWorkerTask
 from ..results.evidence import EvidenceRecordError, ExecutionRecordStore
 from ..results.worker_result import completion_error, decision_correction, needs_decision_correction, return_code, task_result_from_worker

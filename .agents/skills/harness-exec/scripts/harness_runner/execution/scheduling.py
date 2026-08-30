@@ -3,7 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 import heapq
 
-from ..models import Task, TaskResult
+from ..models.plan import Task
+from ..models.result import TaskResult
 
 
 @dataclass(frozen=True)

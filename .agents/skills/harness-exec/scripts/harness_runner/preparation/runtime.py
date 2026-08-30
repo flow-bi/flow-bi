@@ -22,7 +22,8 @@ from worker_runner.worker_process import (
     WorkerLogger,
 )
 
-from ..models import Task, TaskInvocation
+from ..models.invocation import TaskInvocation
+from ..models.plan import Task
 from ..planning.paths import PROJECT_ROOT
 from .config import build_config_overrides
 from .environment import (
