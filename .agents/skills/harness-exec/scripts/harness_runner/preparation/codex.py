@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Codex 실행 위치를 Harness cohort 시작 시 결정한다."""
+"""Codex 실행 환경에 필요한 경로를 결정한다."""
 
 from pathlib import Path
 import shutil

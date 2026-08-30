@@ -58,7 +58,7 @@ def _format_toml_value(value: object) -> str:
         f"{type(value).__name__}"
     )
 
-def _build_worker_config(
+def _build_common_worker_config(
     writable_paths: Iterable[str],
     read_only_paths: Iterable[str],
     toolchain_readable_paths: Iterable[str] = (),
@@ -130,7 +130,7 @@ def build_config_overrides(
     read_only_paths: Iterable[str],
     toolchain_readable_paths: Iterable[str] = ()
 ) -> list[str]:
-    config = _build_worker_config(
+    config = _build_common_worker_config(
         writable_paths=writable_paths,
         read_only_paths=read_only_paths,
         toolchain_readable_paths=toolchain_readable_paths,

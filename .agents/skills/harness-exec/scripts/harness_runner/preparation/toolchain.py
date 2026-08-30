@@ -9,6 +9,7 @@ import sys
 
 # 경로에서 node_modules/npm 패키지 루트를 찾아 반환
 def _npm_package_root(path: Path) -> Path | None:
+    """경로에서 node_modules/npm 패키지 루트를 찾는다."""
     parts = tuple(part.lower() for part in path.parts)
     for index in range(len(parts) - 1):
         if parts[index : index + 2] == ("node_modules", "npm"):
@@ -17,6 +18,7 @@ def _npm_package_root(path: Path) -> Path | None:
 
 # Homebrew Caller의 실제 패키지 설치 루트를 반환 
 def _homebrew_package_root(path: Path) -> Path | None:
+    """Homebrew Cellar의 실제 패키지 설치 루트를 찾는다."""
     parts = tuple(part.lower() for part in path.parts)
     for index, part in enumerate(parts):
         if part == "cellar" and len(parts) > index + 2:
@@ -25,6 +27,7 @@ def _homebrew_package_root(path: Path) -> Path | None:
 
 # Homebrew opt의 패키지 링크 루트를 반환
 def _homebrew_opt_package_root(path: Path) -> Path | None:
+    """Homebrew opt의 패키지 링크 루트를 찾는다."""
     parts = tuple(part.lower() for part in path.parts)
     for index, part in enumerate(parts):
         if part == "opt" and len(parts) > index + 1:
@@ -38,6 +41,7 @@ def _append_unique_path(
     *,
     require_directory: bool = False,
 ) -> None:
+    """유효한 경로를 중복 없이 추가한다."""
     if not candidate:
         return
     path = Path(candidate).expanduser()
@@ -53,6 +57,7 @@ def _add_executable_paths(
     *,
     executable_first: bool = False,
 ) -> tuple[Path, Path]:
+    """실행 파일과 관련 설치 경로를 읽기 허용 목록에 추가한다."""
     executable_path = Path(executable)
     resolved_path = executable_path.resolve()
     candidates = (
@@ -66,18 +71,20 @@ def _add_executable_paths(
 
 # npm 실행에 필요한 npm 패키지 경로를 추가
 def _add_npm_paths(paths: list[Path], npm_paths: Iterable[Path]) -> None:
+    """npm 실행에 필요한 패키지 경로를 추가한다."""
     for npm_path in npm_paths:
         _append_unique_path(paths, _npm_package_root(npm_path))
         _append_unique_path(paths, npm_path.parent / "node_modules" / "npm", require_directory=True)
 
 # Windows Git 실행 파일에서 Git 설치 루트를 찾아 추가
 def _add_windows_git_roots(paths: list[Path], git_paths: Iterable[Path]) -> None:
+    """Windows Git 실행 파일에서 설치 루트를 찾아 추가한다."""
     for git_path in git_paths:
         if git_path.parent.name.lower() in {"bin", "cmd"}:
             _append_unique_path(paths, git_path.parent.parent, require_directory=True)
 
 # Worker가 도구를 실행하는 데 필요한 읽기 허용 경로를 수집
-def collect_worker_readable_paths(
+def collect_toolchain_readable_paths(
     environment: dict[str, str],
     *,
     home_dir: Path | None = None,
@@ -85,8 +92,7 @@ def collect_worker_readable_paths(
     python_executable: str | Path = sys.executable,
     project_root: Path,
 ) -> tuple[str, ...]:
-    """Collect ordered read-permission paths for the Worker toolchain only."""
-
+    """Worker Toolchain 실행에 필요한 읽기 허용 경로를 수집한다."""
     paths: list[Path] = []
     actual_home = home_dir or Path.home()
     actual_platform = platform_name or sys.platform

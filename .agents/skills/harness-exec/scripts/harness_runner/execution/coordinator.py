@@ -1,15 +1,17 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import replace
 import heapq
 from pathlib import Path
 
+from worker_runner import run_worker_cohort
+
 from ..models.invocation import HarnessRequest, TaskExecutionContext, TaskInvocation
 from ..models.plan import ParsedPlan, Task
 from ..models.result import ExecutionReport, TaskResult
-from ..preparation.runtime import PreparedWorkerTask, PreparedWorkers
+from ..preparation.task_invocations import PreparedWorkerTask
 from ..results.evidence import EvidenceRecordError, ExecutionRecordStore, revision_fingerprint
 from ..results.state import PlanStateStore, StateRecordError
 from .scheduling import TaskGraph, block_failed_dependents, build_task_graph, enqueue_ready_tasks, ready_task_numbers, restore_succeeded_tasks
@@ -59,6 +61,7 @@ def _execute_workers(
     project_root: Path | None = None,
     record_store: ExecutionRecordStore | None = None,
     state_store: PlanStateStore | None = None,
+    worker_executor: Callable[..., object],
 ) -> ExecutionReport:
 
     root = project_root.resolve()
@@ -168,6 +171,7 @@ def _execute_workers(
                         invocation,
                         prepared_worker,
                         store,
+                        worker_executor,
                     )
                 ] = number
 
@@ -227,16 +231,22 @@ def execute_workers(
     record_store: ExecutionRecordStore | None = None,
     state_store: PlanStateStore | None = None,
 ) -> ExecutionReport:
-    try:
+    root = project_root.resolve()
+    task_paths = {
+        task.number: (task.allowed_paths, task.read_only_paths)
+        for task in plan.tasks
+    }
+
+    def execute_cohort(worker_executor: Callable[..., object]) -> ExecutionReport:
         return _execute_workers(
             plan,
             request,
             prepared_workers,
             max_parallel_tasks,
-            project_root=project_root,
+            project_root=root,
             record_store=record_store,
             state_store=state_store,
+            worker_executor=worker_executor,
         )
-    finally:
-        if isinstance(prepared_workers, PreparedWorkers):
-            prepared_workers.close()
+
+    return run_worker_cohort(root, task_paths, execute_cohort)

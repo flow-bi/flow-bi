@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
+import uuid
 
 from .codex_cli import build_codex_command
 from .worker_process import (
@@ -39,6 +41,35 @@ def execute_prepared_worker(
         environment=environment,
         project_root=project_root,
         runner=process_runner,
+        logger=logger,
+        timeout=timeout,
+    )
+
+
+def execute_worker(
+    *,
+    prompt: str,
+    executable: str,
+    config_overrides: tuple[str, ...],
+    environment: dict[str, str],
+    project_root: Path,
+    process_runner: SubprocessRunner = subprocess.run,
+    logger: WorkerLogger | None = None,
+    timeout: int = 30 * 60,
+) -> WorkerExecutionResult:
+    """Harness 입력으로 하나의 Worker 실행 전체를 수행한다."""
+    run_id = str(uuid.uuid4())
+    execution_environment = environment.copy()
+    execution_environment["FLOW_BI_RUN_ID"] = run_id
+
+    return execute_prepared_worker(
+        prompt=prompt,
+        run_id=run_id,
+        executable=executable,
+        config_overrides=config_overrides,
+        environment=execution_environment,
+        project_root=project_root,
+        process_runner=process_runner,
         logger=logger,
         timeout=timeout,
     )

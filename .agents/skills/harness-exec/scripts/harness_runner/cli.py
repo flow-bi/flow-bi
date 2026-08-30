@@ -11,8 +11,7 @@ from .planning import complete_plan, load_requested_plan
 from .models.result import TaskResult
 
 
-from .preparation.codex import resolve_codex_executable
-from .preparation.runtime import prepare_worker_tasks
+from .preparation import prepare_execution
 
 from .execution.coordinator import execute_workers
 
@@ -64,25 +63,24 @@ def main(argv: Sequence[str] | None = None) -> int:
         _print_console(f"plan 준비 실패: {error}", file=sys.stderr)
         return 1
 
-    prepared_workers = prepare_worker_tasks(plan.tasks)
+    prepared = prepare_execution(plan.tasks)
 
     report = execute_workers(
         plan,
         request,
-        prepared_workers=prepared_workers,
+        prepared_workers=prepared.task_invocations,
         project_root=PROJECT_ROOT
     )
 
     rendered_report = build_execution_report(request.plan_id, report)
     _print_console(rendered_report.body)
 
-    worker_executable = resolve_codex_executable()
     try:
         published_page = publish_report(
             rendered_report.title,
             rendered_report.body,
             project_root=PROJECT_ROOT,
-            executable=worker_executable,
+            executable=prepared.codex_executable,
         )
     except NotionPublicationError as error:
         for failure in report.failures:

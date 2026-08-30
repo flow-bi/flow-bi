@@ -1,5 +1,5 @@
-from .runner import execute_prepared_worker
+from .cohort import run_worker_cohort
 
 __all__ = (
-    "execute_prepared_worker",
+    "run_worker_cohort",
 )

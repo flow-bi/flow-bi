@@ -3,7 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import NamedTuple
 
-from ..planning.paths import PROJECT_ROOT
+from ..paths import PROJECT_ROOT
+
+"""Worker 실행에 필요한 프로젝트 내부 경로를 구성한다."""
 
 class WorkerPaths(NamedTuple):
     backend: Path
@@ -15,9 +17,11 @@ class WorkerPaths(NamedTuple):
     npm_user_config: Path
 
 
-def build_worker_paths(
+def build_common_worker_paths(
     project_root: Path = PROJECT_ROOT,
 ) -> WorkerPaths:
+    """프로젝트 루트를 기준으로 Worker 전용 경로를 구성한다."""
+
     backend = project_root / "backend"
     gradle_user_home = backend / ".gradle-user-home"
     worker_temp = gradle_user_home / "tmp"

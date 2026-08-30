@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Callable
 
 from ..models.invocation import TaskInvocation
 from ..models.plan import Task
 from ..models.result import TaskResult
-from ..preparation.runtime import PreparedWorkerTask
+from ..preparation.task_invocations import PreparedWorkerTask
 from ..results.evidence import EvidenceRecordError, ExecutionRecordStore
 from ..results.worker_result import completion_error, decision_correction, needs_decision_correction, return_code, task_result_from_worker
 
@@ -20,16 +21,52 @@ def _record_failure(task: Task, code: int | None, output: dict[str, object] | No
     return task_result_from_worker(task, "failed", code, False, message, output)
 
 
+def _execute_worker(
+    prepared_worker: PreparedWorkerTask,
+    invocation: TaskInvocation,
+    worker_executor: Callable[..., object],
+) -> object:
+    context = invocation.execution_context
+    return worker_executor(
+        prepared_worker.task_number,
+        common_prompt=invocation.common_prompt,
+        additional_request=invocation.additional_request,
+        title=prepared_worker.title,
+        task_prompt=prepared_worker.task_prompt,
+        verification_items=prepared_worker.verification_items,
+        execution_context=(
+            {
+                "plan_id": context.plan_id,
+                "fingerprint": context.fingerprint,
+                "mode": context.mode,
+                "prior_tdd_evidence": context.prior_tdd_evidence,
+            }
+            if context is not None
+            else None
+        ),
+        decision_correction=invocation.decision_correction,
+        executable=prepared_worker.executable,
+        config_overrides=prepared_worker.config_overrides,
+        environment=prepared_worker.environment,
+        project_root=prepared_worker.project_root,
+    )
+
+
 def execute_task(
     task: Task,
     invocation: TaskInvocation,
     prepared_worker: PreparedWorkerTask,
     store: ExecutionRecordStore,
+    worker_executor: Callable[..., object],
 ) -> TaskResult:
 
     """Run one Worker invocation, correct its decision once, and persist PASS evidence."""
     try:
-        result = prepared_worker.execute(invocation)
+        result = _execute_worker(
+            prepared_worker,
+            invocation,
+            worker_executor,
+        )
 
     except subprocess.TimeoutExpired as error:
         message = (
@@ -65,7 +102,11 @@ def execute_task(
 
     if message:
         try:
-            result = prepared_worker.execute(decision_correction(invocation, result))
+            result = _execute_worker(
+                prepared_worker,
+                decision_correction(invocation, result),
+                worker_executor,
+            )
         except subprocess.TimeoutExpired as error:
             return task_result_from_worker(task, "failed", 124, True, str(error), output)
         except subprocess.CalledProcessError as error:
