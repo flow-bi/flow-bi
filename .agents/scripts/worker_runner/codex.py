@@ -9,8 +9,8 @@ import tempfile
 from .config import read_config_overrides
 
 
-# Codex 실행 기본 제한 시간 (90분)
-DEFAULT_TIMEOUT_SECONDS = 90 * 60
+# Codex 실행 기본 제한 시간 (30분)
+DEFAULT_TIMEOUT_SECONDS = 30 * 60
 
 # 프로젝트 루트
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
