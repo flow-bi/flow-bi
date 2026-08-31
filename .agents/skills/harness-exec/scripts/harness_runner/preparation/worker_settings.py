@@ -10,29 +10,28 @@ from .environment import build_task_environment, build_worker_environment
 from .permissions import build_config_overrides
 from .toolchain import collect_toolchain_readable_paths
 
+
 @dataclass(frozen=True)
-class PreparedWorkerTask:
-    """실행 계층에 전달할 Worker 입력만 보관한다."""
+class TaskWorkerSettings:
+    """Sandbox and environment settings prepared for one Task."""
 
     config_overrides: tuple[str, ...] = field(repr=False)
     environment: dict[str, str] = field(repr=False)
 
-def prepare_worker_tasks(
+
+def prepare_task_worker_settings(
     tasks: Sequence[Task],
     *,
     project_root: Path = PROJECT_ROOT,
-) -> dict[int, PreparedWorkerTask]:
-    """공통 실행 기반을 한 번 만들고 Task별 실행 입력을 준비한다."""
+) -> dict[int, TaskWorkerSettings]:
     root = project_root.resolve()
-
     environment = build_worker_environment(root)
     toolchain_readable_paths = collect_toolchain_readable_paths(
         environment,
         project_root=root,
     )
-
     return {
-        task.number: PreparedWorkerTask(
+        task.number: TaskWorkerSettings(
             config_overrides=tuple(
                 build_config_overrides(
                     task.allowed_paths,

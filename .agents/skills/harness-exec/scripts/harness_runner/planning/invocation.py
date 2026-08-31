@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 
-from ..models.invocation import HarnessRequest
+from ..models.request import HarnessRequest
 from .errors import PlanValidationError
 
 

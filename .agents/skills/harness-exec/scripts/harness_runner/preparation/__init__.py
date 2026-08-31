@@ -1,8 +1,8 @@
 from .entry import PreparedExecution, prepare_execution
-from .worker_tasks import PreparedWorkerTask
+from .worker_settings import TaskWorkerSettings
 
 __all__ = [
     "PreparedExecution",
-    "PreparedWorkerTask",
+    "TaskWorkerSettings",
     "prepare_execution",
 ]

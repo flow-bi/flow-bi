@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from pathlib import Path
 import sys
 
-from ..models.invocation import HarnessRequest
+from ..models.request import HarnessRequest
 from ..models.plan import ParsedPlan
 from .invocation import parse_cli_invocation
 from .plan import load_active_plan
