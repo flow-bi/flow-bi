@@ -64,6 +64,16 @@ function nodeFor(record, kind) {
   };
 }
 
+function emptyPhaseTiming(record) {
+  return {
+    phase: record.phase,
+    duration_ms: 0,
+    tool_calls: 0,
+    tool_duration_ms: 0,
+    classification: { explicit: false, inferred: false },
+  };
+}
+
 function workerTiming(records, runId) {
   const related = records.filter((record) => record?.run_id === runId && typeof record.record_type === "string" && record.record_type.startsWith("worker_"));
   const start = related.find((record) => record.record_type === "worker_start");
@@ -73,24 +83,23 @@ function workerTiming(records, runId) {
   const phaseStarts = new Map();
   const phases = new Map();
   for (const record of related) {
-    if (record.record_type === "worker_phase_start") phaseStarts.set(record.phase_id, record);
-    if (record.record_type === "worker_phase_end") {
+    if (record.record_type === "worker_phase_start") {
+      phaseStarts.set(record.phase_id, record);
+    } else if (record.record_type === "worker_phase_end") {
       const started = phaseStarts.get(record.phase_id);
       const key = `${record.phase}:${record.phase_source}`;
-      const aggregate = phases.get(key) ?? { phase: record.phase, duration_ms: 0, tool_calls: 0, tool_duration_ms: 0, classification: { explicit: false, inferred: false } };
+      const aggregate = phases.get(key) ?? emptyPhaseTiming(record);
       aggregate.duration_ms += Math.max(0, Number(record.duration_ms) || (started ? Date.parse(record.occurred_at) - Date.parse(started.occurred_at) : 0));
       aggregate.classification[record.phase_source] = true;
       phases.set(key, aggregate);
+    } else if (record.record_type === "worker_tool_end") {
+      const key = `${record.phase}:${record.phase_source}`;
+      const aggregate = phases.get(key) ?? emptyPhaseTiming(record);
+      aggregate.tool_calls += 1;
+      aggregate.tool_duration_ms += Math.max(0, Number(record.duration_ms) || 0);
+      aggregate.classification[record.phase_source] = true;
+      phases.set(key, aggregate);
     }
-  }
-  for (const record of related) {
-    if (record.record_type !== "worker_tool_end") continue;
-    const key = `${record.phase}:${record.phase_source}`;
-    const aggregate = phases.get(key) ?? { phase: record.phase, duration_ms: 0, tool_calls: 0, tool_duration_ms: 0, classification: { explicit: false, inferred: false } };
-    aggregate.tool_calls += 1;
-    aggregate.tool_duration_ms += Math.max(0, Number(record.duration_ms) || 0);
-    aggregate.classification[record.phase_source] = true;
-    phases.set(key, aggregate);
   }
   const values = [...phases.values()];
   return { area: start.area ?? null, total_duration_ms: duration, phases: values, unattributed_duration_ms: Math.max(0, duration - values.reduce((total, item) => total + item.duration_ms, 0)), classification: { explicit: values.some((item) => item.classification.explicit), inferred: values.some((item) => item.classification.inferred) } };

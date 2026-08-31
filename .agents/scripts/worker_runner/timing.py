@@ -14,6 +14,7 @@ import subprocess
 from threading import Lock, Thread
 from typing import Any
 from urllib.parse import urlparse
+import uuid
 
 from .codex import WORKERS, validate_task_number
 
@@ -63,8 +64,6 @@ def infer_phase(tool_name: object, classification: object = None) -> str:
         return "refactor"
     if any(value in text for value in ("read", "rg", "grep", "find", "search", "ls")):
         return "analysis"
-    if "test" in text:
-        return "test_code"
     if "doc" in text or "markdown" in text:
         return "documentation"
     return "analysis"
@@ -83,7 +82,7 @@ class RunContext:
         if area not in WORKERS:
             raise ValueError("Worker area must be an existing WORKERS value.")
         return cls(
-            run_id=secrets.token_hex(16),
+            run_id=str(uuid.uuid4()),
             token=secrets.token_urlsafe(32),
             task_number=int(validate_task_number(task_number)),
             area=area,
@@ -193,8 +192,6 @@ class CollectionService:
 
     def worker_environment(self, base_environment: dict[str, str]) -> dict[str, str]:
         environment = base_environment.copy()
-        for key in ("FLOW_BI_WORKER_EVENT_URL", "FLOW_BI_WORKER_EVENT_TOKEN", "FLOW_BI_WORKER_AREA"):
-            environment.pop(key, None)
         environment.update({
             "FLOW_BI_RUN_ID": self.context.run_id,
             "FLOW_BI_TASK_NUMBER": str(self.context.task_number),

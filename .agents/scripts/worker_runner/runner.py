@@ -8,7 +8,6 @@ import os
 import shutil
 import subprocess
 import tempfile
-import uuid
 from threading import Thread
 
 from .codex import (
@@ -116,7 +115,7 @@ def _with_worker_log_tail(error: str, log_tail: str) -> str:
 
 
 def _jsonl_tool_events_for_line(
-    line: str, open_items: dict[str, tuple[str, str]],
+    line: str, open_items: dict[str, str],
 ) -> tuple[dict[str, str], ...]:
     try:
         payload = json.loads(line)
@@ -131,29 +130,24 @@ def _jsonl_tool_events_for_line(
     # Keep only the stable id and enum-like item type: command text and
     # file/patch payloads never leave this parser.
     if event_type == "item.started" and item_id not in open_items:
-        open_items[item_id] = (item_type, item_type)
+        open_items[item_id] = item_type
         return ({"event_type": "tool_start", "tool_id": item_id, "tool_name": item_type, "classification": item_type},)
     if event_type == "item.completed" and item_id in open_items:
-        tool_name, classification = open_items.pop(item_id)
-        return ({"event_type": "tool_end", "tool_id": item_id, "tool_name": tool_name, "classification": classification},)
+        tool_name = open_items.pop(item_id)
+        return ({"event_type": "tool_end", "tool_id": item_id, "tool_name": tool_name, "classification": tool_name},)
     return ()
-
-
-def _jsonl_tool_events_from_lines(lines: object) -> tuple[dict[str, str], ...]:
-    """Translate supported codex JSONL item lifecycle lines without retaining inputs."""
-
-    open_items: dict[str, tuple[str, str]] = {}
-    events: list[dict[str, str]] = []
-    for line in lines if isinstance(lines, list) else ():
-        events.extend(_jsonl_tool_events_for_line(line, open_items))
-    return tuple(events)
 
 
 def _jsonl_tool_events(progress_path: Path) -> tuple[dict[str, str], ...]:
     try:
-        return _jsonl_tool_events_from_lines(progress_path.read_text(encoding="utf-8", errors="replace").splitlines())
+        lines = progress_path.read_text(encoding="utf-8", errors="replace").splitlines()
     except OSError:
         return ()
+    open_items: dict[str, str] = {}
+    events: list[dict[str, str]] = []
+    for line in lines:
+        events.extend(_jsonl_tool_events_for_line(line, open_items))
+    return tuple(events)
 
 
 def _run_worker_streaming(
@@ -166,7 +160,7 @@ def _run_worker_streaming(
         command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=log_file,
         text=True, encoding="utf-8", env=environment, cwd=project_root,
     )
-    open_items: dict[str, tuple[str, str]] = {}
+    open_items: dict[str, str] = {}
 
     def consume() -> None:
         if process.stdout is None:
@@ -231,6 +225,35 @@ def _terminal_status(returncode: int, output: object | None, output_error: str) 
     return "failed"
 
 
+def _submit_terminal_event(
+    service: CollectionService,
+    context: RunContext,
+    status: str,
+    exit_code: int,
+    summary: object,
+    diagnostic: str,
+) -> None:
+    try:
+        service.submit({
+            "event_type": "end",
+            "run_id": context.run_id,
+            "token": context.token,
+            "status": status,
+            "exit_code": exit_code,
+            "summary": str(summary)[:4096],
+        })
+    except Exception:
+        service.diagnostics.append(diagnostic)
+
+
+def _resolved_timing_summary(
+    service: CollectionService, project_root: Path, run_id: str,
+) -> object | None:
+    if service.timing_summary is not None:
+        return service.timing_summary
+    return _node_timing_summary(project_root, run_id)
+
+
 def execute_worker(
     prompt: str,
     allowed_paths: tuple[str, ...],
@@ -249,15 +272,13 @@ def execute_worker(
     validate_task_number(task_number)
 
     # Worker 실행을 식별하기 위한 고유 ID와 인증 토큰은 매 실행 새로 만든다.
-    run_id = str(uuid.uuid4())
     area = determine_worker_area(allowed_paths)
     context = RunContext.create(
         task_number=task_number,
         area=area,
         parent_session_id=(base_environment or os.environ).get("CODEX_THREAD_ID"),
     )
-    # Keep the UUID public run identity while the collector owns a separate token.
-    context = RunContext(run_id, context.token, context.task_number, context.area, context.parent_session_id)
+    run_id = context.run_id
     service = CollectionService(context, event_sink or NodeEventSink(project_root))
     service.start()
 
@@ -348,15 +369,11 @@ def execute_worker(
                 log_tail = _read_worker_log_tail(log_path)
                 if log_tail:
                     error.stderr = _with_worker_log_tail("", log_tail)
-                try:
-                    service.submit({"event_type": "end", "run_id": run_id, "token": context.token, "status": "timeout", "exit_code": 124, "summary": "Worker timed out."})
-                except Exception:
-                    service.diagnostics.append("timeout event failed")
-                error.timing_summary = (
-                    service.timing_summary
-                    if service.timing_summary is not None
-                    else _node_timing_summary(project_root, run_id)
+                _submit_terminal_event(
+                    service, context, "timeout", 124, "Worker timed out.",
+                    "timeout event failed",
                 )
+                error.timing_summary = _resolved_timing_summary(service, project_root, run_id)
                 error.run_id = run_id
                 if logger is not None:
                     logger(run_id, 124, output_path, project_root, "timeout")
@@ -368,15 +385,11 @@ def execute_worker(
                 log_tail = _read_worker_log_tail(log_path)
                 if log_tail and hasattr(error, "add_note"):
                     error.add_note(_with_worker_log_tail("", log_tail))
-                try:
-                    service.submit({"event_type": "end", "run_id": run_id, "token": context.token, "status": "failed", "exit_code": 1, "summary": "Worker subprocess failed."})
-                except Exception:
-                    service.diagnostics.append("failure event failed")
-                error.timing_summary = (
-                    service.timing_summary
-                    if service.timing_summary is not None
-                    else _node_timing_summary(project_root, run_id)
+                _submit_terminal_event(
+                    service, context, "failed", 1, "Worker subprocess failed.",
+                    "failure event failed",
                 )
+                error.timing_summary = _resolved_timing_summary(service, project_root, run_id)
                 error.run_id = run_id
                 if logger is not None:
                     logger(run_id, 1, output_path, project_root, "failed")
@@ -392,11 +405,11 @@ def execute_worker(
             # 종료 결과 기록
             output, output_error = _read_worker_output(output_path)
             status = _terminal_status(result.returncode, output, output_error)
-            try:
-                summary = output.get("work_summary", "") if isinstance(output, dict) else ""
-                service.submit({"event_type": "end", "run_id": run_id, "token": context.token, "status": status, "exit_code": result.returncode, "summary": str(summary)[:4096]})
-            except Exception:
-                service.diagnostics.append("terminal event failed")
+            summary = output.get("work_summary", "") if isinstance(output, dict) else ""
+            _submit_terminal_event(
+                service, context, status, result.returncode, summary,
+                "terminal event failed",
+            )
             if logger is not None:
                 logger(run_id, result.returncode, output_path, project_root, status)
             if result.returncode != 0 or output_error:
@@ -409,11 +422,7 @@ def execute_worker(
                 returncode=result.returncode,
                 output=output,
                 output_error=output_error,
-                timing_summary=(
-                    service.timing_summary
-                    if service.timing_summary is not None
-                    else _node_timing_summary(project_root, run_id)
-                ),
+                timing_summary=_resolved_timing_summary(service, project_root, run_id),
                 run_id=run_id,
             )
     finally:

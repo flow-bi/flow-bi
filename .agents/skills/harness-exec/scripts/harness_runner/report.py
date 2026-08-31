@@ -92,47 +92,37 @@ def _missing_phase_row(phase_name: str) -> tuple[str, ...]:
     return (phase_name, "미기록", "미기록", "미기록", "미기록", "미기록")
 
 
-def _phases_by_name(result: TaskResult) -> dict[str, tuple]:
-    if result.timing is None:
-        return {}
+def _phases_by_name(results: tuple[TaskResult, ...]) -> dict[str, tuple]:
     grouped: dict[str, list] = {}
-    for phase in result.timing.phases:
-        grouped.setdefault(phase.phase, []).append(phase)
-    return {name: tuple(phases) for name, phases in grouped.items()}
-
-
-def _phase_rows(results: tuple[TaskResult, ...], total_duration_ms: int) -> list[tuple[str, ...]]:
-    totals: dict[str, dict[str, int | bool]] = {}
     for result in results:
         if result.timing is None:
             continue
-        for phase_name, phases in _phases_by_name(result).items():
-            total = totals.setdefault(phase_name, {
-                "duration": 0, "tool_calls": 0, "tool_duration": 0,
-                "explicit": False, "inferred": False,
-            })
-            total["duration"] += sum(phase.duration_ms for phase in phases)
-            total["tool_calls"] += sum(phase.tool_calls for phase in phases)
-            total["tool_duration"] += sum(phase.tool_duration_ms for phase in phases)
-            total["explicit"] = bool(total["explicit"]) or any(phase.explicit for phase in phases)
-            total["inferred"] = bool(total["inferred"]) or any(phase.inferred for phase in phases)
+        for phase in result.timing.phases:
+            grouped.setdefault(phase.phase, []).append(phase)
+    return {name: tuple(phases) for name, phases in grouped.items()}
 
-    rows: list[tuple[str, ...]] = []
-    for phase_name in CANONICAL_PHASES:
-        total = totals.get(phase_name)
-        if total is None:
-            rows.append(_missing_phase_row(phase_name))
-            continue
-        duration = int(total["duration"])
-        rows.append((
-            phase_name,
-            _duration(duration),
-            _ratio(duration, total_duration_ms),
-            f"{total['tool_calls']}회",
-            _duration(int(total["tool_duration"])),
-            _classification(explicit=bool(total["explicit"]), inferred=bool(total["inferred"])),
-        ))
-    return rows
+
+def _phase_row(phase_name: str, phases: tuple, duration_total_ms: int) -> tuple[str, ...]:
+    if not phases:
+        return _missing_phase_row(phase_name)
+    duration = sum(phase.duration_ms for phase in phases)
+    return (
+        phase_name, _duration(duration), _ratio(duration, duration_total_ms),
+        f"{sum(phase.tool_calls for phase in phases)}회",
+        _duration(sum(phase.tool_duration_ms for phase in phases)),
+        _classification(
+            explicit=any(phase.explicit for phase in phases),
+            inferred=any(phase.inferred for phase in phases),
+        ),
+    )
+
+
+def _phase_rows(results: tuple[TaskResult, ...], total_duration_ms: int) -> list[tuple[str, ...]]:
+    phases_by_name = _phases_by_name(results)
+    return [
+        _phase_row(phase_name, phases_by_name.get(phase_name, ()), total_duration_ms)
+        for phase_name in CANONICAL_PHASES
+    ]
 
 
 def _task_time_row(result: TaskResult, report_total_duration_ms: int) -> tuple[str, ...]:
@@ -206,21 +196,11 @@ def _timing_lines(result: TaskResult, report_total_duration_ms: int) -> list[str
         )],
     )
     lines.extend(("", "##### Phase별 소요 시간"))
-    phases_by_name = _phases_by_name(result)
-    phase_rows: list[tuple[str, ...]] = []
-    for phase_name in CANONICAL_PHASES:
-        phases = phases_by_name.get(phase_name)
-        if phases is None:
-            phase_rows.append(_missing_phase_row(phase_name))
-            continue
-        duration = sum(phase.duration_ms for phase in phases)
-        tool_calls = sum(phase.tool_calls for phase in phases)
-        tool_duration = sum(phase.tool_duration_ms for phase in phases)
-        phase_rows.append((
-            phase_name, _duration(duration), _ratio(duration, timing.total_duration_ms),
-            f"{tool_calls}회", _duration(tool_duration),
-            _classification(explicit=any(phase.explicit for phase in phases), inferred=any(phase.inferred for phase in phases)),
-        ))
+    phases_by_name = _phases_by_name((result,))
+    phase_rows = [
+        _phase_row(phase_name, phases_by_name.get(phase_name, ()), timing.total_duration_ms)
+        for phase_name in CANONICAL_PHASES
+    ]
     lines.extend(_table(
         ("phase", "소요 시간", "Task 대비", "tool 호출 수", "tool 실행 시간", "분류"), phase_rows,
     ))

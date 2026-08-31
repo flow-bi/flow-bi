@@ -273,9 +273,6 @@ def build_subprocess_environment(
     environment.pop("FLOW_BI_NOTION_PARENT", None)
     environment.pop("FLOW_BI_" + "BROWSER_VERIFIER_URL", None)
     environment.pop("FLOW_BI_" + "BROWSER_VERIFIER_TOKEN", None)
-    environment.pop("FLOW_BI_WORKER_EVENT_URL", None)
-    environment.pop("FLOW_BI_WORKER_EVENT_TOKEN", None)
-    environment.pop("FLOW_BI_WORKER_AREA", None)
     environment.pop("CODEX_PERMISSION_PROFILE", None)
 
     parent_session_id = environment.get("CODEX_THREAD_ID")
