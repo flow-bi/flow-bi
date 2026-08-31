@@ -7,12 +7,12 @@ from dataclasses import dataclass
 
 from ..models.plan import Task
 from .codex import resolve_codex_executable
-from .task_invocations import PreparedWorkerTask, prepare_task_invocations
+from .worker_tasks import PreparedWorkerTask, prepare_worker_tasks
 
 
 @dataclass(frozen=True)
 class PreparedExecution:
-    task_invocations: dict[int, PreparedWorkerTask]
+    worker_tasks: dict[int, PreparedWorkerTask]
     codex_executable: str
 
 
@@ -21,9 +21,6 @@ def prepare_execution(
 ) -> PreparedExecution:
     executable = resolve_codex_executable()
     return PreparedExecution(
-        task_invocations=prepare_task_invocations(
-            tasks,
-            executable=executable,
-        ),
+        worker_tasks=prepare_worker_tasks(tasks),
         codex_executable=executable,
     )

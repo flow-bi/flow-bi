@@ -1,36 +1,55 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 import subprocess
 
-from worker_runner import WorkerExecutionRequest, WorkerExecutor
+from verifier_runtime import VerifierRuntime
+from worker_runner import (
+    WorkerExecutionRequest,
+    WorkerExecutionResult,
+    execute_worker,
+)
 
 from ..models.invocation import TaskInvocation
 from ..models.plan import Task
 from ..models.result import TaskResult
-from ..preparation.task_invocations import PreparedWorkerTask
+from ..preparation.worker_tasks import PreparedWorkerTask
 from ..results.worker_result import task_result_from_worker
 
 
 @dataclass(frozen=True)
+class WorkerExecutionResources:
+    executable: str
+    project_root: Path
+    verifier_runtime: VerifierRuntime
+
+
+@dataclass(frozen=True)
 class WorkerAttempt:
-    result: object | None = None
+    result: WorkerExecutionResult | None = None
     failure: TaskResult | None = None
 
 
 def build_worker_request(
     prepared_worker: PreparedWorkerTask,
     invocation: TaskInvocation,
+    resources: WorkerExecutionResources,
 ) -> WorkerExecutionRequest:
     """Harness Task 입력을 worker_runner 공개 요청으로 변환한다."""
     context = invocation.execution_context
     return WorkerExecutionRequest(
-        task_number=prepared_worker.task_number,
+        task_number=invocation.task.number,
         common_prompt=invocation.common_prompt,
         additional_request=invocation.additional_request,
-        title=prepared_worker.title,
-        task_prompt=prepared_worker.task_prompt,
-        verification_items=prepared_worker.verification_items,
+        title=invocation.task.title,
+        task_prompt=invocation.task.task_prompt,
+        verification_items=invocation.task.verification_items,
+        verification_paths=tuple(
+            dict.fromkeys(
+                (*invocation.task.allowed_paths, *invocation.task.read_only_paths)
+            )
+        ),
         execution_context=(
             {
                 "plan_id": context.plan_id,
@@ -42,22 +61,25 @@ def build_worker_request(
             else None
         ),
         decision_correction=invocation.decision_correction,
-        executable=prepared_worker.executable,
+        executable=resources.executable,
         config_overrides=prepared_worker.config_overrides,
-        environment=prepared_worker.environment,
+        environment={
+            **prepared_worker.environment,
+            **resources.verifier_runtime.environment_for(invocation.task.number),
+        },
+        project_root=resources.project_root,
     )
 
 
 def invoke_worker(
     task: Task,
     request: WorkerExecutionRequest,
-    worker_executor: WorkerExecutor,
     *,
     previous_output: dict[str, object] | None = None,
 ) -> WorkerAttempt:
     """Worker 프로세스 예외를 Task 실패 결과로 변환한다."""
     try:
-        return WorkerAttempt(result=worker_executor(request))
+        return WorkerAttempt(result=execute_worker(request))
     except subprocess.TimeoutExpired as error:
         message = (
             "Worker 실행 시간이 제한을 초과"

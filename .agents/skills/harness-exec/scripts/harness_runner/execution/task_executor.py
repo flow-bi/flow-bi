@@ -2,12 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from worker_runner import WorkerExecutor
-
 from ..models.invocation import TaskInvocation
 from ..models.plan import Task
 from ..models.result import TaskResult
-from ..preparation.task_invocations import PreparedWorkerTask
+from ..preparation.worker_tasks import PreparedWorkerTask
 from ..results.evidence import EvidenceRecordError, ExecutionRecordStore
 from ..results.worker_result import (
     completion_error,
@@ -16,7 +14,11 @@ from ..results.worker_result import (
     return_code,
     task_result_from_worker,
 )
-from .worker_execution import build_worker_request, invoke_worker
+from .worker_execution import (
+    WorkerExecutionResources,
+    build_worker_request,
+    invoke_worker,
+)
 
 
 @dataclass(frozen=True)
@@ -114,14 +116,13 @@ def execute_task(
     task: Task,
     invocation: TaskInvocation,
     prepared_worker: PreparedWorkerTask,
+    worker_resources: WorkerExecutionResources,
     store: ExecutionRecordStore,
-    worker_executor: WorkerExecutor,
 ) -> TaskResult:
     """Worker 호출, 필요 시 판정 교정, 증거 저장 순서를 조정한다."""
     attempt = invoke_worker(
         task,
-        build_worker_request(prepared_worker, invocation),
-        worker_executor,
+        build_worker_request(prepared_worker, invocation, worker_resources),
     )
     if attempt.failure is not None:
         return attempt.failure
@@ -138,8 +139,11 @@ def execute_task(
         corrected_invocation = decision_correction(invocation, attempt.result)
         attempt = invoke_worker(
             task,
-            build_worker_request(prepared_worker, corrected_invocation),
-            worker_executor,
+            build_worker_request(
+                prepared_worker,
+                corrected_invocation,
+                worker_resources,
+            ),
             previous_output=assessment.output,
         )
         if attempt.failure is not None:

@@ -3,8 +3,6 @@ import sys
 
 from collections.abc import Sequence
 
-from worker_runner import open_worker_executor
-
 from .paths import PROJECT_ROOT
 
 from .planning.errors import PlanValidationError
@@ -14,7 +12,7 @@ from .models.result import TaskResult
 
 from .preparation import prepare_execution
 
-from .execution.coordinator import execute_workers
+from .execution import HarnessExecutionError, run_harness_execution
 
 from .results.notion import NotionPublicationError, publish_report
 from .results.report import build_execution_report
@@ -59,25 +57,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     except PlanValidationError as error:
         _print_console(f"검증 오류: {error}", file=sys.stderr)
         return 2
-    
+
     except OSError as error:
         _print_console(f"plan 준비 실패: {error}", file=sys.stderr)
         return 1
 
     prepared = prepare_execution(plan.tasks)
 
-    task_paths = {
-        task.number: (task.allowed_paths, task.read_only_paths)
-        for task in plan.tasks
-    }
-    with open_worker_executor(PROJECT_ROOT, task_paths) as worker_executor:
-        report = execute_workers(
-            plan,
-            request,
-            prepared_workers=prepared.task_invocations,
-            project_root=PROJECT_ROOT,
-            worker_executor=worker_executor,
-        )
+    try:
+        report = run_harness_execution(plan, request, prepared, PROJECT_ROOT)
+    except HarnessExecutionError as error:
+        _print_console(f"Harness 실행 준비 실패: {error}", file=sys.stderr)
+        return 1
 
     rendered_report = build_execution_report(request.plan_id, report)
     _print_console(rendered_report.body)

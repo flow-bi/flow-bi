@@ -5,6 +5,8 @@ import subprocess
 import uuid
 
 from .codex_cli import build_codex_command
+from .prompt import WorkerPromptTemplate
+from .request import WorkerExecutionRequest
 from .worker_process import (
     SubprocessRunner,
     WorkerExecutionResult,
@@ -47,28 +49,40 @@ def _execute_prepared_worker(
 
 
 def execute_worker(
+    request: WorkerExecutionRequest,
     *,
-    prompt: str,
-    executable: str,
-    config_overrides: tuple[str, ...],
-    environment: dict[str, str],
-    project_root: Path,
     process_runner: SubprocessRunner = subprocess.run,
     logger: WorkerLogger | None = None,
     timeout: int = 30 * 60,
 ) -> WorkerExecutionResult:
-    """Harness 입력으로 하나의 Worker 실행 전체를 수행한다."""
+    """완성된 요청 하나로 Worker 실행 전체를 수행한다."""
+    prompt_template = WorkerPromptTemplate.load()
+    prepared_prompt = prompt_template.prepare_task(
+        request.task_number,
+        request.verification_paths,
+        request.verification_items,
+    )
+    prompt = prompt_template.render(
+        prepared_prompt,
+        task_number=request.task_number,
+        common_prompt=request.common_prompt,
+        additional_request=request.additional_request,
+        title=request.title,
+        task_prompt=request.task_prompt,
+        execution_context=request.execution_context,
+        decision_correction=request.decision_correction,
+    )
     run_id = str(uuid.uuid4())
-    execution_environment = environment.copy()
+    execution_environment = request.environment.copy()
     execution_environment["FLOW_BI_RUN_ID"] = run_id
 
     return _execute_prepared_worker(
         prompt=prompt,
         run_id=run_id,
-        executable=executable,
-        config_overrides=config_overrides,
+        executable=request.executable,
+        config_overrides=request.config_overrides,
         environment=execution_environment,
-        project_root=project_root,
+        project_root=request.project_root,
         process_runner=process_runner,
         logger=logger,
         timeout=timeout,
