@@ -13,8 +13,8 @@ from ..models.plan import ParsedPlan, Task
 from ..models.result import ExecutionReport, TaskResult
 from ..preparation.entry import PreparedExecution
 from ..results.evidence import EvidenceRecordError, ExecutionRecordStore
-from ..results.state import PlanStateStore, StateRecordError
 from .scheduling import build_task_graph, enqueue_ready_tasks, ready_task_numbers
+from .state_store import PlanStateStore, StateRecordError
 from .task_executor import execute_task
 from .task_invocation import prepare_task_invocation
 from .task_state import ExecutionTaskState

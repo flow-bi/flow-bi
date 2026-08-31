@@ -6,8 +6,8 @@ from ..models.invocation import HarnessRequest
 from ..models.plan import ParsedPlan, Task
 from ..models.result import ExecutionReport, TaskResult
 from ..results.evidence import EvidenceRecordError, ExecutionRecordStore, revision_fingerprint
-from ..results.state import PlanStateStore, StateRecordError
 from .scheduling import TaskGraph, block_failed_dependents, restore_succeeded_tasks
+from .state_store import PlanStateStore, StateRecordError
 
 
 @dataclass
