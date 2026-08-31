@@ -63,6 +63,29 @@ def run_harness_execution(
     project_root: Path,
 ) -> ExecutionReport:
     """Initialize one Harness runtime and execute the Plan to completion."""
+    root = project_root.resolve()
+    state_store = PlanTaskStateStore(root / "docs" / "plans" / "state")
+    evidence_store = TaskEvidenceStore(
+        root
+        / ".agents"
+        / "skills"
+        / "harness-exec"
+        / "scripts"
+        / "harness_runner"
+        / ".execution-records"
+    )
+    task_by_number = {task.number: task for task in plan.tasks}
+    _validate_prepared_worker_settings(task_by_number, prepared)
+    try:
+        execution_state = restore_execution_state(
+            plan,
+            request,
+            evidence_store,
+            state_store,
+        )
+    except StateStoreError as error:
+        return _state_read_failure(plan, error)
+
     verifier_scopes = tuple(
         TaskVerifierScope(
             task.number,
@@ -71,32 +94,9 @@ def run_harness_execution(
         )
         for task in plan.tasks
     )
-    root = project_root.resolve()
 
     try:
         with open_verifier_runtime(root, verifier_scopes) as verifier_runtime:
-            state_store = PlanTaskStateStore(root / "docs" / "plans" / "state")
-            evidence_store = TaskEvidenceStore(
-                root
-                / ".agents"
-                / "skills"
-                / "harness-exec"
-                / "scripts"
-                / "harness_runner"
-                / ".execution-records"
-            )
-            task_by_number = {task.number: task for task in plan.tasks}
-            _validate_prepared_worker_settings(task_by_number, prepared)
-            try:
-                execution_state = restore_execution_state(
-                    plan,
-                    request,
-                    evidence_store,
-                    state_store,
-                )
-            except StateStoreError as error:
-                return _state_read_failure(plan, error)
-
             task_runner = TaskRunner(
                 common_prompt=plan.common_prompt,
                 request=request,
