@@ -18,7 +18,6 @@ class PreparedWorkerTask:
     title: str
     task_prompt: str
     verification_items: tuple[str, ...]
-    project_root: Path
     executable: str
     config_overrides: tuple[str, ...] = field(repr=False)
     environment: dict[str, str] = field(repr=False)
@@ -44,7 +43,6 @@ def prepare_task_invocations(
             title=task.title,
             task_prompt=task.task_prompt,
             verification_items=task.verification_items,
-            project_root=root,
             executable=executable,
             config_overrides=tuple(
                 build_config_overrides(

@@ -1,5 +1,11 @@
-from .cohort import run_worker_cohort
+from .cohort import (
+    WorkerExecutionRequest,
+    WorkerExecutor,
+    open_worker_executor,
+)
 
 __all__ = (
-    "run_worker_cohort",
+    "WorkerExecutionRequest",
+    "WorkerExecutor",
+    "open_worker_executor",
 )

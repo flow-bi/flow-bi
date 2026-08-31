@@ -1,224 +1,138 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
-from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
-from dataclasses import replace
+from collections.abc import Mapping
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
+from dataclasses import dataclass
 import heapq
 from pathlib import Path
 
-from worker_runner import run_worker_cohort
+from worker_runner import WorkerExecutor
 
-from ..models.invocation import HarnessRequest, TaskExecutionContext, TaskInvocation
+from ..models.invocation import HarnessRequest
 from ..models.plan import ParsedPlan, Task
 from ..models.result import ExecutionReport, TaskResult
 from ..preparation.task_invocations import PreparedWorkerTask
-from ..results.evidence import EvidenceRecordError, ExecutionRecordStore, revision_fingerprint
+from ..results.evidence import EvidenceRecordError, ExecutionRecordStore
 from ..results.state import PlanStateStore, StateRecordError
-from .scheduling import TaskGraph, block_failed_dependents, build_task_graph, enqueue_ready_tasks, ready_task_numbers, restore_succeeded_tasks
+from .scheduling import build_task_graph, enqueue_ready_tasks, ready_task_numbers
 from .task_executor import execute_task
+from .task_invocation import prepare_task_invocation
+from .task_state import ExecutionTaskState
 
 
 MAX_PARALLEL_TASKS = 4
 
 
-def _persist_blocked(graph: TaskGraph, numbers: tuple[int, ...], results: dict[int, TaskResult], states: PlanStateStore, plan_id: str) -> None:
-    for number in numbers:
-        result = results[number]
-        try:
-            states.update(plan_id, graph.tasks[number], "blocked", reason=result.message)
-        except StateRecordError as error:
-            results[number] = replace(result, message=f"{result.message}; state record save failed: {error}")
+@dataclass(frozen=True)
+class ExecutionDependencies:
+    plan: ParsedPlan
+    request: HarnessRequest
+    prepared_workers: Mapping[int, PreparedWorkerTask]
+    record_store: ExecutionRecordStore
+    worker_executor: WorkerExecutor
 
 
-def _restore_from_evidence(plan: ParsedPlan, request: HarnessRequest, store: ExecutionRecordStore, states: PlanStateStore, statuses: dict[int, str], results: dict[int, TaskResult]) -> None:
-    for task in plan.tasks:
-        if task.number >= request.start_task_number:
-            continue
-        try:
-            record = store.load(request.plan_id, task.number, revision_fingerprint(request.plan_id, task))
-            detail = "현재 Task 계약과 일치하는 기록이 없습니다."
-        except EvidenceRecordError as error:
-            record, detail = None, str(error)
-        if record is None:
-            message = f"이전 PASS 실행 기록을 신뢰할 수 없습니다: {detail}"
-            statuses[task.number] = "failed"
-            results[task.number] = TaskResult(task.number, task.title, "failed", message=message)
-            try:
-                states.update(request.plan_id, task, "failed", reason=message)
-            except StateRecordError as error:
-                results[task.number] = replace(results[task.number], message=f"{message}; 상태 기록 저장 실패: {error}")
-        else:
-            statuses[task.number] = "succeeded"
-            results[task.number] = TaskResult(task.number, task.title, "succeeded", message="이전 PASS 실행 기록을 검증해 선행 Task를 복원했습니다.", work_summary="이전 PASS 실행 기록을 재사용했습니다.", restored=True)
-
-
-def _execute_workers(
-    plan: ParsedPlan,
-    request: HarnessRequest,
+def _validate_prepared_workers(
+    tasks: Mapping[int, Task],
     prepared_workers: Mapping[int, PreparedWorkerTask],
-    max_parallel_tasks: int = MAX_PARALLEL_TASKS,
-    *,
-    project_root: Path | None = None,
-    record_store: ExecutionRecordStore | None = None,
-    state_store: PlanStateStore | None = None,
-    worker_executor: Callable[..., object],
-) -> ExecutionReport:
+) -> None:
+    missing = tuple(number for number in tasks if number not in prepared_workers)
+    if missing:
+        raise ValueError(f"Prepared Workers are missing for Tasks: {missing}")
 
-    root = project_root.resolve()
-    store = record_store or ExecutionRecordStore(root / ".agents" / "skills" / "harness-exec" / "scripts" / "harness_runner" / ".execution-records")
-    states = state_store or PlanStateStore(root / "docs" / "plans" / "state")
 
-    graph = build_task_graph(plan.tasks)
-    tasks = graph.tasks
-
-    missing_workers = tuple(
-        number for number in tasks if number not in prepared_workers
-    )
-    if missing_workers:
-        raise ValueError(
-            f"Prepared Workers are missing for Tasks: {missing_workers}"
-        )
-
-    # 모든 Task 상태를 paneding으로
-    statuses, results = {
-        number: "pending"
-        for number in tasks
-    }, {}
+def _submit_task(
+    executor: ThreadPoolExecutor,
+    task: Task,
+    dependencies: ExecutionDependencies,
+    state: ExecutionTaskState,
+) -> Future[TaskResult] | None:
+    """실행 가능한 Task 하나를 검증하고 Worker pool에 제출한다."""
+    if not state.start(task):
+        return None
 
     try:
-        saved = states.load_task_records(
-            request.plan_id,
-            plan.tasks
+        invocation = prepare_task_invocation(
+            dependencies.plan,
+            dependencies.request,
+            task,
+            dependencies.record_store,
         )
+    except EvidenceRecordError as error:
+        state.fail(task, f"HUMAN_REVIEW_REQUIRED: {error}")
+        state.block_failed_dependents()
+        return None
 
-    except StateRecordError as error:
-        task = plan.tasks[0]
-        return ExecutionReport((TaskResult(task.number, task.title, "failed", message=f"상태 기록 읽기 실패: {error}"),))
-    # 시작 번호가 명시되어있지 않다면
-    if request.start_task_number is None:
-        restore_succeeded_tasks(plan.tasks, saved, statuses, results)
+    return executor.submit(
+        execute_task,
+        task,
+        invocation,
+        dependencies.prepared_workers[task.number],
+        dependencies.record_store,
+        dependencies.worker_executor,
+    )
 
-    else:
-        _restore_from_evidence(plan, request, store, states, statuses, results)
-        _persist_blocked(graph, block_failed_dependents(graph, statuses, results), results, states, request.plan_id)
 
-    ready = ready_task_numbers(tasks, statuses)
+def _completed_task_result(
+    future: Future[TaskResult],
+    task: Task,
+) -> TaskResult:
+    """Worker future의 예외를 Task 실패 결과로 정규화한다."""
+    try:
+        return future.result()
+    except Exception as error:
+        return TaskResult(task.number, task.title, "failed", message=str(error))
 
-    submitted, running = set(ready), {}
+
+def _run_scheduled_tasks(
+    dependencies: ExecutionDependencies,
+    state: ExecutionTaskState,
+    max_parallel_tasks: int,
+) -> None:
+    """의존성이 충족된 Task를 제한된 병렬도로 스케줄링한다."""
+    tasks = state.graph.tasks
+    ready = ready_task_numbers(tasks, state.statuses)
+    submitted = set(ready)
+    running: dict[Future[TaskResult], int] = {}
 
     with ThreadPoolExecutor(max_workers=max_parallel_tasks) as executor:
         while ready or running:
-
             while ready and len(running) < max_parallel_tasks:
-
-                # task 꺼내고 running으로 변경
                 number = heapq.heappop(ready)
-                task = tasks[number]
-
-                statuses[number] = "running"
-
-
-                try:
-                    states.update(request.plan_id, task, "running")
-                except StateRecordError as error:
-                    result = TaskResult(
-                        number,
-                        task.title,
-                        "failed",
-                        message=f"상태 기록 저장 실패: {error}"
-                    )
-
-                    results[number], statuses[number] = result, result.status
-                    _persist_blocked(graph, block_failed_dependents(graph, statuses, results), results, states, request.plan_id)
-                    continue
-
-                fingerprint = revision_fingerprint(request.plan_id, task)
-
-                try:
-                    prior = store.load(request.plan_id, number, fingerprint)
-                except EvidenceRecordError as error:
-                    result = TaskResult(number, task.title, "failed", message=f"HUMAN_REVIEW_REQUIRED: {error}")
-                    results[number], statuses[number] = result, result.status
-
-                    try:
-                        states.update(request.plan_id, task, "failed", reason=result.message)
-                    except StateRecordError:
-                        pass
-                    _persist_blocked(graph, block_failed_dependents(graph, statuses, results), results, states, request.plan_id)
-                    continue
-
-
-                context = TaskExecutionContext(
-                    request.plan_id,
-                    fingerprint,
-                    "rerun" if prior else "new_or_changed",
-                    prior["tdd_evidence"] if prior else None
+                future = _submit_task(
+                    executor,
+                    tasks[number],
+                    dependencies,
+                    state,
                 )
-
-                invocation = TaskInvocation(
-                    plan.common_prompt,
-                    request.additional_request,
-                    task,
-                    context
-                )
-
-                prepared_worker = prepared_workers[number]
-
-                running[
-                    executor.submit(
-                        execute_task,
-                        task,
-                        invocation,
-                        prepared_worker,
-                        store,
-                        worker_executor,
-                    )
-                ] = number
+                if future is not None:
+                    running[future] = number
 
             if not running:
                 break
 
-            completed, _ = wait(
-                running,
-                return_when=FIRST_COMPLETED
-            )
-
+            completed, _ = wait(running, return_when=FIRST_COMPLETED)
             for future in sorted(completed, key=lambda item: running[item]):
                 number = running.pop(future)
+                task = tasks[number]
+                state.complete(task, _completed_task_result(future, task))
 
-                try:
-                    result = future.result()
-                except Exception as error:
-                    result = TaskResult(number, tasks[number].title, "failed", message=str(error))
-                results[number], statuses[number] = result, result.status
+            state.block_failed_dependents()
+            enqueue_ready_tasks(ready, submitted, tasks, state.statuses)
 
-                try:
-                    states.update(
-                        request.plan_id,
-                        tasks[number],
-                        "succeeded" if result.status == "succeeded" else "failed",
-                        reason=None if result.status == "succeeded" else result.message or "Worker 실행 실패"
-                    )
-                except StateRecordError as error:
-                    result = replace(
-                        result,
-                        status="failed",
-                        message=f"상태 기록 저장 실패: {error}"
-                    )
 
-                    results[number], statuses[number] = result, result.status
-            _persist_blocked(graph, block_failed_dependents(graph, statuses, results), results, states, request.plan_id)
-            enqueue_ready_tasks(ready, submitted, tasks, statuses)
-
-    for number, task in tasks.items():
-        if statuses[number] == "pending":
-            message = "선행 Task 조건을 충족하지 못해 차단했습니다."
-            results[number] = TaskResult(number, task.title, "blocked", message=message)
-            try:
-                states.update(request.plan_id, task, "blocked", reason=message)
-            except StateRecordError:
-                pass
-    return ExecutionReport(tuple(results[number] for number in sorted(results)))
+def _state_read_failure(
+    plan: ParsedPlan,
+    error: StateRecordError,
+) -> ExecutionReport:
+    task = plan.tasks[0]
+    result = TaskResult(
+        task.number,
+        task.title,
+        "failed",
+        message=f"상태 기록 읽기 실패: {error}",
+    )
+    return ExecutionReport((result,))
 
 
 def execute_workers(
@@ -227,26 +141,44 @@ def execute_workers(
     prepared_workers: Mapping[int, PreparedWorkerTask],
     max_parallel_tasks: int = MAX_PARALLEL_TASKS,
     *,
-    project_root: Path | None = None,
+    worker_executor: WorkerExecutor,
+    project_root: Path,
     record_store: ExecutionRecordStore | None = None,
     state_store: PlanStateStore | None = None,
 ) -> ExecutionReport:
+    """Worker 실행 의존성을 준비하고 Task 스케줄링을 시작한다."""
     root = project_root.resolve()
-    task_paths = {
-        task.number: (task.allowed_paths, task.read_only_paths)
-        for task in plan.tasks
-    }
+    records = record_store or ExecutionRecordStore(
+        root
+        / ".agents"
+        / "skills"
+        / "harness-exec"
+        / "scripts"
+        / "harness_runner"
+        / ".execution-records"
+    )
+    states = state_store or PlanStateStore(root / "docs" / "plans" / "state")
+    graph = build_task_graph(plan.tasks)
+    _validate_prepared_workers(graph.tasks, prepared_workers)
 
-    def execute_cohort(worker_executor: Callable[..., object]) -> ExecutionReport:
-        return _execute_workers(
+    try:
+        state = ExecutionTaskState.restore(
             plan,
             request,
-            prepared_workers,
-            max_parallel_tasks,
-            project_root=root,
-            record_store=record_store,
-            state_store=state_store,
-            worker_executor=worker_executor,
+            graph,
+            records,
+            states,
         )
+    except StateRecordError as error:
+        return _state_read_failure(plan, error)
 
-    return run_worker_cohort(root, task_paths, execute_cohort)
+    dependencies = ExecutionDependencies(
+        plan,
+        request,
+        prepared_workers,
+        records,
+        worker_executor,
+    )
+    _run_scheduled_tasks(dependencies, state, max_parallel_tasks)
+    state.block_pending_tasks()
+    return state.report()

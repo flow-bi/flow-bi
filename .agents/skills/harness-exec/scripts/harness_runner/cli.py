@@ -3,13 +3,14 @@ import sys
 
 from collections.abc import Sequence
 
+from worker_runner import open_worker_executor
+
 from .paths import PROJECT_ROOT
 
 from .planning.errors import PlanValidationError
 from .planning import complete_plan, load_requested_plan
 
 from .models.result import TaskResult
-
 
 from .preparation import prepare_execution
 
@@ -65,12 +66,18 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     prepared = prepare_execution(plan.tasks)
 
-    report = execute_workers(
-        plan,
-        request,
-        prepared_workers=prepared.task_invocations,
-        project_root=PROJECT_ROOT
-    )
+    task_paths = {
+        task.number: (task.allowed_paths, task.read_only_paths)
+        for task in plan.tasks
+    }
+    with open_worker_executor(PROJECT_ROOT, task_paths) as worker_executor:
+        report = execute_workers(
+            plan,
+            request,
+            prepared_workers=prepared.task_invocations,
+            project_root=PROJECT_ROOT,
+            worker_executor=worker_executor,
+        )
 
     rendered_report = build_execution_report(request.plan_id, report)
     _print_console(rendered_report.body)
