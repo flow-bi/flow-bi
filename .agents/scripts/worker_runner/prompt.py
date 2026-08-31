@@ -209,13 +209,13 @@ class WorkerPromptTemplate:
         additional_request: str,
         title: str,
         task_prompt: str,
-        execution_context: Mapping[str, object] | None,
+        task_execution_context: Mapping[str, object] | None,
         decision_correction: Mapping[str, object] | None,
     ) -> str:
         if prepared.task_number != task_number:
             raise ValueError("prepared prompt does not match Task number")
 
-        context = validate_execution_context(execution_context, task_number)
+        context = validate_execution_context(task_execution_context, task_number)
         execution_section = {
             "rerun": "execution-rerun",
             "new_or_changed": "execution-new-or-changed",

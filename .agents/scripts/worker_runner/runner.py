@@ -69,7 +69,7 @@ def execute_worker(
         additional_request=request.additional_request,
         title=request.title,
         task_prompt=request.task_prompt,
-        execution_context=request.execution_context,
+        task_execution_context=request.task_execution_context,
         decision_correction=request.decision_correction,
     )
     run_id = str(uuid.uuid4())

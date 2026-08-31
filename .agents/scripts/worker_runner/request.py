@@ -14,7 +14,7 @@ class WorkerExecutionRequest:
     task_prompt: str
     verification_items: tuple[str, ...]
     verification_paths: tuple[str, ...]
-    execution_context: Mapping[str, object] | None
+    task_execution_context: Mapping[str, object] | None
     decision_correction: Mapping[str, object] | None
     executable: str
     config_overrides: tuple[str, ...]
