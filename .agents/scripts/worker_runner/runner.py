@@ -13,7 +13,7 @@ from .worker_process import (
 )
 
 
-def execute_prepared_worker(
+def _execute_prepared_worker(
     *,
     prompt: str,
     run_id: str,
@@ -62,7 +62,7 @@ def execute_worker(
     execution_environment = environment.copy()
     execution_environment["FLOW_BI_RUN_ID"] = run_id
 
-    return execute_prepared_worker(
+    return _execute_prepared_worker(
         prompt=prompt,
         run_id=run_id,
         executable=executable,
