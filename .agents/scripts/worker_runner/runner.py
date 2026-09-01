@@ -5,7 +5,7 @@ import subprocess
 import uuid
 
 from .codex_cli import build_codex_command
-from .prompt import WorkerPromptTemplate
+from .prompt import build_worker_prompt
 from .request import WorkerExecutionRequest
 from .worker_process import (
     SubprocessRunner,
@@ -56,22 +56,7 @@ def execute_worker(
     timeout: int = 30 * 60,
 ) -> WorkerExecutionResult:
     """완성된 요청 하나로 Worker 실행 전체를 수행한다."""
-    prompt_template = WorkerPromptTemplate.load()
-    prepared_prompt = prompt_template.prepare_task(
-        request.task_number,
-        request.verification_paths,
-        request.verification_items,
-    )
-    prompt = prompt_template.render(
-        prepared_prompt,
-        task_number=request.task_number,
-        common_prompt=request.common_prompt,
-        additional_request=request.additional_request,
-        title=request.title,
-        task_prompt=request.task_prompt,
-        task_execution_context=request.task_execution_context,
-        decision_correction=request.decision_correction,
-    )
+    prompt = build_worker_prompt(request)
     run_id = str(uuid.uuid4())
     execution_environment = request.environment.copy()
     execution_environment["FLOW_BI_RUN_ID"] = run_id
