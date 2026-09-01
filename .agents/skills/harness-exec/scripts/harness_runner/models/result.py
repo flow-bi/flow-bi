@@ -11,6 +11,28 @@ class VerificationResult:
 
 
 @dataclass(frozen=True)
+class PhaseTiming:
+    phase: str
+    duration_ms: int
+    tool_calls: int
+    tool_duration_ms: int
+    explicit: bool
+    inferred: bool
+
+
+@dataclass(frozen=True)
+class WorkerTiming:
+    run_id: str
+    task_number: int
+    area: str
+    total_duration_ms: int
+    unattributed_duration_ms: int
+    phases: tuple[PhaseTiming, ...]
+    explicit: bool
+    inferred: bool
+
+
+@dataclass(frozen=True)
 class TaskResult:
     task_number: int
     title: str
@@ -23,6 +45,8 @@ class TaskResult:
     quality_score: int | None = None
     remaining_issues: tuple[str, ...] = ()
     restored: bool = False
+    timing: WorkerTiming | None = None
+    timing_observation_error: str = ""
 
 
 @dataclass(frozen=True)

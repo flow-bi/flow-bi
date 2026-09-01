@@ -17,6 +17,7 @@ from ..results.evidence import (
     TaskEvidenceStore,
     task_contract_fingerprint,
 )
+from ..results.timing import timing_from_observation
 
 
 MANDATORY_GATES = (
@@ -233,6 +234,8 @@ def _task_result_from_worker_output(
     timed_out: bool,
     message: str,
     worker_output: dict[str, object] | None,
+    *,
+    worker_observation: object | None = None,
 ) -> TaskResult:
     verification = tuple(
         VerificationResult(item["item"], item["result"], item["evidence"])
@@ -256,17 +259,24 @@ def _task_result_from_worker_output(
     if status != "succeeded" and message and message not in remaining_issues:
         remaining_issues = (*remaining_issues, message)
     quality_score = (worker_output or {}).get("quality_score")
-    return TaskResult(
+    timing, timing_observation_error = timing_from_observation(
+        getattr(worker_observation, "timing_summary", None),
         task.number,
-        task.title,
-        status,
-        return_code,
-        timed_out,
-        message,
-        str((worker_output or {}).get("work_summary", "")),
-        verification,
-        quality_score if type(quality_score) is int else None,
-        remaining_issues,
+        getattr(worker_observation, "run_id", None) or None,
+    )
+    return TaskResult(
+        task_number=task.number,
+        title=task.title,
+        status=status,
+        return_code=return_code,
+        timed_out=timed_out,
+        message=message,
+        work_summary=str((worker_output or {}).get("work_summary", "")),
+        verification=verification,
+        quality_score=quality_score if type(quality_score) is int else None,
+        remaining_issues=remaining_issues,
+        timing=timing,
+        timing_observation_error=timing_observation_error,
     )
 
 
@@ -343,6 +353,14 @@ class TaskRunner:
                 **self.verifier_runtime.environment_for(task.number),
             },
             project_root=self.project_root,
+            worker_area=(
+                "fe-worker"
+                if any(
+                    path == "frontend" or path.startswith("frontend/")
+                    for path in task.allowed_paths
+                )
+                else "be-worker"
+            ),
         )
 
         worker_result = self._execute_worker_once(task, initial_request)
@@ -362,6 +380,7 @@ class TaskRunner:
                         str(item["evidence"]) for item in pending_verification
                     ),
                     worker_result.output,
+                    worker_observation=worker_result,
                 )
             collection_attempts += 1
             collection_request = replace(
@@ -423,6 +442,7 @@ class TaskRunner:
                 False,
                 "Worker 결과 JSON이 유효하지 않습니다.",
                 None,
+                worker_observation=worker_result,
             )
         try:
             self.evidence_store.save_success_evidence(
@@ -439,6 +459,7 @@ class TaskRunner:
                 False,
                 f"실행 기록 저장 실패: {error}",
                 output,
+                worker_observation=worker_result,
             )
         return _task_result_from_worker_output(
             task,
@@ -447,6 +468,7 @@ class TaskRunner:
             False,
             "",
             output,
+            worker_observation=worker_result,
         )
 
     def _execute_worker_once(
@@ -467,7 +489,10 @@ class TaskRunner:
                     replace(
                         worker_request,
                         run_id=run_id,
-                        environment=environment,
+                        environment={
+                            **worker_request.environment,
+                            **environment,
+                        },
                         config_overrides=config_overrides,
                     )
                 )
@@ -477,7 +502,13 @@ class TaskRunner:
                 f"제한 시간: {error.timeout}초, 상세 오류: {error}"
             )
             return _task_result_from_worker_output(
-                task, "failed", 124, True, message, previous_output
+                task,
+                "failed",
+                124,
+                True,
+                message,
+                previous_output,
+                worker_observation=error,
             )
         except subprocess.CalledProcessError as error:
             return _task_result_from_worker_output(
@@ -487,10 +518,17 @@ class TaskRunner:
                 False,
                 str(error),
                 previous_output,
+                worker_observation=error,
             )
         except Exception as error:
             return _task_result_from_worker_output(
-                task, "failed", None, False, str(error), previous_output
+                task,
+                "failed",
+                None,
+                False,
+                str(error),
+                previous_output,
+                worker_observation=error,
             )
 
     @staticmethod
@@ -508,6 +546,7 @@ class TaskRunner:
                 False,
                 f"Worker 종료 코드 {worker_result.returncode}",
                 output,
+                worker_observation=worker_result,
             )
         completion_error = _worker_completion_error(
             task, worker_result, execution_context
@@ -520,5 +559,6 @@ class TaskRunner:
                 False,
                 completion_error,
                 output,
+                worker_observation=worker_result,
             )
         return None

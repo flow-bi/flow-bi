@@ -52,6 +52,7 @@ class CodexCommandTests(unittest.TestCase):
             [
                 "C:/tools/codex.exe",
                 "exec",
+                "--json",
                 "-o",
                 str(Path("C:/work/result.json")),
                 "-c",

@@ -13,3 +13,9 @@ Prompt의 `Task 실행 정보`에 있는 `execution_context`를 확인하고 현
 - `existing_without_evidence`: 검증된 TDD 근거가 없는 기존 구현이다. Red 실패나 TDD 근거를 조작하지 말고 필요한 사람 검토를 보고한다.
 
 `decision_correction`에 값이 있으면 구현을 변경하거나 검증을 다시 실행하지 않는다. 전달된 객관적 근거를 유지하고 최종 판정만 교정한다.
+
+Worker phase를 명시적으로 전환할 때에는 부모가 제공한 loopback 수집 경로만 사용해
+`"$FLOW_BI_PYTHON_EXECUTABLE" -m worker_runner.phase_marker <phase>`를 실행한다.
+phase는 `analysis`, `test_code`, `implementation`, `implementation_and_test`, `refactor`,
+`documentation`, `verification`, `finalization` 중 하나여야 한다. `.codex-logs`에 직접 쓰거나
+`FLOW_BI_WORKER_EVENT_URL`, `FLOW_BI_WORKER_EVENT_TOKEN`을 출력하지 않는다.

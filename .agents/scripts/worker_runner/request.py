@@ -21,3 +21,4 @@ class WorkerExecutionRequest:
     verification_result_collection: Mapping[str, object] | None = None
     run_id: str | None = None
     verification_items: tuple[str, ...] = ()
+    worker_area: str = "be-worker"

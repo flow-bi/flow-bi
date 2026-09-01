@@ -9,7 +9,7 @@ def build_codex_command(
     executable: str,
     config_overrides: tuple[str, ...],
 ) -> list[str]:
-    command = [executable, "exec", "-o", str(output_path)]
+    command = [executable, "exec", "--json", "-o", str(output_path)]
     for override in config_overrides:
         command.extend(("-c", override))
     command.append("-")
