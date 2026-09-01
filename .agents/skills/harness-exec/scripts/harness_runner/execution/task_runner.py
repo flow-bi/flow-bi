@@ -238,10 +238,6 @@ class TaskRunner:
             additional_request=self.request.additional_request,
             title=task.title,
             task_prompt=task.task_prompt,
-            verification_items=task.verification_items,
-            verification_paths=tuple(
-                dict.fromkeys((*task.allowed_paths, *task.read_only_paths))
-            ),
             task_execution_context=task_execution_context,
             decision_correction=None,
             executable=self.codex_executable,

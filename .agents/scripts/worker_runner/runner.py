@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
 import subprocess
 import uuid
 
-from .codex_cli import build_codex_command
 from .prompt import build_worker_prompt
 from .request import WorkerExecutionRequest
 from .worker_process import (
@@ -13,39 +11,6 @@ from .worker_process import (
     WorkerLogger,
     run_worker_process,
 )
-
-
-def _execute_prepared_worker(
-    *,
-    prompt: str,
-    run_id: str,
-    executable: str,
-    config_overrides: tuple[str, ...],
-    environment: dict[str, str],
-    project_root: Path,
-    process_runner: SubprocessRunner,
-    logger: WorkerLogger | None,
-    timeout: int,
-) -> WorkerExecutionResult:
-    """Run one Task using already-prepared cohort and Task inputs."""
-
-    def command_factory(output_path: Path) -> list[str]:
-        return build_codex_command(
-            output_path=output_path,
-            executable=executable,
-            config_overrides=config_overrides,
-        )
-
-    return run_worker_process(
-        run_id=run_id,
-        command_factory=command_factory,
-        prompt=prompt,
-        environment=environment,
-        project_root=project_root,
-        runner=process_runner,
-        logger=logger,
-        timeout=timeout,
-    )
 
 
 def execute_worker(
@@ -57,18 +22,19 @@ def execute_worker(
 ) -> WorkerExecutionResult:
     """완성된 요청 하나로 Worker 실행 전체를 수행한다."""
     prompt = build_worker_prompt(request)
-    run_id = str(uuid.uuid4())
+
     execution_environment = request.environment.copy()
+    run_id = str(uuid.uuid4())
     execution_environment["FLOW_BI_RUN_ID"] = run_id
 
-    return _execute_prepared_worker(
-        prompt=prompt,
-        run_id=run_id,
+    return run_worker_process(
         executable=request.executable,
         config_overrides=request.config_overrides,
+        prompt=prompt,
+        run_id=run_id,
         environment=execution_environment,
         project_root=request.project_root,
-        process_runner=process_runner,
+        runner=process_runner,
         logger=logger,
         timeout=timeout,
     )
