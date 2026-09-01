@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 
 import { handleSubagentStart, handleSubagentStop } from "./subagent-events.mjs";
-import { handleStop, handleUserPromptSubmit, recordWorkerEnd } from "./task-events.mjs";
+import { handleStop, handleUserPromptSubmit, recordWorkerEnd, recordWorkerEvent } from "./task-events.mjs";
 
 const OUTPUT_EVENTS = new Set(["Stop", "SubagentStart", "SubagentStop"]);
 
@@ -44,6 +44,7 @@ export async function runCli({
   stdout = process.stdout,
   readFile = readFileSync,
   workerEnd = recordWorkerEnd,
+  workerEvent = recordWorkerEvent,
   handlers,
 } = {}) {
   let eventName = null;
@@ -60,6 +61,13 @@ export async function runCli({
         // Missing output is represented by the fallback summary.
       }
       await workerEnd({ runId, exitCode, summary, status });
+      stdout.write(JSON.stringify({ ok: true }));
+      return;
+    }
+    if (argv[2] === "--worker-event") {
+      const event = await readStdinJson(stdin);
+      const result = await workerEvent(event);
+      stdout.write(JSON.stringify({ ok: true, result }));
       return;
     }
 
@@ -69,6 +77,7 @@ export async function runCli({
     if (OUTPUT_EVENTS.has(eventName)) stdout.write(JSON.stringify(output));
   } catch {
     // Logging must never block the Codex lifecycle or change worker results.
-    if (OUTPUT_EVENTS.has(eventName)) stdout.write("{}");
+    if (argv[2] === "--worker-event" || argv[2] === "--worker-end") stdout.write(JSON.stringify({ ok: false, error: "worker_event_rejected" }));
+    else if (OUTPUT_EVENTS.has(eventName)) stdout.write("{}");
   }
 }

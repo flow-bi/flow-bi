@@ -44,7 +44,7 @@ def build_codex_command(
     readable_paths: tuple[str, ...] = (),
     writable_directories: tuple[str, ...] = (),
 ) -> list[str]:
-    command = [executable or resolve_codex_executable(), "exec", "-o", str(output_path)]
+    command = [executable or resolve_codex_executable(), "exec", "--json", "-o", str(output_path)]
     
     for override in read_config_overrides(
         allowed_paths,
