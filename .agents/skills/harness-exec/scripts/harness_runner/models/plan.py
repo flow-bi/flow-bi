@@ -3,6 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
+DECLARED_TDD_POLICIES = frozenset(
+    ("REQUIRED", "REGRESSION_ONLY", "NOT_APPLICABLE")
+)
+REUSE_ALLOWED = "REUSE_ALLOWED"
+
+
 @dataclass(frozen=True)
 class Task:
     number: int
@@ -14,6 +20,7 @@ class Task:
     implementation_items: tuple[str, ...] = ()
     verification_items: tuple[str, ...] = ()
     minimum_quality_score: int | None = None
+    tdd_policy: str = "REQUIRED"
 
 
 @dataclass(frozen=True)

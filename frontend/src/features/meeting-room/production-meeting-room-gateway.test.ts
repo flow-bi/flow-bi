@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { onUnauthenticated } from '../authenticatedFetch'
-import { productionMeetingRoomGateway } from './meeting-room-gateway'
+import { productionMeetingRoomGateway } from './production-meeting-room-gateway'
 
 describe('productionMeetingRoomGateway', () => {
   it('uses same-origin session requests and never sends a user identity', async () => {

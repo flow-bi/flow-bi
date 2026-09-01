@@ -62,6 +62,7 @@ def _build_common_worker_config(
     writable_paths: Iterable[str],
     read_only_paths: Iterable[str],
     toolchain_readable_paths: Iterable[str] = (),
+    writable_directories: Iterable[str] = (),
     *,
     template: dict[str, object] | None = None,
 ) -> dict[str, object]:
@@ -121,6 +122,11 @@ def _build_common_worker_config(
     for toolchain_path in toolchain_readable_paths:
         filesystem[toolchain_path] = "read"
 
+    for writable_directory in writable_directories:
+        trimmed_path = writable_directory.rstrip("/\\")
+        filesystem[trimmed_path] = "write"
+        filesystem[f"{trimmed_path}/**"] = "write"
+
     return config
 
 
@@ -128,12 +134,14 @@ def _build_common_worker_config(
 def build_config_overrides(
     writable_paths: Iterable[str],
     read_only_paths: Iterable[str],
-    toolchain_readable_paths: Iterable[str] = ()
+    toolchain_readable_paths: Iterable[str] = (),
+    writable_directories: Iterable[str] = (),
 ) -> list[str]:
     config = _build_common_worker_config(
         writable_paths=writable_paths,
         read_only_paths=read_only_paths,
         toolchain_readable_paths=toolchain_readable_paths,
+        writable_directories=writable_directories,
     )
 
     return [

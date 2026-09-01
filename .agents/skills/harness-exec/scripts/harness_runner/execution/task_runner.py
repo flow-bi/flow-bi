@@ -8,7 +8,7 @@ import subprocess
 from verifier_runtime import VerifierRuntime
 from worker_runner import WorkerExecutionRequest, WorkerExecutionResult, execute_worker
 
-from ..models.plan import Task
+from ..models.plan import REUSE_ALLOWED, Task
 from ..models.request import HarnessRequest
 from ..models.result import TaskResult, VerificationResult
 from ..preparation.worker_settings import TaskWorkerSettings
@@ -31,13 +31,60 @@ MANDATORY_GATES = (
 EXPLICIT_FAILURE_DECISIONS = frozenset(
     ("RETRY", "HUMAN_REVIEW_REQUIRED", "FAILED", "BLOCKED")
 )
+MAX_VERIFICATION_RESULT_COLLECTION_ATTEMPTS = 3
+IN_PROGRESS_EVIDENCE_MARKERS = (
+    "session",
+    "진행 중",
+    "in progress",
+    "running",
+)
 
 
 def _non_empty_text(value: object) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
 
-def _objective_completion_error(task: Task, worker_result: WorkerExecutionResult) -> str:
+def _tdd_contract_error(
+    task: Task,
+    execution_context: Mapping[str, object],
+    gate: object,
+) -> str:
+    if not isinstance(gate, dict):
+        return "TDD 정책 실행 결과가 누락되었습니다."
+    policy = execution_context.get("effective_tdd_policy")
+    if policy != task.tdd_policy and not (
+        policy == REUSE_ALLOWED and task.tdd_policy == "REQUIRED"
+    ):
+        return "선언 TDD 정책과 유효 정책이 모순됩니다."
+    if gate.get("effective_policy") != policy:
+        return "Worker TDD 유효 정책이 실행 컨텍스트와 일치하지 않습니다."
+    if not _non_empty_text(gate.get("evidence")) or not _non_empty_text(
+        gate.get("current_verification_evidence")
+    ):
+        return f"{policy} TDD에는 현재 검증 증거가 필요합니다."
+    if policy == "NOT_APPLICABLE":
+        if gate.get("result") != "N/A" or not _non_empty_text(gate.get("reason")):
+            return "NOT_APPLICABLE TDD에는 N/A 결과와 적용 제외 사유가 필요합니다."
+    elif gate.get("result") != "PASS":
+        return f"{policy} TDD Gate는 PASS여야 합니다."
+    reused = gate.get("reused_evidence")
+    if policy == REUSE_ALLOWED:
+        if (
+            not isinstance(reused, dict)
+            or reused.get("record_id") != execution_context.get("prior_evidence_id")
+            or reused.get("fingerprint") != execution_context.get("fingerprint")
+        ):
+            return "REUSE_ALLOWED TDD에는 동일 fingerprint의 선행 증거 식별자가 필요합니다."
+    elif reused not in (None, {"record_id": None, "fingerprint": None}):
+        return "재사용이 아닌 TDD 정책에는 선행 증거를 지정할 수 없습니다."
+    return ""
+
+
+def _objective_completion_error(
+    task: Task,
+    worker_result: WorkerExecutionResult,
+    execution_context: Mapping[str, object],
+) -> str:
     output = worker_result.output
     if not isinstance(output, dict):
         detail = (
@@ -61,6 +108,10 @@ def _objective_completion_error(task: Task, worker_result: WorkerExecutionResult
         return "Mandatory Gate 결과가 누락되었습니다."
     for gate_name in MANDATORY_GATES:
         gate = gates.get(gate_name)
+        if gate_name == "tdd":
+            tdd_error = _tdd_contract_error(task, execution_context, gate)
+            if tdd_error:
+                return tdd_error
         if not isinstance(gate, dict):
             return f"Mandatory Gate {gate_name} 결과가 누락되었습니다."
         gate_result = gate.get("result")
@@ -105,8 +156,14 @@ def _objective_completion_error(task: Task, worker_result: WorkerExecutionResult
     return ""
 
 
-def _worker_completion_error(task: Task, worker_result: WorkerExecutionResult) -> str:
-    objective_error = _objective_completion_error(task, worker_result)
+def _worker_completion_error(
+    task: Task,
+    worker_result: WorkerExecutionResult,
+    execution_context: Mapping[str, object],
+) -> str:
+    objective_error = _objective_completion_error(
+        task, worker_result, execution_context
+    )
     if objective_error:
         return objective_error
     output = worker_result.output
@@ -117,12 +174,38 @@ def _worker_completion_error(task: Task, worker_result: WorkerExecutionResult) -
     return ""
 
 
-def _needs_decision_correction(task: Task, worker_result: WorkerExecutionResult) -> bool:
-    if _objective_completion_error(task, worker_result):
+def _needs_decision_correction(
+    task: Task,
+    worker_result: WorkerExecutionResult,
+    execution_context: Mapping[str, object],
+) -> bool:
+    if _objective_completion_error(task, worker_result, execution_context):
         return False
     output = worker_result.output
     decision = output.get("decision") if isinstance(output, dict) else None
     return decision != "PASS" and decision not in EXPLICIT_FAILURE_DECISIONS
+
+
+def _in_progress_not_run_verification(
+    worker_result: WorkerExecutionResult,
+) -> list[dict[str, object]]:
+    output = worker_result.output
+    if not isinstance(output, dict) or not isinstance(output.get("verification"), list):
+        return []
+    pending: list[dict[str, object]] = []
+    for item in output["verification"]:
+        if not isinstance(item, dict):
+            return []
+        result = item.get("result")
+        if result == "PASS":
+            continue
+        if result != "NOT_RUN" or not _non_empty_text(item.get("evidence")):
+            return []
+        evidence = item["evidence"].lower()
+        if not any(marker in evidence for marker in IN_PROGRESS_EVIDENCE_MARKERS):
+            return []
+        pending.append(item)
+    return pending
 
 
 def _build_decision_correction(worker_result: WorkerExecutionResult) -> dict[str, object]:
@@ -230,6 +313,17 @@ class TaskRunner:
             "prior_tdd_evidence": (
                 prior_evidence["tdd_evidence"] if prior_evidence else None
             ),
+            "prior_evidence_id": (
+                f"plan:{self.request.plan_id}:task:{task.number}:"
+                f"fingerprint:{task_fingerprint}"
+                if prior_evidence
+                else None
+            ),
+            "effective_tdd_policy": (
+                REUSE_ALLOWED
+                if prior_evidence and task.tdd_policy == "REQUIRED"
+                else task.tdd_policy
+            ),
         }
         worker_settings = self.worker_settings_by_task[task.number]
         initial_request = WorkerExecutionRequest(
@@ -238,8 +332,10 @@ class TaskRunner:
             additional_request=self.request.additional_request,
             title=task.title,
             task_prompt=task.task_prompt,
+            verification_items=task.verification_items,
             task_execution_context=task_execution_context,
             decision_correction=None,
+            verification_result_collection=None,
             executable=self.codex_executable,
             config_overrides=worker_settings.config_overrides,
             environment={
@@ -252,9 +348,51 @@ class TaskRunner:
         worker_result = self._execute_worker_once(task, initial_request)
         if isinstance(worker_result, TaskResult):
             return worker_result
-        task_result = self._evaluate_worker_result(task, worker_result)
+        collection_attempts = 1
+        pending_verification = _in_progress_not_run_verification(worker_result)
+        while pending_verification:
+            if collection_attempts >= MAX_VERIFICATION_RESULT_COLLECTION_ATTEMPTS:
+                return _task_result_from_worker_output(
+                    task,
+                    "failed",
+                    worker_result.returncode,
+                    False,
+                    "진행 중 verifier 결과 수집이 3회 후에도 완료되지 않았습니다: "
+                    + "; ".join(
+                        str(item["evidence"]) for item in pending_verification
+                    ),
+                    worker_result.output,
+                )
+            collection_attempts += 1
+            collection_request = replace(
+                initial_request,
+                verification_result_collection={
+                    "attempt": collection_attempts,
+                    "verification": pending_verification,
+                },
+            )
+            worker_result = self._execute_worker_once(
+                task,
+                collection_request,
+                previous_output=(
+                    worker_result.output
+                    if isinstance(worker_result.output, dict)
+                    else None
+                ),
+            )
+            if isinstance(worker_result, TaskResult):
+                return worker_result
+            if worker_result.returncode:
+                break
+            pending_verification = _in_progress_not_run_verification(worker_result)
+
+        task_result = self._evaluate_worker_result(
+            task, worker_result, task_execution_context
+        )
         if task_result is not None:
-            if not _needs_decision_correction(task, worker_result):
+            if not _needs_decision_correction(
+                task, worker_result, task_execution_context
+            ):
                 return task_result
             corrected_request = replace(
                 initial_request,
@@ -270,7 +408,9 @@ class TaskRunner:
             )
             if isinstance(worker_result, TaskResult):
                 return worker_result
-            task_result = self._evaluate_worker_result(task, worker_result)
+            task_result = self._evaluate_worker_result(
+                task, worker_result, task_execution_context
+            )
             if task_result is not None:
                 return task_result
 
@@ -317,7 +457,20 @@ class TaskRunner:
         previous_output: dict[str, object] | None = None,
     ) -> WorkerExecutionResult | TaskResult:
         try:
-            return execute_worker(worker_request)
+            worker_settings = self.worker_settings_by_task[task.number]
+            with worker_settings.prepare_run() as (
+                run_id,
+                environment,
+                config_overrides,
+            ):
+                return execute_worker(
+                    replace(
+                        worker_request,
+                        run_id=run_id,
+                        environment=environment,
+                        config_overrides=config_overrides,
+                    )
+                )
         except subprocess.TimeoutExpired as error:
             message = (
                 "Worker 실행 시간이 제한을 초과했습니다. "
@@ -344,6 +497,7 @@ class TaskRunner:
     def _evaluate_worker_result(
         task: Task,
         worker_result: WorkerExecutionResult,
+        execution_context: Mapping[str, object],
     ) -> TaskResult | None:
         output = worker_result.output if isinstance(worker_result.output, dict) else None
         if worker_result.returncode:
@@ -355,7 +509,9 @@ class TaskRunner:
                 f"Worker 종료 코드 {worker_result.returncode}",
                 output,
             )
-        completion_error = _worker_completion_error(task, worker_result)
+        completion_error = _worker_completion_error(
+            task, worker_result, execution_context
+        )
         if completion_error:
             return _task_result_from_worker_output(
                 task,

@@ -45,16 +45,18 @@ public class DatabaseScheduleModificationService implements ScheduleModification
 
   @Override
   public void update(UpdateReservationScheduleCommand command) {
-    scheduleRepository.findByIdWithAssociationsForUpdate(command.scheduleId())
-        .filter(schedule -> schedule.getStatus() == ScheduleStatus.ACTIVE)
-        .ifPresentOrElse(schedule -> updateSchedule(schedule,command),() -> {
-          throw new IllegalStateException("Connected reservation schedule is unavailable");
-        });
+    Schedule lockedSchedule = scheduleRepository.findByIdForUpdate(command.scheduleId())
+        .filter(schedule -> schedule.getStatus() == ScheduleStatus.ACTIVE).orElseThrow(
+            () -> new IllegalStateException("Connected reservation schedule is unavailable"));
+    Schedule schedule = scheduleRepository.findByIdWithAssociations(lockedSchedule.getId())
+        .orElseThrow(
+            () -> new IllegalStateException("Connected reservation schedule is unavailable"));
+    updateSchedule(schedule,command);
   }
 
   @Override
   public void cancelReservationSchedule(Long scheduleId,long actorId,OffsetDateTime cancelledAt) {
-    Schedule schedule = scheduleRepository.findByIdWithAssociationsForUpdate(scheduleId)
+    Schedule schedule = scheduleRepository.findByIdForUpdate(scheduleId)
         .orElseThrow(RoomReservationScheduleCancelConflictException::new);
     if (schedule.getCreatorId() != actorId) {
       throw new RoomReservationScheduleCancelConflictException();

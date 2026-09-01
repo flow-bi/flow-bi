@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from ..models.plan import ParsedPlan, Task
+from ..models.plan import DECLARED_TDD_POLICIES, ParsedPlan, Task
 
 
 TASK_SECTION_PATTERN = re.compile(r"^## 2\. 실행 Task[ \t]*$", re.MULTILINE)
@@ -83,6 +83,16 @@ def _minimum_quality_score(body: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
+def _tdd_policy(body: str) -> str:
+    values = _bullet_values(body)
+    if len(values) != 1 or values[0] not in DECLARED_TDD_POLICIES:
+        raise ValueError(
+            "Task TDD 정책은 REQUIRED, REGRESSION_ONLY, NOT_APPLICABLE 중 "
+            "하나여야 합니다."
+        )
+    return values[0]
+
+
 def parse_plan_text(text: str) -> ParsedPlan:
     region_start, region_end = _task_region(text)
     task_region = text[region_start:region_end]
@@ -93,6 +103,9 @@ def parse_plan_text(text: str) -> ParsedPlan:
     for index, heading in enumerate(headings):
         end = headings[index + 1].start() if index + 1 < len(headings) else len(task_region)
         sections = _detail_sections(task_region[heading.end() : end])
+        tdd_policy_body = next(
+            (body for name, body, _ in sections if name == "TDD 정책"), ""
+        )
 
         prerequisite_body = _section_body(sections, "선행 Task")
         allowed_paths_body = _section_body(sections, "수정 가능 경로")
@@ -115,6 +128,7 @@ def parse_plan_text(text: str) -> ParsedPlan:
                 implementation_items=_bullet_values(implementation_body),
                 verification_items=_bullet_values(verification_body),
                 minimum_quality_score=_minimum_quality_score(completion_body),
+                tdd_policy=_tdd_policy(tdd_policy_body),
             )
         )
     return ParsedPlan(

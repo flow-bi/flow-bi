@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
 import os
+import shutil
 import sys
+import tempfile
+import uuid
 
 from ..paths import PROJECT_ROOT
 from .codex import resolve_codex_home
@@ -140,3 +145,47 @@ def build_task_environment(
     )
     environment["FLOW_BI_TASK_NUMBER"] = str(task_number)
     return environment
+
+
+@contextmanager
+def prepare_run_environment(
+    base_environment: dict[str, str],
+) -> Generator[tuple[str, dict[str, str], Path], None, None]:
+    """실행별 임시 환경을 준비하고 Worker 종료 후 정리한다."""
+    run_id = str(uuid.uuid4())
+    worker_temp = Path(tempfile.gettempdir()) / "flow-bi-harness-worker" / run_id
+    worker_home = worker_temp / "worker-home"
+    npm_cache = worker_temp / "npm-cache"
+    worker_home.mkdir(parents=True, exist_ok=False)
+    npm_cache.mkdir()
+    npm_user_config = worker_home / ".npmrc"
+    npm_user_config.touch()
+
+    environment = base_environment.copy()
+    environment.update(
+        {
+            "FLOW_BI_RUN_ID": run_id,
+            "TEMP": str(worker_temp),
+            "TMP": str(worker_temp),
+            "TMPDIR": str(worker_temp),
+            "NPM_CONFIG_CACHE": str(npm_cache),
+            "NPM_CONFIG_USERCONFIG": str(npm_user_config),
+        }
+    )
+    environment["JAVA_TOOL_OPTIONS"] = " ".join(
+        filter(
+            None,
+            (
+                environment.get("JAVA_TOOL_OPTIONS"),
+                f'-Duser.home="{worker_home}"',
+            ),
+        )
+    )
+    try:
+        yield run_id, environment, worker_temp
+    finally:
+        shutil.rmtree(worker_temp, ignore_errors=True)
+        try:
+            worker_temp.parent.rmdir()
+        except OSError:
+            pass

@@ -34,7 +34,14 @@ def task(number: int, *, prerequisites: tuple[int, ...] = ()) -> Task:
     )
 
 
-def worker_result(*, quality_score: object = 90, decision: str = "PASS") -> object:
+def worker_result(
+    *,
+    quality_score: object = 90,
+    decision: str = "PASS",
+    effective_tdd_policy: str = "REQUIRED",
+    prior_evidence_id: str | None = None,
+    fingerprint: str | None = None,
+) -> object:
     class Result:
         returncode = 0
         output_error = ""
@@ -53,8 +60,28 @@ def worker_result(*, quality_score: object = 90, decision: str = "PASS") -> obje
             "final_status": "PASS",
             "quality_score": quality_score,
         }
+    response = Result()
+    tdd_gate = {
+        "effective_policy": effective_tdd_policy,
+        "current_verification_evidence": "current regression",
+    }
+    if effective_tdd_policy == "REUSE_ALLOWED":
+        tdd_gate["reused_evidence"] = {
+            "record_id": prior_evidence_id,
+            "fingerprint": fingerprint,
+        }
+    response.output["mandatory_gates"]["tdd"].update(tdd_gate)
+    return response
 
-    return Result()
+
+def in_progress_not_run_result(*, evidence: str = "shell session is still running") -> object:
+    response = worker_result(decision="RETRY")
+    response.output["verification"][0] = {
+        "item": "regression",
+        "result": "NOT_RUN",
+        "evidence": evidence,
+    }
+    return response
 
 
 class RevisionEvidenceTests(unittest.TestCase):
@@ -189,7 +216,11 @@ class RevisionEvidenceTests(unittest.TestCase):
         report = execute_workers(
             self.plan,
             HarnessRequest("rerun-plan-01", start_task_number=2),
-            lambda invocation: calls.append(invocation.task.number) or worker_result(),
+            lambda invocation: calls.append(invocation.task.number) or worker_result(
+                effective_tdd_policy=invocation.execution_context.effective_tdd_policy,
+                prior_evidence_id=invocation.execution_context.prior_evidence_id,
+                fingerprint=invocation.execution_context.fingerprint,
+            ),
             project_root=self.root,
             record_store=self.store,
         )
@@ -361,6 +392,63 @@ class RevisionEvidenceTests(unittest.TestCase):
             )
             self.assertEqual(len(calls), 1)
             self.assertEqual(report.results[0].status, "failed")
+
+    def test_in_progress_not_run_collects_existing_verifier_result_without_reexecution(self) -> None:
+        calls: list[object] = []
+
+        def invoke(invocation: object) -> object:
+            calls.append(invocation)
+            return in_progress_not_run_result() if len(calls) == 1 else worker_result()
+
+        report = execute_workers(
+            ParsedPlan("requirements", (task(1),)),
+            self.request,
+            invoke,
+            project_root=self.root,
+            record_store=self.store,
+        )
+
+        self.assertTrue(report.succeeded)
+        self.assertEqual(len(calls), 2)
+        self.assertIsNone(calls[1].decision_correction)
+        self.assertIsNotNone(calls[1].verification_result_collection)
+        self.assertEqual(calls[1].verification_result_collection["attempt"], 2)
+
+    def test_in_progress_not_run_stops_after_three_total_attempts(self) -> None:
+        calls: list[object] = []
+
+        report = execute_workers(
+            ParsedPlan("requirements", (task(1),)),
+            self.request,
+            lambda invocation: calls.append(invocation) or in_progress_not_run_result(),
+            project_root=self.root,
+            record_store=self.store,
+        )
+
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(report.results[0].status, "failed")
+        self.assertIn("3회", report.results[0].message)
+
+    def test_final_failure_non_pending_not_run_and_evidenceless_pass_do_not_collect(self) -> None:
+        final_failure = worker_result()
+        final_failure.output["verification"][0]["result"] = "FAIL"
+        unrelated_not_run = in_progress_not_run_result(evidence="worker did not start")
+        evidenceless_pass = worker_result()
+        evidenceless_pass.output["verification"][0]["evidence"] = ""
+
+        for response in (final_failure, unrelated_not_run, evidenceless_pass):
+            with self.subTest(response=response.output["verification"][0]):
+                calls: list[object] = []
+                report = execute_workers(
+                    ParsedPlan("requirements", (task(1),)),
+                    self.request,
+                    lambda invocation, response=response: calls.append(invocation) or response,
+                    project_root=self.root,
+                    record_store=ExecutionRecordStore(self.root / f"records-{id(response)}"),
+                )
+
+                self.assertEqual(len(calls), 1)
+                self.assertEqual(report.results[0].status, "failed")
 
 
 class InvocationParsingTests(unittest.TestCase):

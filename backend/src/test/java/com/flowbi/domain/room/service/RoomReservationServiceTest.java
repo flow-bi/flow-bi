@@ -15,6 +15,7 @@ import com.flowbi.domain.room.repository.RoomRepository;
 import com.flowbi.domain.room.repository.RoomReservationRepository;
 import com.flowbi.domain.schedule.service.ScheduleCreationService;
 import com.flowbi.domain.schedule.service.ScheduleCreationService.CreatedSchedule;
+import com.flowbi.domain.schedule.service.ScheduleModificationService;
 import com.flowbi.domain.user.service.ReservationParticipantAccessService;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -40,6 +41,8 @@ class RoomReservationServiceTest {
   private ReservationParticipantAccessService participantAccessService;
   @Mock
   private ScheduleCreationService scheduleCreationService;
+  @Mock
+  private ScheduleModificationService scheduleModificationService;
 
   @Test
   void createsReservedRoomReservationAndAnActiveSchedule() {
@@ -182,7 +185,9 @@ class RoomReservationServiceTest {
 
   private RoomReservationService service() {
     return new RoomReservationService(roomRepository, reservationRepository,
-        participantAccessService, scheduleCreationService);
+        scheduleCreationService, scheduleModificationService, new RoomReservationRequestValidator(),
+        new ReservationAttendeeResolver(participantAccessService),
+        new ReservationScheduleOwnershipVerifier(scheduleModificationService));
   }
 
   private CreateRoomReservationCommand command(List<Long> attendees) {

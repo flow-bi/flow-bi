@@ -2,7 +2,7 @@
 
 작업이 끝나면 Markdown 코드 블록이나 추가 설명 없이 유효한 JSON 객체 하나만 반환한다.
 
-Plan의 모든 검증 항목에 대해 `verification` 결과와 실행 명령·출력 등의 근거를 작성한다. 실행하지 못한 검증은 `NOT_RUN`으로 기록하고 이유를 근거에 남긴다.
+Task 실행 정보의 `verification_items`에 전달된 모든 검증 항목에 대해 `verification` 결과와 실행 명령·출력 등의 근거를 작성한다. 각 `item`에는 `verification_items`의 문자열을 요약하거나 수정하지 않고 원문 그대로 사용하며, 전달된 순서와 개수를 유지한다. 실행하지 못한 검증은 `NOT_RUN`으로 기록하고 이유를 근거에 남긴다.
 
 결과는 다음 구조를 따른다.
 
@@ -16,6 +16,7 @@ Plan의 모든 검증 항목에 대해 `verification` 결과와 실행 명령·�
     "requirements": {"result": "PASS | FAIL", "evidence": "근거"},
     "tdd": {
       "result": "PASS | FAIL | N/A",
+      "effective_policy": "execution_context.effective_tdd_policy",
       "evidence": "근거",
       "reason": "사유",
       "reused_evidence": {"record_id": null, "fingerprint": null},
@@ -26,7 +27,7 @@ Plan의 모든 검증 항목에 대해 `verification` 결과와 실행 명령·�
     "critical_findings": {"result": "PASS | FAIL", "evidence": "근거"}
   },
   "verification": [
-    {"item": "Plan 검증 항목", "result": "PASS | FAIL | NOT_RUN", "evidence": "근거"}
+    {"item": "verification_items의 원문 문자열", "result": "PASS | FAIL | NOT_RUN", "evidence": "근거"}
   ],
   "remaining_issues": [],
   "decision": "PASS | PASS_WITH_FOLLOW_UP | RETRY | HUMAN_REVIEW_REQUIRED | FAILED | BLOCKED",

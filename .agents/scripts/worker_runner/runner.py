@@ -24,7 +24,7 @@ def execute_worker(
     prompt = build_worker_prompt(request)
 
     execution_environment = request.environment.copy()
-    run_id = str(uuid.uuid4())
+    run_id = request.run_id or str(uuid.uuid4())
     execution_environment["FLOW_BI_RUN_ID"] = run_id
 
     return run_worker_process(

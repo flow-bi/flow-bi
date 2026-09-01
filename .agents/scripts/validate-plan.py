@@ -22,6 +22,7 @@ REQUIRED_BASIC_SECTIONS = [
 
 REQUIRED_TASK_SECTIONS = [
     "#### 선행 Task",
+    "#### TDD 정책",
     "#### 작업 목적",
     "#### 수정 가능 경로",
     "#### 수정 금지 경로",
@@ -33,6 +34,7 @@ REQUIRED_TASK_SECTIONS = [
     "#### 작업 결과",
     "#### 남은 문제",
 ]
+DECLARED_TDD_POLICIES = {"REQUIRED", "REGRESSION_ONLY", "NOT_APPLICABLE"}
 
 FORBIDDEN_PATTERNS = [
     r"^####\s*담당\s*Worker\s*$",
@@ -277,9 +279,14 @@ def validate_task_contents(task: Dict[str, object], errors: List[str]) -> None:
     excluded = extract_section_body(task_body, "#### 제외 범위")
     result = extract_section_body(task_body, "#### 작업 결과")
     remaining = extract_section_body(task_body, "#### 남은 문제")
+    tdd_policy = extract_section_body(task_body, "#### TDD 정책")
 
     if not purpose:
         add_error(errors, f"Task {task_number}의 작업 목적이 비어 있습니다.")
+
+    tdd_values = extract_bullet_values(tdd_policy)
+    if len(tdd_values) != 1 or tdd_values[0] not in DECLARED_TDD_POLICIES:
+        add_error(errors, f"Task {task_number}의 TDD 정책은 REQUIRED, REGRESSION_ONLY, NOT_APPLICABLE 중 하나여야 합니다.")
 
     validate_path_section(task_number, "수정 가능 경로", allowed_paths, errors)
     validate_path_section(task_number, "수정 금지 경로", forbidden_paths, errors)
