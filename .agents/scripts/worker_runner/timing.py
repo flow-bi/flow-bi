@@ -31,6 +31,7 @@ PHASES = frozenset((
 ))
 EVENT_TYPES = frozenset(("start", "phase", "tool_start", "tool_end", "end"))
 TERMINAL_STATUSES = frozenset(("completed", "failed", "timeout"))
+RUN_PURPOSES = frozenset(("task_execution", "verification_result_collection", "decision_correction"))
 
 
 class EventValidationError(ValueError):
@@ -82,6 +83,8 @@ class RunContext:
     task_number: int
     area: str
     parent_session_id: str | None
+    run_purpose: str = "task_execution"
+    attempt: int = 1
 
     @classmethod
     def create(
@@ -91,15 +94,21 @@ class RunContext:
         area: str,
         parent_session_id: str | None,
         run_id: str | None = None,
+        run_purpose: str = "task_execution",
+        attempt: int = 1,
     ) -> "RunContext":
         if area not in WORKERS:
             raise ValueError("Worker area must be an existing WORKERS value.")
+        if run_purpose not in RUN_PURPOSES:
+            raise ValueError("Worker run purpose is not allowed.")
+        if type(attempt) is not int or attempt < 1:
+            raise ValueError("Worker attempt must be a positive integer.")
         return cls(
             run_id=run_id or str(uuid.uuid4()),
             token=secrets.token_urlsafe(32),
             task_number=int(validate_task_number(task_number)),
             area=area,
-            parent_session_id=parent_session_id,
+            parent_session_id=parent_session_id, run_purpose=run_purpose, attempt=attempt,
         )
 
 
@@ -290,6 +299,8 @@ class CollectionService:
             "task_number": self.context.task_number,
             "area": self.context.area,
             "parent_session_id": self.context.parent_session_id,
+            "run_purpose": self.context.run_purpose,
+            "attempt": self.context.attempt,
             "phase": phase,
             "phase_source": source,
             "occurred_at": datetime.now(UTC).isoformat(),

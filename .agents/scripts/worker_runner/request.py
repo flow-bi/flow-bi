@@ -22,3 +22,5 @@ class WorkerExecutionRequest:
     run_id: str | None = None
     verification_items: tuple[str, ...] = ()
     worker_area: str = "be-worker"
+    run_purpose: str = "task_execution"
+    attempt: int = 1

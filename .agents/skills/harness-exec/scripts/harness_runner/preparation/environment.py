@@ -19,6 +19,7 @@ _PROTECTED_KEYS = frozenset(
         "CODEX_HOME",
         "JAVA_HOME",
         "PATH",
+        "PYTHONPATH",
         "TEMP",
         "TMP",
         "TMPDIR",
@@ -30,6 +31,26 @@ _PROTECTED_KEYS = frozenset(
         "FLOW_BI_PYTHON_EXECUTABLE",
     }
 )
+
+
+def _prepend_worker_scripts_path(
+    environment: dict[str, str],
+    project_root: Path,
+) -> None:
+    """Make Worker-owned modules importable without changing the parent shell."""
+    scripts_path = str((project_root / ".agents" / "scripts").resolve())
+    scripts_identity = os.path.normcase(os.path.abspath(scripts_path))
+    inherited_entries = environment.get("PYTHONPATH", "").split(os.pathsep)
+    unique_entries: list[str] = []
+    seen_entries = {scripts_identity}
+    for entry in inherited_entries:
+        if not entry:
+            continue
+        identity = os.path.normcase(os.path.abspath(entry))
+        if identity not in seen_entries:
+            seen_entries.add(identity)
+            unique_entries.append(entry)
+    environment["PYTHONPATH"] = os.pathsep.join((scripts_path, *unique_entries))
 
 
 def _load_java_home(env_file: Path) -> Path | None:
@@ -123,6 +144,7 @@ def build_worker_environment(
             "FLOW_BI_PYTHON_EXECUTABLE": sys.executable,
         }
     )
+    _prepend_worker_scripts_path(environment, project_root)
     _apply_java_environment(environment, paths)
     _apply_parent_session_environment(environment)
 

@@ -10,7 +10,7 @@ from worker_runner import WorkerExecutionRequest, WorkerExecutionResult, execute
 
 from ..models.plan import REUSE_ALLOWED, Task
 from ..models.request import HarnessRequest
-from ..models.result import TaskResult, VerificationResult
+from ..models.result import TaskResult, VerificationResult, WorkerRunTiming
 from ..preparation.worker_settings import TaskWorkerSettings
 from ..results.evidence import (
     EvidenceError,
@@ -280,6 +280,34 @@ def _task_result_from_worker_output(
     )
 
 
+def _run_timing(
+    request: WorkerExecutionRequest,
+    observation: object | None,
+) -> WorkerRunTiming:
+    """Convert one attempted Worker run without affecting its task outcome."""
+
+    timing, observation_error = timing_from_observation(
+        getattr(observation, "timing_summary", None),
+        request.task_number,
+        getattr(observation, "run_id", None) or request.run_id or None,
+    )
+    return WorkerRunTiming(
+        purpose=request.run_purpose,
+        attempt=request.attempt,
+        timing=timing,
+        observation_error=observation_error,
+    )
+
+
+def _with_run_timings(
+    result: TaskResult,
+    run_timings: list[WorkerRunTiming],
+) -> TaskResult:
+    """Keep the legacy final timing while exposing every run in execution order."""
+
+    return replace(result, run_timings=tuple(run_timings))
+
+
 class TaskRunner:
     def __init__(
         self,
@@ -301,6 +329,11 @@ class TaskRunner:
         self.evidence_store = evidence_store
 
     def run(self, task: Task) -> TaskResult:
+        run_timings: list[WorkerRunTiming] = []
+
+        def finish(result: TaskResult) -> TaskResult:
+            return _with_run_timings(result, run_timings)
+
         task_fingerprint = task_contract_fingerprint(self.request.plan_id, task)
         try:
             prior_evidence = self.evidence_store.load_valid_evidence(
@@ -309,12 +342,12 @@ class TaskRunner:
                 task_fingerprint,
             )
         except EvidenceError as error:
-            return TaskResult(
+            return finish(TaskResult(
                 task.number,
                 task.title,
                 "failed",
                 message=f"HUMAN_REVIEW_REQUIRED: {error}",
-            )
+            ))
 
         task_execution_context = {
             "plan_id": self.request.plan_id,
@@ -361,16 +394,18 @@ class TaskRunner:
                 )
                 else "be-worker"
             ),
+            run_purpose="task_execution",
+            attempt=1,
         )
 
-        worker_result = self._execute_worker_once(task, initial_request)
+        worker_result = self._execute_worker_once(task, initial_request, run_timings)
         if isinstance(worker_result, TaskResult):
-            return worker_result
+            return finish(worker_result)
         collection_attempts = 1
         pending_verification = _in_progress_not_run_verification(worker_result)
         while pending_verification:
             if collection_attempts >= MAX_VERIFICATION_RESULT_COLLECTION_ATTEMPTS:
-                return _task_result_from_worker_output(
+                return finish(_task_result_from_worker_output(
                     task,
                     "failed",
                     worker_result.returncode,
@@ -381,10 +416,12 @@ class TaskRunner:
                     ),
                     worker_result.output,
                     worker_observation=worker_result,
-                )
+                ))
             collection_attempts += 1
             collection_request = replace(
                 initial_request,
+                run_purpose="verification_result_collection",
+                attempt=collection_attempts,
                 verification_result_collection={
                     "attempt": collection_attempts,
                     "verification": pending_verification,
@@ -393,6 +430,7 @@ class TaskRunner:
             worker_result = self._execute_worker_once(
                 task,
                 collection_request,
+                run_timings,
                 previous_output=(
                     worker_result.output
                     if isinstance(worker_result.output, dict)
@@ -400,7 +438,7 @@ class TaskRunner:
                 ),
             )
             if isinstance(worker_result, TaskResult):
-                return worker_result
+                return finish(worker_result)
             if worker_result.returncode:
                 break
             pending_verification = _in_progress_not_run_verification(worker_result)
@@ -412,9 +450,11 @@ class TaskRunner:
             if not _needs_decision_correction(
                 task, worker_result, task_execution_context
             ):
-                return task_result
+                return finish(task_result)
             corrected_request = replace(
                 initial_request,
+                run_purpose="decision_correction",
+                attempt=collection_attempts + 1,
                 decision_correction=_build_decision_correction(worker_result),
             )
             previous_output = (
@@ -423,19 +463,20 @@ class TaskRunner:
             worker_result = self._execute_worker_once(
                 task,
                 corrected_request,
+                run_timings,
                 previous_output=previous_output,
             )
             if isinstance(worker_result, TaskResult):
-                return worker_result
+                return finish(worker_result)
             task_result = self._evaluate_worker_result(
                 task, worker_result, task_execution_context
             )
             if task_result is not None:
-                return task_result
+                return finish(task_result)
 
         output = worker_result.output
         if not isinstance(output, dict):
-            return _task_result_from_worker_output(
+            return finish(_task_result_from_worker_output(
                 task,
                 "failed",
                 worker_result.returncode,
@@ -443,7 +484,7 @@ class TaskRunner:
                 "Worker 결과 JSON이 유효하지 않습니다.",
                 None,
                 worker_observation=worker_result,
-            )
+            ))
         try:
             self.evidence_store.save_success_evidence(
                 self.request.plan_id,
@@ -452,7 +493,7 @@ class TaskRunner:
                 output,
             )
         except (OSError, EvidenceError) as error:
-            return _task_result_from_worker_output(
+            return finish(_task_result_from_worker_output(
                 task,
                 "failed",
                 worker_result.returncode,
@@ -460,8 +501,8 @@ class TaskRunner:
                 f"실행 기록 저장 실패: {error}",
                 output,
                 worker_observation=worker_result,
-            )
-        return _task_result_from_worker_output(
+            ))
+        return finish(_task_result_from_worker_output(
             task,
             "succeeded",
             worker_result.returncode,
@@ -469,12 +510,13 @@ class TaskRunner:
             "",
             output,
             worker_observation=worker_result,
-        )
+        ))
 
     def _execute_worker_once(
         self,
         task: Task,
         worker_request: WorkerExecutionRequest,
+        run_timings: list[WorkerRunTiming],
         *,
         previous_output: dict[str, object] | None = None,
     ) -> WorkerExecutionResult | TaskResult:
@@ -485,18 +527,22 @@ class TaskRunner:
                 environment,
                 config_overrides,
             ):
-                return execute_worker(
-                    replace(
-                        worker_request,
-                        run_id=run_id,
-                        environment={
-                            **worker_request.environment,
-                            **environment,
-                        },
-                        config_overrides=config_overrides,
-                    )
+                effective_request = replace(
+                    worker_request,
+                    run_id=run_id,
+                    environment={
+                        **worker_request.environment,
+                        **environment,
+                    },
+                    config_overrides=config_overrides,
                 )
+                result = execute_worker(
+                    effective_request
+                )
+                run_timings.append(_run_timing(effective_request, result))
+                return result
         except subprocess.TimeoutExpired as error:
+            run_timings.append(_run_timing(worker_request, error))
             message = (
                 "Worker 실행 시간이 제한을 초과했습니다. "
                 f"제한 시간: {error.timeout}초, 상세 오류: {error}"
@@ -511,6 +557,7 @@ class TaskRunner:
                 worker_observation=error,
             )
         except subprocess.CalledProcessError as error:
+            run_timings.append(_run_timing(worker_request, error))
             return _task_result_from_worker_output(
                 task,
                 "failed",
@@ -521,6 +568,7 @@ class TaskRunner:
                 worker_observation=error,
             )
         except Exception as error:
+            run_timings.append(_run_timing(worker_request, error))
             return _task_result_from_worker_output(
                 task,
                 "failed",

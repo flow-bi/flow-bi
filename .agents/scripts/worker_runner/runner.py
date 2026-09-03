@@ -97,6 +97,8 @@ def execute_worker(
         parent_session_id=request.environment.get("CODEX_THREAD_ID")
         or os.environ.get("CODEX_THREAD_ID"),
         run_id=request.run_id,
+        run_purpose=request.run_purpose,
+        attempt=request.attempt,
     )
     service = CollectionService(
         context,

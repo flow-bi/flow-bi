@@ -19,6 +19,14 @@ CANONICAL_PHASES = (
 )
 
 
+def _recorded_timings(result: TaskResult) -> tuple:
+    """Prefer all preserved Worker attempts; retain legacy single-run records."""
+    attempts = result.run_timings
+    if attempts:
+        return tuple(item.timing for item in attempts if item.timing is not None)
+    return (result.timing,) if result.timing is not None else ()
+
+
 @dataclass(frozen=True)
 class RenderedReport:
     title: str
@@ -95,10 +103,9 @@ def _missing_phase_row(phase_name: str) -> tuple[str, ...]:
 def _phases_by_name(results: tuple[TaskResult, ...]) -> dict[str, tuple]:
     grouped: dict[str, list] = {}
     for result in results:
-        if result.timing is None:
-            continue
-        for phase in result.timing.phases:
-            grouped.setdefault(phase.phase, []).append(phase)
+        for timing in _recorded_timings(result):
+            for phase in timing.phases:
+                grouped.setdefault(phase.phase, []).append(phase)
     return {name: tuple(phases) for name, phases in grouped.items()}
 
 
@@ -126,27 +133,29 @@ def _phase_rows(results: tuple[TaskResult, ...], total_duration_ms: int) -> list
 
 
 def _task_time_row(result: TaskResult, report_total_duration_ms: int) -> tuple[str, ...]:
-    if result.timing is None:
+    timings = _recorded_timings(result)
+    if not timings:
         return (str(result.task_number), result.title, _task_status(result), *("미기록",) * 5)
-    timing = result.timing
+    total = sum(item.total_duration_ms for item in timings)
+    unattributed = sum(item.unattributed_duration_ms for item in timings)
     return (
         str(result.task_number), result.title, _task_status(result),
-        _duration(timing.total_duration_ms), _ratio(timing.total_duration_ms, report_total_duration_ms),
-        _duration(timing.unattributed_duration_ms), _ratio(timing.unattributed_duration_ms, timing.total_duration_ms),
-        _classification(explicit=timing.explicit, inferred=timing.inferred),
+        _duration(total), _ratio(total, report_total_duration_ms),
+        _duration(unattributed), _ratio(unattributed, total),
+        _classification(explicit=any(item.explicit for item in timings), inferred=any(item.inferred for item in timings)),
     )
 
 
 def _time_analysis_lines(results: tuple[TaskResult, ...]) -> list[str]:
-    recorded = tuple(result for result in results if result.timing is not None)
-    total_duration = sum(result.timing.total_duration_ms for result in recorded)
-    unattributed = sum(result.timing.unattributed_duration_ms for result in recorded)
+    recorded = tuple(timing for result in results for timing in _recorded_timings(result))
+    total_duration = sum(timing.total_duration_ms for timing in recorded)
+    unattributed = sum(timing.unattributed_duration_ms for timing in recorded)
     return [
         "### 실행 시간 요약",
         *_table(
             ("timing 기록 Task", "timing 미기록 Task", "전체 Worker 시간", "전체 미귀속 시간"),
             [(
-                f"{len(recorded)}개", f"{len(results) - len(recorded)}개",
+                f"{sum(bool(_recorded_timings(result)) for result in results)}개", f"{sum(not _recorded_timings(result) for result in results)}개",
                 _duration(total_duration) if recorded else "분석 불가 (timing 기록 없음)",
                 f"{_duration(unattributed)}, {_ratio(unattributed, total_duration)}" if recorded else "분석 불가 (timing 기록 없음)",
             )],
@@ -177,28 +186,53 @@ def _time_analysis_lines(results: tuple[TaskResult, ...]) -> list[str]:
 
 
 def _timing_lines(result: TaskResult, report_total_duration_ms: int) -> list[str]:
-    timing = result.timing
-    if timing is None:
+    attempts = result.run_timings
+    timings = _recorded_timings(result)
+    if not timings:
         lines = _table(
             ("Area", "Run ID", "Worker 시간", "전체 대비", "미귀속 시간", "Task 대비", "timing 분류"),
             [("미기록",) * 7],
         )
+        errors = [item.observation_error for item in attempts if item.observation_error]
         if result.timing_observation_error:
-            lines.append(f"- 관측 상태: 오류 — {result.timing_observation_error}")
+            errors.append(result.timing_observation_error)
+        for error in dict.fromkeys(errors):
+            lines.append(f"- 관측 상태: 오류 — {error}")
         return lines
-    lines = _table(
-        ("Area", "Run ID", "Worker 시간", "전체 대비", "미귀속 시간", "Task 대비", "timing 분류"),
-        [(
+    rows: list[tuple[str, ...]] = []
+    if attempts:
+        for item in attempts:
+            timing = item.timing
+            if timing is None:
+                rows.append((
+                    f"{item.purpose} #{item.attempt}", "미기록", "미기록", "미기록",
+                    "미기록", "미기록", "미기록",
+                ))
+                continue
+            rows.append((
+                f"{item.purpose} #{item.attempt}", f"{timing.area} / {timing.run_id}",
+                _duration(timing.total_duration_ms), _ratio(timing.total_duration_ms, report_total_duration_ms),
+                _duration(timing.unattributed_duration_ms), _ratio(timing.unattributed_duration_ms, timing.total_duration_ms),
+                _classification(explicit=timing.explicit, inferred=timing.inferred),
+            ))
+    else:
+        timing = timings[0]
+        rows.append((
             timing.area, timing.run_id, _duration(timing.total_duration_ms),
             _ratio(timing.total_duration_ms, report_total_duration_ms),
             _duration(timing.unattributed_duration_ms), _ratio(timing.unattributed_duration_ms, timing.total_duration_ms),
             _classification(explicit=timing.explicit, inferred=timing.inferred),
-        )],
+        ))
+    lines = _table(
+        ("실행 목적 / Area", "Run ID", "Worker 시간", "전체 대비", "미귀속 시간", "Task 대비", "timing 분류"), rows,
     )
+    for item in attempts:
+        if item.observation_error:
+            lines.append(f"- {item.purpose} #{item.attempt} 관측 상태: 오류 — {item.observation_error}")
     lines.extend(("", "##### Phase별 소요 시간"))
     phases_by_name = _phases_by_name((result,))
     phase_rows = [
-        _phase_row(phase_name, phases_by_name.get(phase_name, ()), timing.total_duration_ms)
+        _phase_row(phase_name, phases_by_name.get(phase_name, ()), sum(item.total_duration_ms for item in timings))
         for phase_name in CANONICAL_PHASES
     ]
     lines.extend(_table(
@@ -242,9 +276,7 @@ def build_execution_report(
     status = _overall_status(report)
     ordered = tuple(sorted(report.results, key=lambda result: result.task_number))
     report_total_duration_ms = sum(
-        result.timing.total_duration_ms
-        for result in ordered
-        if result.timing is not None
+        timing.total_duration_ms for result in ordered for timing in _recorded_timings(result)
     )
     completed = [
         f"Task {item.task_number}. {item.title}"

@@ -19,3 +19,14 @@ Worker phase를 명시적으로 전환할 때에는 부모가 제공한 loopback
 phase는 `analysis`, `test_code`, `implementation`, `implementation_and_test`, `refactor`,
 `documentation`, `verification`, `finalization` 중 하나여야 한다. `.codex-logs`에 직접 쓰거나
 `FLOW_BI_WORKER_EVENT_URL`, `FLOW_BI_WORKER_EVENT_TOKEN`을 출력하지 않는다.
+
+`REQUIRED` 본 작업은 탐색 전에 `analysis`, Red 테스트 전 `test_code`, 구현 전 `implementation`
+(불가분이면 `implementation_and_test`), 검증 전 `verification`, 결과 작성 전 `finalization` marker를
+기록한다. 수행하지 않는 refactor·documentation phase는 만들지 않으며, 결과 수집·판정 교정은 허위 구현 phase를 기록하지 않는다.
+
+각 전환 직전에 다음처럼 실제 phase 이름을 인자로 전달한다:
+`"$FLOW_BI_PYTHON_EXECUTABLE" -m worker_runner.phase_marker analysis`,
+`"$FLOW_BI_PYTHON_EXECUTABLE" -m worker_runner.phase_marker test_code`,
+`"$FLOW_BI_PYTHON_EXECUTABLE" -m worker_runner.phase_marker implementation`,
+`"$FLOW_BI_PYTHON_EXECUTABLE" -m worker_runner.phase_marker verification`,
+`"$FLOW_BI_PYTHON_EXECUTABLE" -m worker_runner.phase_marker finalization`.

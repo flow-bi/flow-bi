@@ -6,6 +6,7 @@ from .result import (
     TaskResult,
     VerificationResult,
     WorkerTiming,
+    WorkerRunTiming,
 )
 
 __all__ = (
@@ -19,4 +20,5 @@ __all__ = (
     "TaskResult",
     "VerificationResult",
     "WorkerTiming",
+    "WorkerRunTiming",
 )

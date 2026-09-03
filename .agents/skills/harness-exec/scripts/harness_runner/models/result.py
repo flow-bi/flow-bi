@@ -33,6 +33,15 @@ class WorkerTiming:
 
 
 @dataclass(frozen=True)
+class WorkerRunTiming:
+    """One immutable Worker attempt; later attempts never overwrite it."""
+    purpose: str
+    attempt: int
+    timing: WorkerTiming | None = None
+    observation_error: str = ""
+
+
+@dataclass(frozen=True)
 class TaskResult:
     task_number: int
     title: str
@@ -47,6 +56,7 @@ class TaskResult:
     restored: bool = False
     timing: WorkerTiming | None = None
     timing_observation_error: str = ""
+    run_timings: tuple[WorkerRunTiming, ...] = ()
 
 
 @dataclass(frozen=True)
