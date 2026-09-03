@@ -12,7 +12,7 @@ for scripts_root in (HARNESS_SCRIPTS, WORKER_SCRIPTS):
     if str(scripts_root) not in sys.path:
         sys.path.insert(0, str(scripts_root))
 
-from harness_runner.models import ExecutionReport, TaskResult
+from harness_runner.models import ExecutionReport, TaskResult, WorkerRunTiming
 from harness_runner.models.plan import Task
 from harness_runner import cli
 from harness_runner.execution.task_runner import _task_result_from_worker_output
@@ -138,6 +138,24 @@ class TaskTimingPropagationTests(unittest.TestCase):
 
 
 class HarnessTimeReportTests(unittest.TestCase):
+    def test_task_detail_keeps_every_run_and_aggregates_phases_once(self) -> None:
+        initial = parse_timing_summary(summary(1, run_id="main", total_ms=100, phases=[phase("test_code", 30)]), 1)
+        collection = parse_timing_summary(summary(1, run_id="collection", total_ms=50, phases=[phase("verification", 20)]), 1)
+        result = TaskResult(
+            1, "timed", "succeeded",
+            run_timings=(
+                WorkerRunTiming("task_execution", 1, initial),
+                WorkerRunTiming("verification_result_collection", 2, collection),
+            ),
+        )
+        body = build_execution_report("timing-plan", ExecutionReport((result,))).body
+
+        self.assertIn("| 1 | timed | PASS | 0.15초 (150ms) | 100.0%", body)
+        self.assertIn("task_execution #1 | be-worker / main", body)
+        self.assertIn("verification_result_collection #2 | be-worker / collection", body)
+        self.assertIn("| test_code | 0.03초 (30ms)", body)
+        self.assertIn("| verification | 0.02초 (20ms)", body)
+
     def test_report_aggregates_success_failure_timeout_and_keeps_missing_unrecorded(self) -> None:
         first = parse_timing_summary(summary(
             1,
