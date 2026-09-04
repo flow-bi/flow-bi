@@ -26,6 +26,7 @@ function workerRecord(state, event, recordType, occurredAt, extra = {}) {
     record_type: recordType, tree_version: state.tree_version, ...commonRecord(state, occurredAt),
     area: state.worker_area, task_number: state.executor.task_number,
     parent_session_id: state.parent_session_id ?? null,
+    run_purpose: state.run_purpose ?? null, attempt: state.attempt ?? null,
     phase: event.phase ?? null, phase_source: event.phase_source ?? null, phase_id: event.phase_id ?? null,
     tool_id: event.tool_id ?? null, tool_name: typeof event.tool_name === "string" ? event.tool_name.slice(0, 128) : null,
     ...extra,
@@ -35,6 +36,7 @@ function provisionalStart(event, occurredAt) {
   return {
     kind: "worker_start", run_id: event.run_id, task_number: event.task_number,
     area: event.area, parent_session_id: event.parent_session_id ?? null,
+    run_purpose: event.run_purpose ?? null, attempt: event.attempt ?? null,
     occurred_at: occurredAt,
   };
 }
@@ -93,6 +95,7 @@ export async function handleUserPromptSubmit(
       parent_session_id: parentSessionId, hierarchy_resolved: parentSessionId ? Boolean(parent) : true,
       executor, tree_version: parent ? parent.tree_version : TREE_VERSION,
       run_id: environment.FLOW_BI_RUN_ID || null, summary_requested: false,
+      run_purpose: null, attempt: null,
       usage_baseline: usageBaseline.usage, usage_baseline_status: usageBaseline.usage_status,
       use_terminal_usage_directly: executor.kind === "primary" && !usageBaseline.usage && isFirstRecordedSessionTurn,
     };
@@ -113,6 +116,8 @@ export async function handleUserPromptSubmit(
       if (provisional.task_number === state.executor.task_number
         && provisional.area && provisional.parent_session_id === state.parent_session_id) {
         state.worker_area = provisional.area;
+        state.run_purpose = provisional.run_purpose;
+        state.attempt = provisional.attempt;
         recordWorkerStart(records, state, provisional, provisional.occurred_at);
       }
       pending.splice(provisionalIndex, 1);
@@ -157,6 +162,13 @@ export async function recordWorkerEnd(
       pending.splice(index, 1);
       return { status: "cleanup_retry" };
     }
+    const timingStarted = Boolean(state.worker_timing?.started_at);
+    const timingEnded = records.some(
+      (record) => record.record_type === "worker_end" && record.run_id === runId,
+    );
+    if (timingStarted && !timingEnded) {
+      return { status: "timing_pending" };
+    }
     const terminalStatus = status || (exitCode === 0 ? "completed" : "failed");
     records.push({
       record_type: "task_end", tree_version: state.tree_version, ...commonRecord(state, now().toISOString()),
@@ -195,6 +207,10 @@ export async function recordWorkerEvent(
     if (event.parent_session_id !== undefined && event.parent_session_id !== state.parent_session_id) throw new Error("Worker event session does not match run.");
     if (state.worker_area && state.worker_area !== event.area) throw new Error("Worker event area does not match run.");
     state.worker_area = event.area;
+    if (event.event_type === "start") {
+      state.run_purpose = typeof event.run_purpose === "string" ? event.run_purpose : null;
+      state.attempt = Number.isSafeInteger(event.attempt) ? event.attempt : null;
+    }
     state.worker_timing ??= { tools: {}, current_phase: null };
     const occurredAt = eventTime(event, now);
     const timing = state.worker_timing;

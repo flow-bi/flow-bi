@@ -7,6 +7,7 @@ import test from "node:test";
 import {
   handleStop,
   handleUserPromptSubmit,
+  recordWorkerEnd,
   recordWorkerEvent,
 } from "../prompt-detail/task-events.mjs";
 import { storagePaths } from "../prompt-detail/config.mjs";
@@ -133,5 +134,39 @@ test("binds a worker start that arrives before the worker UserPromptSubmit sessi
     assert.equal(starts[0].area, "fe-worker");
     assert.equal(starts[0].context.session_id, "worker-session");
     assert.equal(records.findIndex((record) => record.record_type === "worker_start") < records.findIndex((record) => record.record_type === "worker_end"), true);
+  } finally { rmSync(projectRoot, { recursive: true, force: true }); }
+});
+
+test("keeps a timed worker pending until the terminal timing event after completion hook", async () => {
+  const projectRoot = mkdtempSync(join(tmpdir(), "worker-time-completion-order-"));
+  try {
+    const now = clock(
+      "2026-08-28T00:00:00.000Z",
+      "2026-08-28T00:00:01.000Z",
+      "2026-08-28T00:00:03.000Z",
+      "2026-08-28T00:00:05.000Z",
+    );
+    const runId = "completion-before-timing";
+    const eventOptions = await startWorker(projectRoot, now, runId, 3, null);
+    await recordWorkerEvent({
+      event_type: "start", run_id: runId, task_number: 3, area: "be-worker",
+      parent_session_id: null,
+    }, eventOptions);
+
+    const completion = await recordWorkerEnd(
+      { runId, exitCode: 0, summary: "done", status: "completed" },
+      eventOptions,
+    );
+    assert.equal(completion.status, "timing_pending");
+
+    await recordWorkerEvent({
+      event_type: "end", run_id: runId, task_number: 3, area: "be-worker",
+      parent_session_id: null, status: "completed", exit_code: 0, summary: "done",
+    }, eventOptions);
+
+    const tree = readJson(storagePaths(projectRoot).treeFile, {});
+    assert.equal(tree.roots[0].run_id, runId);
+    assert.equal(tree.roots[0].result.status, "completed");
+    assert.equal(tree.roots[0].total_duration_ms, 2000);
   } finally { rmSync(projectRoot, { recursive: true, force: true }); }
 });

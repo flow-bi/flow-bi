@@ -1,19 +1,21 @@
 from __future__ import annotations
-
-from collections.abc import Sequence
 import sys
 
-from .parse import parse_invocation
-from .execution import execute_workers
-from .models import PlanValidationError, TaskResult
-from .notion import NotionPublicationError, publish_report
-from .plan import complete_plan, load_active_plan, repository_root
-from .report import build_execution_report
-from .worker_gateway import invoke_task
+from collections.abc import Sequence
 
-from worker_runner.backend_verifier import BackendVerifier
-from worker_runner.frontend_verifier import FrontendVerifier
+from .paths import PROJECT_ROOT
 
+from .planning.errors import PlanValidationError
+from .planning import complete_plan, load_requested_plan
+
+from .models.result import TaskResult
+
+from .preparation import prepare_execution
+
+from .execution import HarnessExecutionError, run_harness_execution
+
+from .results.notion import NotionPublicationError, publish_report
+from .results.report import build_execution_report
 
 def _print_console(message: object, *, file=None) -> None:
     stream = sys.stdout if file is None else file
@@ -45,57 +47,38 @@ def _print_failure(failure: TaskResult) -> None:
         file=sys.stderr,
     )
 
-
+# 하네스 전체 흐름 담당
 def main(argv: Sequence[str] | None = None) -> int:
-    arguments = list(sys.argv[1:] if argv is None else argv)
-    if len(arguments) != 1:
-        _print_console("오류: 전체 요청을 하나의 인자로 전달해야 합니다.", file=sys.stderr)
-        return 2
 
+    # plan 준비
     try:
-        request = parse_invocation(arguments[0])
-        root = repository_root()
-        plan_path, tasks = load_active_plan(request.plan_id, root)
+        request, plan_path, plan = load_requested_plan(argv)
+
     except PlanValidationError as error:
         _print_console(f"검증 오류: {error}", file=sys.stderr)
         return 2
+
     except OSError as error:
         _print_console(f"plan 준비 실패: {error}", file=sys.stderr)
         return 1
 
-    with (
-        BackendVerifier(root) as backend_verifier,
-        FrontendVerifier(root) as frontend_verifier,
-    ):
-        def worker_call(invocation):
-            allowed_paths = invocation.task.allowed_paths
-            frontend_environment = (
-                frontend_verifier.environment
-                if isinstance(allowed_paths, tuple) and any(
-                    path == "frontend" or path.startswith("frontend/")
-                    for path in allowed_paths
-                )
-                else {}
-            )
-            return invoke_task(
-                invocation,
-                environment_overrides={
-                    **backend_verifier.environment_for_task(
-                        invocation.task.allowed_paths,
-                        invocation.task.forbidden_paths,
-                    ),
-                    **frontend_environment,
-                },
-            )
-        report = execute_workers(tasks, request, call_worker=worker_call)
+    prepared = prepare_execution(plan.tasks)
+
+    try:
+        report = run_harness_execution(plan, request, prepared, PROJECT_ROOT)
+    except HarnessExecutionError as error:
+        _print_console(f"Harness 실행 준비 실패: {error}", file=sys.stderr)
+        return 1
 
     rendered_report = build_execution_report(request.plan_id, report)
     _print_console(rendered_report.body)
+
     try:
         published_page = publish_report(
             rendered_report.title,
             rendered_report.body,
-            project_root=root,
+            project_root=PROJECT_ROOT,
+            executable=prepared.codex_executable,
         )
     except NotionPublicationError as error:
         for failure in report.failures:
@@ -112,10 +95,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
 
     try:
-        destination = complete_plan(plan_path, root)
+        destination = complete_plan(plan_path)
     except OSError as error:
         _print_console(f"plan 실행은 완료했지만 plan 이동 실패: {error}", file=sys.stderr)
         return 1
 
-    _print_console(f"plan 완료: {destination.relative_to(root).as_posix()}")
+    _print_console(f"plan 완료: {destination.relative_to(PROJECT_ROOT).as_posix()}")
     return 0

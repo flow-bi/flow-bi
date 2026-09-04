@@ -12,7 +12,7 @@ from .timing import EventValidationError, PHASES, validate_loopback_url
 
 
 def emit_worker_event(event: dict[str, object], environment: dict[str, str] | None = None) -> dict[str, object]:
-    env = environment or os.environ
+    env = os.environ if environment is None else environment
     url = validate_loopback_url(env.get("FLOW_BI_WORKER_EVENT_URL", ""))
     run_id = env.get("FLOW_BI_RUN_ID")
     token = env.get("FLOW_BI_WORKER_EVENT_TOKEN")

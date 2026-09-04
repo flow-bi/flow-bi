@@ -16,7 +16,7 @@ from typing import Any
 from urllib.parse import urlparse
 import uuid
 
-from .codex import WORKERS, validate_task_number
+WORKERS = ("fe-worker", "be-worker")
 
 
 PHASES = frozenset((
@@ -31,6 +31,7 @@ PHASES = frozenset((
 ))
 EVENT_TYPES = frozenset(("start", "phase", "tool_start", "tool_end", "end"))
 TERMINAL_STATUSES = frozenset(("completed", "failed", "timeout"))
+RUN_PURPOSES = frozenset(("task_execution", "verification_result_collection", "decision_correction"))
 
 
 class EventValidationError(ValueError):
@@ -39,6 +40,12 @@ class EventValidationError(ValueError):
 
 class TimingLogError(RuntimeError):
     """The parent-owned record sink did not acknowledge an event."""
+
+
+def validate_task_number(value: object) -> int:
+    if type(value) is not int or value < 1:
+        raise ValueError("Task number must be a positive integer.")
+    return value
 
 
 def determine_worker_area(allowed_paths: tuple[str, ...]) -> str:
@@ -76,17 +83,32 @@ class RunContext:
     task_number: int
     area: str
     parent_session_id: str | None
+    run_purpose: str = "task_execution"
+    attempt: int = 1
 
     @classmethod
-    def create(cls, *, task_number: object, area: str, parent_session_id: str | None) -> "RunContext":
+    def create(
+        cls,
+        *,
+        task_number: object,
+        area: str,
+        parent_session_id: str | None,
+        run_id: str | None = None,
+        run_purpose: str = "task_execution",
+        attempt: int = 1,
+    ) -> "RunContext":
         if area not in WORKERS:
             raise ValueError("Worker area must be an existing WORKERS value.")
+        if run_purpose not in RUN_PURPOSES:
+            raise ValueError("Worker run purpose is not allowed.")
+        if type(attempt) is not int or attempt < 1:
+            raise ValueError("Worker attempt must be a positive integer.")
         return cls(
-            run_id=str(uuid.uuid4()),
+            run_id=run_id or str(uuid.uuid4()),
             token=secrets.token_urlsafe(32),
             task_number=int(validate_task_number(task_number)),
             area=area,
-            parent_session_id=parent_session_id,
+            parent_session_id=parent_session_id, run_purpose=run_purpose, attempt=attempt,
         )
 
 
@@ -185,7 +207,8 @@ class CollectionService:
     def close(self) -> None:
         with self._lock:
             self._active = False
-        self._server.shutdown()
+        if self._thread is not None:
+            self._server.shutdown()
         self._server.server_close()
         if self._thread is not None:
             self._thread.join(timeout=5)
@@ -223,7 +246,10 @@ class CollectionService:
             if event_type in {"tool_start", "tool_end"} and not isinstance(event.get("tool_id"), str):
                 raise EventValidationError("Tool events require a tool_id.")
             if event_type == "end":
-                if event.get("status") not in TERMINAL_STATUSES or not isinstance(event.get("exit_code"), int):
+                if (
+                    event.get("status") not in TERMINAL_STATUSES
+                    or type(event.get("exit_code")) is not int
+                ):
                     raise EventValidationError("Terminal event is invalid.")
             if event_type == "tool_end" and event["tool_id"] not in self._open_tools:
                 return {"status": "duplicate_or_missing_tool_end"}
@@ -273,6 +299,8 @@ class CollectionService:
             "task_number": self.context.task_number,
             "area": self.context.area,
             "parent_session_id": self.context.parent_session_id,
+            "run_purpose": self.context.run_purpose,
+            "attempt": self.context.attempt,
             "phase": phase,
             "phase_source": source,
             "occurred_at": datetime.now(UTC).isoformat(),

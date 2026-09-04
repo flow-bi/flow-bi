@@ -1,0 +1,31 @@
+model = "gpt-5.6-terra"
+model_reasoning_effort = "medium"
+
+default_permissions = "task-worker"
+
+[permissions.task-worker]
+description = "Task worker with execution-specific write and deny paths."
+extends = "worker-base"
+
+[permissions.task-worker.filesystem]
+glob_scan_max_depth = 5
+
+[permissions.task-worker.filesystem.":workspace_roots"]
+".git/**" = "write"
+"frontend/node_modules/**" = "write"
+"frontend/dist/**" = "write"
+"backend/build/" = "write"
+"backend/build/**" = "write"
+"backend/.gradle/" = "write"
+"backend/.gradle/**" = "write"
+"backend/.gradle-user-home/" = "write"
+"backend/.gradle-user-home/**" = "write"
+
+[permissions.task-worker.network]
+enabled = true
+allow_local_binding = true
+
+
+[permissions.task-worker.network.domains]
+"localhost" = "allow"
+"127.0.0.1" = "allow"
