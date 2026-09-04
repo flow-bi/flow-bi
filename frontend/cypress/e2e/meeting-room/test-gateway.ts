@@ -46,9 +46,6 @@ export function meetingRoomTestGateway({
     },
   ]
   return {
-    isReservationCreationAvailable: true,
-    isReservationUpdateAvailable: true,
-    isReservationCancellationAvailable: true,
     findAvailability: (query: RoomAvailabilityQuery) => {
       availabilityRequests += 1
       if (initialAvailabilityDate === undefined) {

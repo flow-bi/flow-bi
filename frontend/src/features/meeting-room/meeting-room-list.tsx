@@ -12,17 +12,11 @@ export function RoomAvailabilityList({
   onReserve,
   onEdit,
   onCancel,
-  isSubmissionAvailable,
-  isUpdateAvailable,
-  isCancellationAvailable,
 }: {
   rooms: RoomSummary[]
   onReserve: (room: RoomSummary, trigger: HTMLButtonElement) => void
   onEdit: (room: RoomSummary, reservation: Reservation, trigger: HTMLButtonElement) => void
   onCancel: (room: RoomSummary, reservation: Reservation, trigger: HTMLButtonElement) => void
-  isSubmissionAvailable: boolean
-  isUpdateAvailable: boolean
-  isCancellationAvailable: boolean
 }) {
   return (
     <section className="space-y-4" aria-label="회의실 목록">
@@ -52,43 +46,39 @@ export function RoomAvailabilityList({
               <ReservationTextList reservations={room.reservations} />
             </div>
           </div>
-          {isUpdateAvailable
-            ? room.reservations
-                .filter((reservation) => reservation.canEdit)
-                .map((reservation) => (
-                  <button
-                    key={reservation.id}
-                    className="mt-3 mr-3 rounded border border-(--color-border) px-4 py-2"
-                    type="button"
-                    aria-label={`예약 수정: ${reservation.title}`}
-                    onClick={(event) => onEdit(room, reservation, event.currentTarget)}
-                  >
-                    예약 수정
-                  </button>
-                ))
-            : null}
-          {isCancellationAvailable
-            ? room.reservations
-                .filter((reservation) => reservation.canEdit)
-                .map((reservation) => (
-                  <button
-                    key={`cancel-${reservation.id}`}
-                    className="mt-3 mr-3 rounded border border-(--color-danger) px-4 py-2 text-(--color-danger)"
-                    type="button"
-                    aria-label={`예약 취소: ${reservation.title}`}
-                    onClick={(event) => onCancel(room, reservation, event.currentTarget)}
-                  >
-                    예약 취소
-                  </button>
-                ))
-            : null}
+          {room.reservations
+            .filter((reservation) => reservation.canEdit)
+            .map((reservation) => (
+              <button
+                key={reservation.id}
+                className="mt-3 mr-3 rounded border border-(--color-border) px-4 py-2"
+                type="button"
+                aria-label={`예약 수정: ${reservation.title}`}
+                onClick={(event) => onEdit(room, reservation, event.currentTarget)}
+              >
+                예약 수정
+              </button>
+            ))}
+          {room.reservations
+            .filter((reservation) => reservation.canEdit)
+            .map((reservation) => (
+              <button
+                key={`cancel-${reservation.id}`}
+                className="mt-3 mr-3 rounded border border-(--color-danger) px-4 py-2 text-(--color-danger)"
+                type="button"
+                aria-label={`예약 취소: ${reservation.title}`}
+                onClick={(event) => onCancel(room, reservation, event.currentTarget)}
+              >
+                예약 취소
+              </button>
+            ))}
           <button
             id={`room-reserve-${room.id}`}
             className="mt-4 rounded bg-(--color-primary) px-4 py-2 text-white"
             type="button"
             onClick={(event) => onReserve(room, event.currentTarget)}
           >
-            {isSubmissionAvailable ? `${room.name} 예약하기` : '인증 연동 대기 중'}
+            {room.name} 예약하기
           </button>
         </article>
       ))}

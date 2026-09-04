@@ -1,23 +1,49 @@
+import { z } from 'zod'
+
 import { validateMeetingTimes } from './meeting-time'
 
 import type {
   CreateRoomReservationCommand,
-  RoomReservationAttendee,
   UpdateRoomReservationCommand,
 } from './meeting-room-gateway'
 
-export interface ReservationFormValues {
-  title: string
-  date: string
-  startTime: string
-  endTime: string
-  creatorAttends: boolean
-  attendeeIds: number[]
-  attendees?: RoomReservationAttendee[]
-  description: string
+const attendeeSchema = z.object({ userId: z.number(), displayName: z.string() })
+
+export function reservationFormSchema(capacity: number) {
+  return z
+    .object({
+      title: z.string().trim().min(1, '예약 제목을 입력해 주세요.'),
+      date: z.string().min(1, '예약 날짜를 선택해 주세요.'),
+      startTime: z.string(),
+      endTime: z.string(),
+      creatorAttends: z.boolean(),
+      attendeeIds: z.array(z.number()),
+      attendees: z.array(attendeeSchema).optional(),
+      description: z.string(),
+    })
+    .superRefine((values, context) => {
+      const timeErrors = validateMeetingTimes(values.startTime, values.endTime)
+      if (timeErrors.startTime) {
+        context.addIssue({ code: 'custom', path: ['startTime'], message: timeErrors.startTime })
+      }
+      if (timeErrors.endTime) {
+        context.addIssue({ code: 'custom', path: ['endTime'], message: timeErrors.endTime })
+      }
+      const attendeeCount = values.attendeeIds.length + Number(values.creatorAttends)
+      if (attendeeCount === 0 || attendeeCount > capacity) {
+        context.addIssue({
+          code: 'custom',
+          path: ['attendeeIds'],
+          message:
+            attendeeCount === 0
+              ? '참석자를 한 명 이상 추가해 주세요.'
+              : `참석자 수가 회의실 수용 인원(${capacity}명)을 초과했습니다.`,
+        })
+      }
+    })
 }
 
-export type ReservationFormErrors = Partial<Record<keyof ReservationFormValues, string>>
+export type ReservationFormValues = z.infer<ReturnType<typeof reservationFormSchema>>
 
 export function initialReservationValuesFromSearch({
   date,
@@ -33,28 +59,6 @@ export function initialReservationValuesFromSearch({
     attendeeIds: [],
     description: '',
   }
-}
-
-export function validateReservationForm(
-  values: ReservationFormValues,
-  capacity: number,
-): ReservationFormErrors {
-  const errors: ReservationFormErrors = {}
-  if (values.title.trim() === '') {
-    errors.title = '예약 제목을 입력해 주세요.'
-  }
-  if (!values.date) {
-    errors.date = '예약 날짜를 선택해 주세요.'
-  }
-  Object.assign(errors, validateMeetingTimes(values.startTime, values.endTime))
-  const attendeeCount = values.attendeeIds.length + Number(values.creatorAttends)
-  if (attendeeCount === 0) {
-    errors.attendeeIds = '참석자를 한 명 이상 추가해 주세요.'
-  }
-  if (attendeeCount > capacity) {
-    errors.attendeeIds = `참석자 수가 회의실 수용 인원(${capacity}명)을 초과했습니다.`
-  }
-  return errors
 }
 
 export function toReservationCommand(

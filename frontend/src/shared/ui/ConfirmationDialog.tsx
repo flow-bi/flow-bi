@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useId, useRef, type ReactNode, type RefObject } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+  type RefObject,
+} from 'react'
 
 const closeButtonClass =
   'absolute top-4 right-4 rounded p-1 text-text-secondary transition hover:bg-secondary focus-visible:outline-3 focus-visible:outline-focus-ring focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50'
@@ -15,6 +23,7 @@ export interface ConfirmationDialogProps {
   footer: ReactNode
   onDismiss: () => void
   closeButtonRef?: RefObject<HTMLButtonElement | null>
+  initialFocusRef?: RefObject<HTMLButtonElement | null>
   isCloseDisabled?: boolean
   titleId?: string
   descriptionId?: string
@@ -26,6 +35,7 @@ export function ConfirmationDialog({
   footer,
   onDismiss,
   closeButtonRef,
+  initialFocusRef,
   isCloseDisabled = false,
   titleId: providedTitleId,
   descriptionId: providedDescriptionId,
@@ -45,8 +55,12 @@ export function ConfirmationDialog({
   }, [onDismiss])
 
   useEffect(() => {
-    ;(closeButtonRef?.current ?? internalCloseButtonRef.current)?.focus()
-  }, [closeButtonRef])
+    ;(
+      initialFocusRef?.current ??
+      closeButtonRef?.current ??
+      internalCloseButtonRef.current
+    )?.focus()
+  }, [closeButtonRef, initialFocusRef])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -75,6 +89,23 @@ export function ConfirmationDialog({
         aria-modal="true"
         className="relative w-full max-w-sm rounded-xl bg-surface p-6 shadow-2xl"
         data-testid="confirmation-dialog-card"
+        onKeyDown={(event: ReactKeyboardEvent<HTMLElement>) => {
+          if (event.key !== 'Tab') {
+            return
+          }
+          const buttons = Array.from(
+            event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'),
+          )
+          const first = buttons.at(0)
+          const last = buttons.at(-1)
+          if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault()
+            last?.focus()
+          } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault()
+            first?.focus()
+          }
+        }}
         role="alertdialog"
       >
         <h2 className="m-0 pr-10 text-xl font-bold text-text-primary" id={titleId}>
@@ -90,9 +121,9 @@ export function ConfirmationDialog({
         >
           ×
         </button>
-        <p className="mt-3 text-text-secondary" id={descriptionId}>
+        <div className="mt-3 text-text-secondary" id={descriptionId}>
           {description}
-        </p>
+        </div>
         <footer
           className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-end"
           data-testid="confirmation-dialog-footer"
