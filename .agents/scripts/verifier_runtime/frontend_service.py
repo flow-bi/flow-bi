@@ -26,15 +26,6 @@ class FrontendVerificationResult:
     output: str
     timed_out: bool = False
 
-def validate_npm_arguments(arguments: object) -> tuple[str, ...]:
-    if not isinstance(arguments, list) or not all(isinstance(value, str) and value for value in arguments): raise ValueError("npm arguments are invalid")
-    if arguments[:1] == ["ls"]:
-        packages = arguments[1:]
-        if len(packages) > MAX_PACKAGES or not all(PACKAGE_NAME.fullmatch(value) for value in packages): raise ValueError("npm package name is not allowed")
-        return tuple(arguments)
-    if len(arguments) == 2 and arguments[0] == "run" and arguments[1] in SCRIPT_NAMES: return tuple(arguments)
-    raise ValueError("npm verification command is not allowed")
-
 class FrontendVerifier:
     def __init__(self, project_root: Path, *, runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run, npm_executable: str | None = None, timeout: int = DEFAULT_FRONTEND_TIMEOUT_SECONDS) -> None:
         self._frontend, self._runner, self._npm, self._timeout = (project_root.resolve() / "frontend").resolve(), runner, npm_executable or _resolve_npm_executable(), timeout
@@ -67,7 +58,7 @@ class FrontendVerifier:
                 try:
                     length = int(self.headers.get("Content-Length", "0"))
                     if length < 0 or length > MAX_REQUEST_BYTES: self.send_error(413); return
-                    result = verifier._verify_npm(validate_npm_arguments(json.loads(self.rfile.read(length).decode("utf-8")).get("arguments")))
+                    result = verifier._verify_npm(tuple(json.loads(self.rfile.read(length).decode("utf-8")).get("arguments")))
                 except (AttributeError, UnicodeError, ValueError, json.JSONDecodeError): self.send_error(400); return
                 if result is None: self.send_error(429); return
                 response = json.dumps({"returncode": result.returncode, "output": result.output, "timed_out": result.timed_out}, ensure_ascii=False).encode("utf-8")

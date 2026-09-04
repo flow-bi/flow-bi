@@ -86,7 +86,7 @@ def execute_worker(
     process_runner: SubprocessRunner = subprocess.run,
     logger: WorkerLogger | None = None,
     event_sink: EventSink | None = None,
-    timeout: int = 30 * 60,
+    timeout: int = 90 * 60,
 ) -> WorkerExecutionResult:
     """완성된 요청 하나로 Worker 실행과 run-scoped timing 수집을 수행한다."""
 

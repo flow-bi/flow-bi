@@ -208,7 +208,7 @@ def run_worker_process(
     project_root: Path,
     runner: SubprocessRunner = subprocess.run,
     logger: WorkerLogger | None = None,
-    timeout: int = 30 * 60,
+    timeout: int = 90 * 60,
     on_tool_event: Callable[[dict[str, str]], None] | None = None,
 ) -> WorkerExecutionResult:
     completion_logger = logger or invoke_worker_completion_hook
