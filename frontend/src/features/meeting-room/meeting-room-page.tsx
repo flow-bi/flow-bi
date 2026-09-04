@@ -48,7 +48,6 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
   }>()
   const [editError, setEditError] = useState<string>()
   const [cancellationNotice, setCancellationNotice] = useState<string>()
-  const [cancellationTrigger, setCancellationTrigger] = useState<HTMLButtonElement>()
   const reserveTriggerRef = useRef<HTMLButtonElement | undefined>(undefined)
   const cancellationAdjacentFocusRoomIdRef = useRef<number | undefined>(undefined)
   const queryClient = useQueryClient()
@@ -214,9 +213,6 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
       {visibleRooms?.length ? (
         <RoomAvailabilityList
           rooms={visibleRooms}
-          isSubmissionAvailable={gateway.isReservationCreationAvailable === true}
-          isUpdateAvailable={gateway.isReservationUpdateAvailable === true}
-          isCancellationAvailable={gateway.isReservationCancellationAvailable === true}
           onReserve={(selected, trigger) => {
             reserveTriggerRef.current = trigger
             setReservationPanelInstance((instance) => instance + 1)
@@ -227,7 +223,6 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
           }}
           onCancel={(room, reservation, trigger) => {
             reserveTriggerRef.current = trigger
-            setCancellationTrigger(trigger)
             setCancellationNotice(undefined)
             cancellation.open(reservation, room.id)
           }}
@@ -235,12 +230,12 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
       ) : null}
       {selectedUpdate ? (
         <ReservationPanel
+          key={selectedUpdate.reservation.reservationId}
           room={selectedUpdate.room}
           initialDate={submittedSearch.date}
           initialValues={valuesForUpdate(selectedUpdate.reservation)}
           panelTitle={selectedUpdate.reservation.title}
           mode="update"
-          isSubmissionAvailable={gateway.isReservationUpdateAvailable === true}
           onClose={closeReservationPanel}
           onSubmit={async (command) => {
             if (!gateway.updateReservation) {
@@ -271,7 +266,6 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
             startTime: submittedSearch.startTime ?? '09:00',
             endTime: submittedSearch.endTime ?? '18:00',
           })}
-          isSubmissionAvailable={gateway.isReservationCreationAvailable === true}
           onClose={closeReservationPanel}
           onSubmit={async (command) => {
             if (!gateway.createReservation) {
@@ -299,7 +293,6 @@ export function MeetingRoomPage({ gateway, initialDate }: MeetingRoomPageProps) 
             startAt: cancellation.target.reservation.startAt ?? '',
             endAt: cancellation.target.reservation.endAt ?? '',
           }}
-          trigger={cancellationTrigger}
           isSubmitting={cancellation.isSubmitting}
           error={cancellation.error}
           isRefreshRecommended={cancellation.isRefreshRecommended}

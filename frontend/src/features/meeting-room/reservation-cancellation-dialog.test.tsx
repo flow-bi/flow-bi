@@ -20,7 +20,6 @@ describe('ReservationCancellationDialog', () => {
           startAt: '2026-08-07T09:00:00',
           endAt: '2026-08-07T10:00:00',
         }}
-        trigger={trigger}
         isSubmitting={false}
         onClose={onClose}
         onConfirm={vi.fn()}

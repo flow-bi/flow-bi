@@ -26,9 +26,6 @@ describe('RoomAvailabilityList', () => {
             ],
           },
         ]}
-        isSubmissionAvailable
-        isUpdateAvailable
-        isCancellationAvailable
         onReserve={vi.fn()}
         onEdit={vi.fn()}
         onCancel={vi.fn()}

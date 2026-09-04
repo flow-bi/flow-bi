@@ -72,7 +72,6 @@ function reservationGateway(
   createReservation = vi.fn().mockResolvedValue({ reservationId: 30, scheduleId: 40 }),
 ): MeetingRoomGateway {
   return {
-    isReservationCreationAvailable: true,
     findAvailability: vi.fn().mockResolvedValue({ rooms }),
     createReservation,
   }
@@ -86,7 +85,6 @@ describe('MeetingRoomPage', () => {
     const createReservation = vi.fn().mockResolvedValue({ reservationId: 30, scheduleId: 40 })
     const user = userEvent.setup()
     renderPage({
-      isReservationCreationAvailable: true,
       findAvailability: vi.fn().mockResolvedValue({ rooms }),
       findAttendeeCandidates,
       createReservation,
@@ -163,8 +161,6 @@ describe('MeetingRoomPage', () => {
     })
     const user = userEvent.setup()
     renderPage({
-      isReservationCreationAvailable: true,
-      isReservationUpdateAvailable: true,
       findAvailability,
       createReservation: vi.fn(),
       getReservationForEdit,
@@ -194,7 +190,6 @@ describe('MeetingRoomPage', () => {
     const invalidateQueries = vi.spyOn(QueryClient.prototype, 'invalidateQueries')
     const user = userEvent.setup()
     renderPage({
-      isReservationUpdateAvailable: true,
       findAvailability: vi.fn().mockResolvedValue({ rooms }),
       getReservationForEdit: vi.fn().mockResolvedValue({
         reservationId: 10,
@@ -232,8 +227,6 @@ describe('MeetingRoomPage', () => {
 
   it('hides edit actions for a reservation the current user does not own', async () => {
     renderPage({
-      isReservationCreationAvailable: true,
-      isReservationUpdateAvailable: true,
       findAvailability: vi.fn().mockResolvedValue({
         rooms: [{ ...rooms[0], reservations: [{ ...rooms[0].reservations[0], canEdit: false }] }],
       }),
@@ -250,7 +243,6 @@ describe('MeetingRoomPage', () => {
     const user = userEvent.setup()
     renderPage(
       {
-        isReservationCancellationAvailable: true,
         findAvailability: vi.fn().mockResolvedValue({ rooms }),
         cancelReservation,
       },
@@ -278,7 +270,6 @@ describe('MeetingRoomPage', () => {
 
   it('does not expose cancellation for a reservation the current user does not own', async () => {
     renderPage({
-      isReservationCancellationAvailable: true,
       findAvailability: vi.fn().mockResolvedValue({
         rooms: [{ ...rooms[0], reservations: [{ ...rooms[0].reservations[0], canEdit: false }] }],
       }),
@@ -291,7 +282,6 @@ describe('MeetingRoomPage', () => {
   it('keeps keyboard focus inside the cancellation confirmation dialog', async () => {
     const user = userEvent.setup()
     renderPage({
-      isReservationCancellationAvailable: true,
       findAvailability: vi.fn().mockResolvedValue({ rooms }),
       cancelReservation: vi.fn(),
     })
@@ -320,7 +310,6 @@ describe('MeetingRoomPage', () => {
     async (code, message) => {
       const user = userEvent.setup()
       renderPage({
-        isReservationCancellationAvailable: true,
         findAvailability: vi.fn().mockResolvedValue({ rooms }),
         cancelReservation: vi.fn().mockRejectedValue(new MeetingRoomGatewayError(code as never)),
       })
@@ -338,7 +327,6 @@ describe('MeetingRoomPage', () => {
       .mockResolvedValueOnce({ rooms: [{ ...rooms[0], reservations: [] }] })
     const user = userEvent.setup()
     renderPage({
-      isReservationCancellationAvailable: true,
       findAvailability,
       cancelReservation: vi
         .fn()
@@ -359,7 +347,6 @@ describe('MeetingRoomPage', () => {
   it('keeps the dialog open and offers retry after a network cancellation error', async () => {
     const user = userEvent.setup()
     renderPage({
-      isReservationCancellationAvailable: true,
       findAvailability: vi.fn().mockResolvedValue({ rooms }),
       cancelReservation: vi.fn().mockRejectedValue(new Error('network offline')),
     })
@@ -372,7 +359,6 @@ describe('MeetingRoomPage', () => {
   it('preserves edited input after an update conflict and offers reselection guidance', async () => {
     const user = userEvent.setup()
     renderPage({
-      isReservationUpdateAvailable: true,
       findAvailability: vi.fn().mockResolvedValue({ rooms }),
       getReservationForEdit: vi.fn().mockResolvedValue({
         reservationId: 10,
@@ -411,7 +397,6 @@ describe('MeetingRoomPage', () => {
         description: '',
       }),
     ).rejects.toMatchObject({ code: 'AUTH_INTEGRATION_PENDING' })
-    expect(productionMeetingRoomGateway.isReservationUpdateAvailable).toBe(true)
   })
 
   it('safely rejects unauthenticated production availability and creation requests', async () => {
@@ -552,7 +537,6 @@ describe('MeetingRoomPage', () => {
     const findAvailability = vi.fn().mockResolvedValue({ rooms })
     const user = userEvent.setup()
     renderPage({
-      isReservationCreationAvailable: true,
       findAvailability,
       createReservation: vi.fn(),
     })
@@ -666,7 +650,6 @@ describe('MeetingRoomPage', () => {
     const user = userEvent.setup()
     renderPage({
       ...reservationGateway(),
-      isReservationUpdateAvailable: true,
       getReservationForEdit: vi.fn().mockResolvedValue({
         reservationId: 10,
         roomId: 1,
@@ -856,7 +839,7 @@ describe('MeetingRoomPage', () => {
       .mockRejectedValue(new MeetingRoomGatewayError('ROOM_RESERVATION_CONFLICT'))
     const findAvailability = vi.fn().mockResolvedValue({ rooms })
     const user = userEvent.setup()
-    renderPage({ isReservationCreationAvailable: true, findAvailability, createReservation })
+    renderPage({ findAvailability, createReservation })
     await user.click(await screen.findByRole('button', { name: '한강 회의실 예약하기' }))
     await user.type(screen.getByLabelText('예약 제목'), '주간 회의')
     await selectAttendee(user)
@@ -865,22 +848,5 @@ describe('MeetingRoomPage', () => {
     expect(screen.queryByText('예약과 연결 일정이 생성되었습니다.')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '예약 현황 다시 조회' }))
     expect(findAvailability).toHaveBeenCalledTimes(2)
-  })
-
-  it('keeps production reservation submission disabled with an authentication pending reason', async () => {
-    const user = userEvent.setup()
-    renderPage({
-      isReservationCreationAvailable: false,
-      findAvailability: vi.fn().mockResolvedValue({ rooms }),
-      createReservation: (command) =>
-        productionMeetingRoomGateway.createReservation?.(command) ??
-        Promise.reject(new MeetingRoomGatewayError('AUTH_INTEGRATION_PENDING')),
-    })
-    await user.click(await screen.findByRole('button', { name: '인증 연동 대기 중' }))
-    expect(screen.getByRole('dialog', { name: '한강 회의실 예약' })).toBeInTheDocument()
-    expect(
-      screen.getByText('인증 연동이 준비 중이어서 예약을 제출할 수 없습니다.'),
-    ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '예약 및 일정 생성' })).toBeDisabled()
   })
 })

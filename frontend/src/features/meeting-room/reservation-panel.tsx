@@ -15,7 +15,6 @@ import { ReservationPanelShell } from './reservation-panel-shell'
 interface ReservationPanelProps {
   room: RoomSummary
   initialDate: string
-  isSubmissionAvailable: boolean
   mode?: 'create' | 'update'
   initialValues?: ReservationFormValues
   panelTitle?: string
@@ -28,7 +27,6 @@ interface ReservationPanelProps {
 export function ReservationPanel({
   room,
   initialDate,
-  isSubmissionAvailable,
   mode = 'create',
   initialValues,
   panelTitle,
@@ -63,7 +61,6 @@ export function ReservationPanel({
         capacity={room.capacity}
         mode={mode}
         initialValues={defaultValues}
-        isSubmissionAvailable={isSubmissionAvailable}
         onSubmit={onSubmit}
         onRefreshAvailability={onRefreshAvailability}
         onFindAttendeeCandidates={onFindAttendeeCandidates}
