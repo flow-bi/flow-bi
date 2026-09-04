@@ -79,9 +79,6 @@ export interface EditableRoomReservation {
 }
 
 export interface MeetingRoomGateway {
-  isReservationCreationAvailable?: boolean
-  isReservationUpdateAvailable?: boolean
-  isReservationCancellationAvailable?: boolean
   findAvailability(query: RoomAvailabilityQuery): Promise<RoomAvailabilityResponse>
   findAttendeeCandidates?(this: void, query: string): Promise<RoomReservationAttendee[]>
   createReservation?(command: CreateRoomReservationCommand): Promise<CreateRoomReservationResult>

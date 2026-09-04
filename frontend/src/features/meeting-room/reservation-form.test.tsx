@@ -23,7 +23,6 @@ function renderForm(overrides: Partial<ComponentProps<typeof ReservationForm>> =
           startTime: '09:00',
           endTime: '10:00',
         })}
-        isSubmissionAvailable
         onSubmit={onSubmit}
         onRefreshAvailability={vi.fn()}
         onDirtyChange={vi.fn()}
@@ -85,12 +84,13 @@ describe('ReservationForm', () => {
     expect(refreshAvailability).toHaveBeenCalledOnce()
   })
 
-  it('replaces form values when a newly selected reservation supplies update initial values', async () => {
+  it('replaces form values when a newly selected reservation remounts the form', async () => {
     const { rerender } = render(
       <QueryClientProvider
         client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
       >
         <ReservationForm
+          key={3}
           roomId={3}
           capacity={4}
           mode="update"
@@ -104,7 +104,6 @@ describe('ReservationForm', () => {
             creatorAttends: true,
             description: '첫 번째 설명',
           }}
-          isSubmissionAvailable
           onSubmit={vi.fn()}
           onRefreshAvailability={vi.fn()}
           onDirtyChange={vi.fn()}
@@ -117,6 +116,7 @@ describe('ReservationForm', () => {
         client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
       >
         <ReservationForm
+          key={4}
           roomId={4}
           capacity={6}
           mode="update"
@@ -129,7 +129,6 @@ describe('ReservationForm', () => {
             title: '두 번째 예약',
             description: '두 번째 설명',
           }}
-          isSubmissionAvailable
           onSubmit={vi.fn()}
           onRefreshAvailability={vi.fn()}
           onDirtyChange={vi.fn()}

@@ -118,9 +118,6 @@ export function createDevelopmentMeetingRoomGateway(): MeetingRoomGateway {
   }
 
   return {
-    isReservationCreationAvailable: true,
-    isReservationUpdateAvailable: true,
-    isReservationCancellationAvailable: true,
     findAvailability: (query) => {
       ensureInitialReservation(query.date)
       const queryPeriod =

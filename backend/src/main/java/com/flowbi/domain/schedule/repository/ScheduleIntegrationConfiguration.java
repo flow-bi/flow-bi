@@ -1,16 +1,8 @@
 package com.flowbi.domain.schedule.repository;
 
-import com.flowbi.domain.schedule.audit.*;
-import com.flowbi.domain.schedule.controller.*;
-import com.flowbi.domain.schedule.dto.*;
-import com.flowbi.domain.schedule.entity.*;
-import com.flowbi.domain.schedule.exception.*;
-import com.flowbi.domain.schedule.service.*;
-
 import com.flowbi.domain.schedule.port.ScheduleAuditWriter;
 import com.flowbi.domain.schedule.port.ScheduleAudienceLookup;
 import com.flowbi.domain.schedule.port.ScheduleReferenceValidator;
-import com.flowbi.domain.schedule.port.ScheduleRoomReservationLookup;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -47,22 +39,6 @@ class ScheduleIntegrationConfiguration {
       @Override
       public java.util.Set<Long> memberProjectIds(long actorId,java.util.Set<Long> projectIds) {
         return adapter.memberProjectIds(actorId,projectIds);
-      }
-    };
-  }
-
-  @Bean
-  @ConditionalOnMissingBean(ScheduleRoomReservationLookup.class)
-  ScheduleRoomReservationLookup defaultScheduleRoomReservationLookup() {
-    return new ScheduleRoomReservationLookup() {
-      @Override
-      public boolean isManagedSchedule(long scheduleId) {
-        return false;
-      }
-
-      @Override
-      public java.util.Set<Long> managedScheduleIds(java.util.Collection<Long> scheduleIds) {
-        return java.util.Set.of();
       }
     };
   }

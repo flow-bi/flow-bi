@@ -93,9 +93,6 @@ function reservationRequestBody(command: CreateRoomReservationCommand): string {
 }
 
 export const productionMeetingRoomGateway: MeetingRoomGateway = {
-  isReservationCreationAvailable: true,
-  isReservationUpdateAvailable: true,
-  isReservationCancellationAvailable: true,
   findAvailability: (query) => requestJson<RoomAvailabilityResponse>(availabilityUrl(query)),
   findAttendeeCandidates: async (query) => {
     const normalizedQuery = normalizedAttendeeQuery(query)
