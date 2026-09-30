@@ -9,13 +9,6 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from verifier_runtime.frontend_client import FrontendVerifierClientError, request_frontend_verification
-from verifier_runtime.frontend_service import (
-    FRONTEND_VERIFIER_TOKEN,
-    FRONTEND_VERIFIER_URL,
-    FrontendVerifier,
-    FrontendVerificationResult,
-    validate_npm_arguments,
-)
 
 
 def main(arguments: Sequence[str] | None = None) -> int:

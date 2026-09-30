@@ -154,7 +154,10 @@ function AppShell({ sidebar, logout, children }: AppShellProps) {
   }
 
   return (
-    <div className="min-h-screen bg-background text-text-primary">
+    <div
+      className="flex h-dvh min-h-0 flex-col overflow-hidden bg-background text-text-primary"
+      data-testid="app-shell"
+    >
       <Header
         companyName="Flow BI"
         isMobileSidebarOpen={isMobileSidebarOpen}
@@ -162,13 +165,14 @@ function AppShell({ sidebar, logout, children }: AppShellProps) {
         openSidebarButtonRef={openSidebarButtonRef}
       />
       <div
-        className="min-h-[calc(100vh-4rem)] md:grid md:grid-cols-[16rem_minmax(0,1fr)]"
+        className="h-full min-h-0 flex-1 overflow-hidden md:grid md:grid-cols-[16rem_minmax(0,1fr)]"
         data-app-body
+        data-testid="app-body"
       >
         <Sidebar logout={logout}>{sidebar(() => undefined)}</Sidebar>
         <main
           aria-label="콘텐츠"
-          className="bg-background p-4 md:p-8 [&>h1]:mt-0 [&>p]:text-text-secondary"
+          className="h-full min-w-0 overflow-x-hidden overflow-y-auto bg-background p-4 md:p-8 [&>h1]:mt-0 [&>p]:text-text-secondary"
           tabIndex={-1}
         >
           {children}

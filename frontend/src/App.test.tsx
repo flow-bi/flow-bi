@@ -191,8 +191,21 @@ describe('App main screen', () => {
     render(<App />)
 
     expect(await screen.findByRole('banner')).toHaveClass('bg-surface', 'border-border')
+    expect(screen.getByTestId('app-shell')).toHaveClass('h-dvh', 'overflow-hidden')
+    expect(screen.getByTestId('app-body')).toHaveClass(
+      'h-full',
+      'min-h-0',
+      'flex-1',
+      'overflow-hidden',
+    )
     expect(screen.getByRole('button', { name: '사이드바 열기' })).toHaveClass('md:hidden')
-    expect(screen.getByRole('main', { name: '콘텐츠' })).toHaveClass('bg-background', 'md:p-8')
+    expect(screen.getByRole('main', { name: '콘텐츠' })).toHaveClass(
+      'min-w-0',
+      'overflow-x-hidden',
+      'overflow-y-auto',
+      'bg-background',
+      'md:p-8',
+    )
     expect(screen.getByRole('banner').className).not.toContain('app-header')
     expect(screen.getByRole('heading', { name: '회의실 예약 현황' })).toBeInTheDocument()
   })

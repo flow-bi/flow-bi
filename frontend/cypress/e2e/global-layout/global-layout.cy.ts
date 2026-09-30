@@ -16,6 +16,41 @@ describe('global application layout', () => {
     cy.intercept('GET', '/api/schedules?*', []).as('schedules')
   }
 
+  function expectDocumentToFitViewport(width: number, height: number) {
+    cy.document().then((document) => {
+      expect(document.documentElement.scrollWidth).to.be.at.most(width)
+      expect(document.documentElement.scrollHeight).to.be.at.most(height)
+    })
+  }
+
+  ;[
+    { name: 'desktop', width: 1280, height: 800 },
+    { name: 'mobile', width: 390, height: 844 },
+  ].forEach(({ name, width, height }) => {
+    it(`keeps short content inside the ${name} viewport`, () => {
+      cy.viewport(width, height)
+      cy.intercept('GET', '/api/rooms?*', { body: { rooms: [] }, statusCode: 200 })
+      cy.visit('/')
+
+      cy.contains('조회된 회의실이 없습니다.')
+      expectDocumentToFitViewport(width, height)
+    })
+  })
+
+  it('keeps long content vertically navigable without scrolling the document', () => {
+    cy.viewport(390, 844)
+    interceptAuthenticatedCalendar()
+    cy.visit('/?view=month')
+
+    cy.get('main[aria-label="콘텐츠"]').then(($main) => {
+      const main = $main[0]
+      expect(main.scrollHeight).to.be.greaterThan(main.clientHeight)
+      main.scrollTop = main.scrollHeight
+      expect(main.scrollTop).to.be.greaterThan(0)
+    })
+    expectDocumentToFitViewport(390, 844)
+  })
+
   it('lays out the header, sidebar, and main content on desktop', () => {
     cy.viewport(1280, 800)
     cy.visit('/')
